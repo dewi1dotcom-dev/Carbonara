@@ -1,4 +1,4 @@
-# Carbonara
+﻿# Carbonara
 
 Dealership vehicle lifecycle system. **Part 1: arrival inspection → storage.**
 
@@ -74,12 +74,12 @@ docker compose up -d --build
 docker compose logs -f app      # wait for "Application startup complete"
 ```
 
-Open `http://<server-ip>:8000` on a phone or tablet on the same network.
+Open `http://<server-ip>:8080` on a phone or tablet on the same network.
 
 Then go to **Settings**, add the inspectors and the storage spots (there's an "Add range"
 option, e.g. `A-01` … `A-40`), and start with **+ New arrival**.
 
-API docs (Swagger) are at `http://<server-ip>:8000/docs`.
+API docs (Swagger) are at `http://<server-ip>:8080/docs`.
 
 ### Camera note
 Photos use the browser's file input with `capture="environment"`, which opens the rear

@@ -35,7 +35,7 @@ services:
     volumes:
       - ./data/photos:/data/photos
     ports:
-      - "${APP_PORT:-8000}:8000"
+      - "${APP_PORT:-8080}:8000"
 
   # Keeps Statens vegvesen data fresh for vehicles marked as registered.
   worker:
