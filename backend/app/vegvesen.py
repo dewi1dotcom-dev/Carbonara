@@ -99,12 +99,15 @@ def dig(obj, *path):
 
 
 def _text(v, key=None):
-    """Code objects look like {kodeVerdi, kodeBeskrivelse, kodeNavn}; some
-    lists hold plain strings, others dicts with a named key."""
+    """Code objects look like {kodeVerdi, kodeNavn, kodeBeskrivelse}; some
+    lists hold plain strings, others dicts with a named key.
+
+    kodeNavn is the display name ("Rød", "Kombikupé (AB)"); kodeBeskrivelse is
+    often a side note ("herunder: Burgunder"), so it is only a fallback."""
     if isinstance(v, dict):
         if key and v.get(key):
             return str(v[key])
-        return v.get("kodeBeskrivelse") or v.get("kodeNavn") or v.get("kodeVerdi")
+        return v.get("kodeNavn") or v.get("kodeBeskrivelse") or v.get("kodeVerdi")
     return str(v) if v not in (None, "") else None
 
 
@@ -156,6 +159,130 @@ def extract(item: dict) -> dict:
         "curb_weight_kg": _int(dig(td, "vekter", "egenvekt")),
         "total_weight_kg": _int(dig(td, "vekter", "tillattTotalvekt")),
     }
+
+
+def overview(item: dict | None) -> dict:
+    """Extra key facts for the top of the vehicle page, read from raw data."""
+    item = item or {}
+    body = dig(item, "godkjenning", "tekniskGodkjenning", "tekniskeData", "karosseriOgLasteplan") or {}
+    return {
+        # Machine-readable status, e.g. REGISTRERT / AVREGISTRERT / VRAKET.
+        "status_code": dig(item, "registrering", "registreringsstatus", "kodeVerdi"),
+        "vin_location": _text(dig(body, "plasseringUnderstellsnummer", 0)),
+    }
+
+
+def _num(v, unit=""):
+    if v in (None, ""):
+        return None
+    try:
+        f = float(v)
+    except (TypeError, ValueError):
+        return str(v)
+    s = f"{f:,.1f}".rstrip("0").rstrip(".").replace(",", " ")
+    return f"{s} {unit}".strip()
+
+
+def _tyres(td: dict) -> list:
+    """One row per approved tyre/rim combination, e.g. '205/60R16 on 6.5J'."""
+    rows = []
+    for i, combo in enumerate(dig(td, "dekkOgFelg", "akselDekkOgFelgKombinasjon") or [], 1):
+        per_axle = []
+        for a in combo.get("akselDekkOgFelg") or []:
+            text = " on ".join(filter(None, [(a.get("dekkdimensjon") or "").strip(),
+                                             (a.get("felgdimensjon") or "").strip()]))
+            if text and text not in per_axle:
+                per_axle.append(text)
+        if per_axle:
+            rows.append([f"Option {i}", " / ".join(per_axle) if len(per_axle) > 1 else per_axle[0]])
+    return rows
+
+
+def details(item: dict | None) -> list:
+    """All other useful registry data, grouped for the 'All vehicle data'
+    section. Rows are [label, value] or [label, iso_date, "date"]; empty and
+    not-applicable values are left out."""
+    if not item:
+        return []
+    appr = dig(item, "godkjenning", "tekniskGodkjenning") or {}
+    td = appr.get("tekniskeData") or {}
+    gen = td.get("generelt") or {}
+    body = td.get("karosseriOgLasteplan") or {}
+    weights = td.get("vekter") or {}
+    drive = td.get("motorOgDrivverk") or {}
+    motor = dig(drive, "motor", 0) or {}
+    fuel0 = dig(motor, "drivstoff", 0) or {}
+    env = dig(td, "miljodata", "miljoOgdrivstoffGruppe", 0) or {}
+    use = dig(env, "forbrukOgUtslipp", 0) or {}
+    dims = td.get("dimensjoner") or {}
+    reg = item.get("registrering") or {}
+
+    hybrid = dig(drive, "hybridKategori")
+    euro = dig(td, "miljodata", "euroKlasse", "kodeVerdi")
+    braked, unbraked = weights.get("tillattTilhengervektMedBrems"), weights.get("tillattTilhengervektUtenBrems")
+    towing = ([["Towing", "Not allowed"]] if not braked and not unbraked else
+              [["Trailer with brakes", _num(braked, "kg")], ["Trailer without brakes", _num(unbraked, "kg")]])
+    if dims.get("lengde"):
+        size = " × ".join(str(dims[k]) for k in ("lengde", "bredde", "hoyde") if dims.get(k)) + " mm"
+    else:
+        size = None
+    notes = "; ".join(n.get("merknad") for n in appr.get("kjoretoymerknad") or [] if n.get("merknad")) or None
+
+    sections = [
+        ("Registration", [
+            ["Status", _text(reg.get("registreringsstatus"))],
+            ["First registered in Norway",
+             dig(item, "forstegangsregistrering", "registrertForstegangNorgeDato"), "date"],
+            ["First registered", dig(item, "godkjenning", "forstegangsGodkjenning", "forstegangRegistrertDato"), "date"],
+            ["Current owner since", reg.get("registrertForstegangPaEierskap"), "date"],
+            ["Use", _text(reg.get("kjoringensArt"))],
+            ["Plate type", _text(dig(item, "kjennemerke", 0, "kjennemerketype"))],
+        ]),
+        ("Vehicle", [
+            ["Make", _text(dig(gen, "merke", 0), "merke")],
+            ["Model", _text(dig(gen, "handelsbetegnelse", 0))],
+            ["Type designation", _text(gen.get("typebetegnelse"))],
+            ["Class", _text(appr.get("kjoretoyklassifisering"), "beskrivelse")],
+            ["Body", _text(body.get("karosseritype"))],
+            ["Doors", _text(body.get("plasseringAvDorer"))],
+            ["Seats", _num(dig(td, "persontall", "sitteplasserTotalt"))],
+            ["Length × width × height", size],
+            ["Manufacturer", _text(dig(gen, "fabrikant", 0), "fabrikantNavn")],
+            ["Type plate location", _text(dig(body, "plasseringFabrikasjonsplate", 0))],
+        ]),
+        ("Drivetrain and environment", [
+            ["Fuel", _text(fuel0.get("drivstoffKode"))],
+            ["Power", _num(fuel0.get("maksNettoEffekt"), "kW")],
+            ["Engine", _num(motor.get("slagvolum"), "cc")],
+            ["Gearbox", _text(drive.get("girkassetype"))],
+            ["Hybrid", _text(hybrid) if hybrid and hybrid.get("kodeVerdi") != "INGEN" else None],
+            ["Top speed", _num(dig(drive, "maksimumHastighet", 0), "km/h")],
+            ["Range (WLTP)", _num(use.get("rekkeviddeKm"), "km")],
+            ["Energy use", _num(use.get("elEnergiforbruk"), "Wh/km")],
+            ["Fuel consumption", _num(use.get("forbrukBlandetKjoring"), "l/100 km")],
+            ["CO₂", _num(use.get("co2BlandetKjoring"), "g/km")],
+            ["Euro class", f"Euro {euro}" if euro else None],
+            ["Engine code", _text(motor.get("motorKode"))],
+        ]),
+        ("Weights and towing", [
+            ["Curb weight", _num(weights.get("egenvekt"), "kg")],
+            ["Payload", _num(weights.get("nyttelast"), "kg")],
+            ["Max total weight", _num(weights.get("tillattTotalvekt"), "kg")],
+            *towing,
+            ["Max train weight", _num(weights.get("tillattVogntogvekt") or None, "kg")],
+        ]),
+        ("Tyres and rims", _tyres(td)),
+        ("Approval", [
+            ["EU type approval", _text(dig(appr, "kjoretoyklassifisering", "efTypegodkjenning", "typegodkjenningNrTekst"))],
+            ["Notes", notes],
+        ]),
+    ]
+    out = []
+    for title, rows in sections:
+        rows = [r for r in rows if r[1] not in (None, "")]
+        if rows:
+            out.append({"title": title, "rows": rows})
+    return out
 
 
 # Fields whose change is worth a line in the vehicle's history.
@@ -237,8 +364,12 @@ def sync_vehicle(conn, vehicle_id: int) -> dict:
     # Copy into the vehicle record.
     updates = {col: fields[src] for col, src in OVERWRITE.items()
                if fields[src] and fields[src] != vehicle[col]}
+    # Fill blanks, and also refresh values that were copied from the registry
+    # earlier (vehicle value == previous registry value), so corrections flow
+    # through without overwriting anything staff typed in themselves.
     updates |= {col: fields[src] for col, src in FILL_BLANK.items()
-                if fields[src] and not vehicle[col]}
+                if fields[src] and fields[src] != vehicle[col]
+                and (not vehicle[col] or vehicle[col] == prev[src])}
     if updates:
         update_row(conn, "vehicles", vehicle_id, updates)
 

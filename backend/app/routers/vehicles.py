@@ -44,7 +44,9 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, limit: 
     term = f"%{q.strip()}%" if q and q.strip() else None
     return conn.execute(
         """SELECT v.*, l.code AS location_code, l.zone AS location_zone,
-                  r.sync_status AS registry_status, r.eu_control_due
+                  r.sync_status AS registry_status, r.eu_control_due,
+                  r.registration_status,
+                  r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code
              FROM vehicles v
              LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
              LEFT JOIN storage_locations l ON l.id = a.location_id
@@ -96,8 +98,13 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         (vehicle_id,),
     ).fetchall()
     registry = conn.execute(
-        f"SELECT {REGISTRY_COLUMNS} FROM vehicle_registry r WHERE r.vehicle_id = %s", (vehicle_id,)
+        f"SELECT {REGISTRY_COLUMNS}, r.data FROM vehicle_registry r WHERE r.vehicle_id = %s", (vehicle_id,)
     ).fetchone()
+    details = []
+    if registry:
+        raw = registry.pop("data")
+        registry |= vegvesen.overview(raw)
+        details = vegvesen.details(raw)
     marked_by = vehicle["registered_marked_by"] and conn.execute(
         "SELECT name FROM staff WHERE id = %s", (vehicle["registered_marked_by"],)
     ).fetchone()
@@ -110,6 +117,7 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "open_damages": open_damages,
         "events": events,
         "registry": registry,
+        "registry_details": details,
         "registry_configured": vegvesen.is_configured(),
     }
 

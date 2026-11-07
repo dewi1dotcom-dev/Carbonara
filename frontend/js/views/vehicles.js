@@ -16,15 +16,19 @@ export async function vehiclesView(el) {
     if (statusSel.value) params.set('status', statusSel.value);
     try {
       const rows = await api.get(`/vehicles?${params}`);
-      results.replaceChildren(...(rows.length ? rows.map((v) =>
-        h('a', { class: 'card list-card', href: `#/vehicles/${v.id}` },
+      results.replaceChildren(...(rows.length ? rows.map((v) => {
+        const eu = euStatus(v.eu_control_due);
+        return h('a', { class: 'card list-card', href: `#/vehicles/${v.id}` },
           h('div', { class: 'list-main' },
             h('div', { class: 'list-title' }, vehicleTitle(v), ' ', pill(v.status)),
-            h('div', { class: 'vin mono' }, v.vin)),
+            h('div', { class: 'vin mono' }, v.vin),
+            h('div', { class: 'badges' },
+              badge(regStatus(v.registered_marked_at, v.registration_status_code, v.registration_status)),
+              eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null)),
           h('div', { class: 'list-meta' },
             [v.registration_number, v.color, v.location_code && `Spot ${v.location_code}`,
-              v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`].filter(Boolean).join(' · '))))
-        : [h('p', { class: 'empty' }, 'No vehicles found.')]));
+              v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`].filter(Boolean).join(' · ')));
+      }) : [h('p', { class: 'empty' }, 'No vehicles found.')]));
     } catch (e) { showError(e); }
   }
   search.addEventListener('input', debounce(load, 250));
@@ -84,11 +88,44 @@ const SYNC_TEXT = {
   error: 'Sync failed — will retry automatically',
 };
 
-function euControlClass(due) {
-  if (!due) return '';
-  const days = (new Date(due) - new Date()) / 86400000;
-  return days < 0 ? 'bad' : days < 60 ? 'warn' : '';
+// ------------------------------------------------------------ status badges
+
+const EU_WARN_DAYS = 60; // amber from this many days before the deadline
+const EU_RED_DAYS = 1;   // red from this many days before the deadline
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Whole days from today (local) until an ISO date; negative when passed. */
+function daysUntil(iso) {
+  if (!iso) return null;
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  const now = new Date();
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
 }
+
+/** EU-kontroll: red within EU_RED_DAYS or passed, amber within EU_WARN_DAYS, green otherwise. */
+function euStatus(due) {
+  const days = daysUntil(due);
+  if (days == null) return null;
+  if (days < 0) return { cls: 'bad', days, text: `Overdue by ${plural(-days, 'day')}` };
+  if (days <= EU_RED_DAYS) {
+    return { cls: 'bad', days, text: days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days} days` };
+  }
+  if (days <= EU_WARN_DAYS) return { cls: 'warn', days, text: `Due in ${plural(days, 'day')}` };
+  return { cls: 'good', days, text: 'Valid' };
+}
+
+/** Registration: amber when not registered, red when Vegvesen says anything
+ *  other than registered (deregistered, scrapped…), green when registered. */
+function regStatus(markedAt, code, name) {
+  if (!markedAt) return { cls: 'warn', text: 'Not registered' };
+  if (!code) return { cls: '', text: 'Registered · awaiting data' };
+  if (code === 'REGISTRERT') {
+    return { cls: 'good', text: name && name !== 'Registrert' ? `Registered (${name})` : 'Registered' };
+  }
+  return { cls: 'bad', text: name || code };
+}
+
+const badge = (st, prefix = '') => st && h('span', { class: `badge ${st.cls}` }, prefix + st.text);
 
 function markDialog(v, done) {
   const staffSel = h('select', { id: 'reg-staff' }, h('option', { value: '' }, 'Loading…'));
@@ -129,54 +166,83 @@ async function showRaw(v) {
   } catch (e) { showError(e); }
 }
 
+const kv = (rows) => h('dl', { class: 'kv' },
+  rows.filter(([, val]) => val != null && val !== '').map(([k, val]) => [h('dt', {}, k), h('dd', {}, val)]));
+
+/** Top of the vehicle page: the facts staff need at a glance. */
+function overviewCard(v, rerender) {
+  const r = v.registry || {};
+  const reg = regStatus(v.registered_marked_at, r.status_code, r.registration_status);
+  const eu = euStatus(r.eu_control_due);
+  const loc = v.current_location;
+
+  const alerts = [];
+  if (eu?.cls === 'bad') {
+    alerts.push(h('div', { class: 'notice bad' }, h('strong', {}, `EU-kontroll ${eu.text.toLowerCase()}. `),
+      eu.days < 0
+        ? `The deadline was ${fmtDate(r.eu_control_due, false)}. The car must pass EU-kontroll before it is driven on public roads.`
+        : `The deadline is ${fmtDate(r.eu_control_due, false)}. Book EU-kontroll now.`));
+  }
+  if (reg.cls === 'bad') {
+    alerts.push(h('div', { class: 'notice bad' }, h('strong', {}, `Registration status: ${reg.text}. `),
+      'Statens vegvesen does not list this car as registered.'));
+  }
+
+  return h('section', { class: 'card overview' },
+    alerts,
+    kv([
+      ['Registration', h('span', { class: 'inline' },
+        v.registration_number ? h('span', { class: 'mono strong' }, v.registration_number) : null,
+        badge(reg),
+        v.registered_marked_at ? null
+          : h('button', { class: 'btn primary small', type: 'button', onClick: () => markDialog(v, rerender) },
+            'Mark as registered'))],
+      ['EU-kontroll', eu
+        ? h('span', { class: 'inline' }, badge(eu), `due ${fmtDate(r.eu_control_due, false)}`)
+        : h('span', { class: 'muted' }, v.registered_marked_at ? 'No date from Statens vegvesen yet' : '–')],
+      ['Last approved', r.eu_control_last_approved && fmtDate(r.eu_control_last_approved, false)],
+      ['Colour', v.color ?? r.color ?? '–'],
+      ['VIN location', r.vin_location ?? h('span', { class: 'muted' }, '–')],
+      ['Storage spot', loc ? `${loc.code}${loc.zone ? ` (${loc.zone})` : ''} since ${fmtDate(loc.placed_at)}` : '–'],
+    ]));
+}
+
+/** Everything else, folded away under "All vehicle data". */
 function registryCard(v, rerender) {
-  const card = h('section', { class: 'card' }, h('h2', {}, 'Registration in Norway'));
-  if (!v.registered_marked_at) {
-    card.append(
-      h('p', { class: 'muted' },
-        'Not marked as registered. When sales has registered the car, mark it here to fetch its data from Statens vegvesen.'),
-      h('button', { class: 'btn primary', type: 'button', onClick: () => markDialog(v, rerender) }, 'Mark as registered'));
-    return card;
-  }
-
+  const card = h('section', { class: 'card' }, h('h2', {}, 'Statens vegvesen'));
   const r = v.registry || { sync_status: 'pending' };
-  card.append(h('p', {},
-    `Marked as registered ${fmtDate(v.registered_marked_at)}`,
-    v.registered_marked_by_name ? ` by ${v.registered_marked_by_name}` : '', '.'));
 
-  if (!v.registry_configured) {
-    card.append(h('div', { class: 'notice warn' },
-      'The Statens vegvesen API key is not configured on the server, so no data can be fetched yet.'));
+  if (!v.registered_marked_at) {
+    card.append(h('p', { class: 'muted' },
+      'Not registered yet. When sales has registered the car, use "Mark as registered" above to fetch its data.'));
+  } else {
+    if (!v.registry_configured) {
+      card.append(h('div', { class: 'notice warn' },
+        'The Statens vegvesen API key is not configured on the server, so no data can be fetched yet.'));
+    }
+    card.append(h('div', { class: `sync-line sync-${r.sync_status}` },
+      SYNC_TEXT[r.sync_status] ?? r.sync_status,
+      r.last_success_at ? ` · last ${fmtDate(r.last_success_at)}` : '',
+      r.sync_status !== 'ok' && r.last_error ? h('span', { class: 'block small' }, r.last_error) : null));
   }
-  card.append(h('div', { class: `sync-line sync-${r.sync_status}` },
-    SYNC_TEXT[r.sync_status] ?? r.sync_status,
-    r.last_success_at ? ` · last ${fmtDate(r.last_success_at)}` : '',
-    r.sync_status !== 'ok' && r.last_error ? h('span', { class: 'block small' }, r.last_error) : null));
 
-  if (r.last_success_at) {
-    const num = (n, unit) => (n == null ? null : `${Number(n).toLocaleString()} ${unit}`);
-    const rows = [
-      ['Reg. no', r.registration_number && h('span', { class: 'mono' }, r.registration_number)],
-      ['Status', r.registration_status],
-      ['EU-kontroll due', r.eu_control_due &&
-        h('span', { class: `due ${euControlClass(r.eu_control_due)}` }, fmtDate(r.eu_control_due, false))],
-      ['EU-kontroll approved', r.eu_control_last_approved && fmtDate(r.eu_control_last_approved, false)],
-      ['First reg. in Norway', r.first_registered_norway && fmtDate(r.first_registered_norway, false)],
-      ['First registered', r.first_registered && fmtDate(r.first_registered, false)],
-      ['Make / model', [r.make, r.model].filter(Boolean).join(' ')],
-      ['Type', r.type_designation],
-      ['Class', r.vehicle_class],
-      ['Body', r.body_type],
-      ['Colour', r.color],
-      ['Fuel', r.fuel],
-      ['Power', num(r.power_kw, 'kW')],
-      ['Engine', num(r.engine_cc, 'cc')],
-      ['Seats', r.seats],
-      ['Curb weight', num(r.curb_weight_kg, 'kg')],
-      ['Max total weight', num(r.total_weight_kg, 'kg')],
-    ].filter(([, val]) => val != null && val !== '');
-    card.append(h('dl', { class: 'kv' }, rows.map(([k, val]) => [h('dt', {}, k), h('dd', {}, val)])));
-  }
+  const fmt = ([label, val, type]) => [label, type === 'date' ? fmtDate(val, false) : val];
+  const groups = [
+    { title: 'In Carbonara', rows: [
+      ['Make / model', [v.make, v.model, v.variant].filter(Boolean).join(' ')],
+      ['Model year', v.model_year],
+      ['Fuel', v.fuel_type],
+      ['In system since', fmtDate(v.created_at)],
+      ['Marked as registered', v.registered_marked_at &&
+        `${fmtDate(v.registered_marked_at)}${v.registered_marked_by_name ? ` by ${v.registered_marked_by_name}` : ''}`],
+    ] },
+    ...(v.registry_details || []).map((g) => ({ title: g.title, rows: g.rows.map(fmt) })),
+  ];
+  card.append(h('details', { class: 'more' },
+    h('summary', {}, 'All vehicle data'),
+    groups.map((g) => [h('h3', {}, g.title), kv(g.rows)])));
+
+  if (!v.registered_marked_at) return card;
 
   const syncBtn = h('button', { class: 'btn', type: 'button', disabled: !v.registry_configured }, '↻ Sync now');
   syncBtn.addEventListener('click', () => busy(syncBtn, async () => {
@@ -211,24 +277,11 @@ export async function vehicleView(el, [id]) {
       el.replaceChildren(...fresh.childNodes);
     } catch (e) { showError(e); }
   };
-  const loc = v.current_location;
-  const rows = [
-    ['VIN', h('span', { class: 'mono' }, v.vin)],
-    ['Make / model', [v.make, v.model, v.variant].filter(Boolean).join(' ') || '–'],
-    ['Model year', v.model_year ?? '–'],
-    ['Colour', v.color ?? '–'],
-    ['Fuel', v.fuel_type ?? '–'],
-    ['Registration', v.registration_number ?? '–'],
-    ['Location', loc ? `${loc.code}${loc.zone ? ` (${loc.zone})` : ''} since ${fmtDate(loc.placed_at)}` : '–'],
-    ['In system since', fmtDate(v.created_at)],
-  ];
-
   el.append(
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, vehicleTitle(v)), h('div', { class: 'vin mono big' }, v.vin)),
       pill(v.status)),
-    h('section', { class: 'card' },
-      h('dl', { class: 'kv' }, rows.map(([k, val]) => [h('dt', {}, k), h('dd', {}, val)]))),
+    overviewCard(v, rerender),
     registryCard(v, rerender),
     h('section', { class: 'card' },
       h('h2', {}, `Known damage (${v.open_damages.length})`),
