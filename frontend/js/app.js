@@ -48,3 +48,15 @@ async function render() {
 
 window.addEventListener('hashchange', render);
 render();
+
+// Show which version/build is running, so it is easy to check after an update.
+fetch('/api/version')
+  .then((r) => (r.ok ? r.json() : null))
+  .then((v) => {
+    if (!v) return;
+    const el = document.getElementById('app-version');
+    el.textContent = v.build_time
+      ? `Carbonara v${v.version} · built ${v.build_time}`
+      : `Carbonara v${v.version}`;
+  })
+  .catch(() => {});

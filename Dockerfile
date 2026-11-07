@@ -11,6 +11,9 @@ RUN pip install --no-cache-dir -r backend/requirements.txt
 
 COPY backend backend
 COPY frontend frontend
+COPY VERSION VERSION
+# Stamp the build time (UTC) so the footer shows exactly which build is running.
+RUN date -u +"%Y-%m-%d %H:%M UTC" > BUILD_TIME
 
 WORKDIR /app/backend
 ENV PHOTO_DIR=/data/photos \

@@ -21,7 +21,7 @@ async def lifespan(app: FastAPI):
     pool.close()
 
 
-app = FastAPI(title="Carbonara", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="Carbonara", version=settings.version, lifespan=lifespan)
 
 for module in (admin, vin, inspections, vehicles):
     app.include_router(module.router, prefix="/api")
@@ -31,7 +31,12 @@ for module in (admin, vin, inspections, vehicles):
 def health():
     with pool.connection() as conn:
         conn.execute("SELECT 1")
-    return {"status": "ok"}
+    return {"status": "ok", "version": settings.version}
+
+
+@app.get("/api/version", tags=["meta"])
+def version():
+    return {"version": settings.version, "build_time": settings.build_time or None}
 
 
 # Frontend (must be mounted last so /api routes win).

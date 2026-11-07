@@ -12,9 +12,15 @@ export async function settingsView(el) {
     registryBox.replaceChildren(h('section', { class: 'card' },
       h('h2', {}, 'Statens vegvesen sync'),
       s.configured
-        ? h('p', {}, `API key configured. Registered vehicles are re-synced every ${s.sync_days} days.`)
+        ? h('p', {},
+          `API key configured${s.key_hint ? ` (ending in …${s.key_hint})` : ''}. `,
+          `Registered vehicles are re-synced every ${s.sync_days} days.`)
         : h('div', { class: 'notice warn' },
-          'No API key configured. Set VEGVESEN_API_KEY in the server’s .env file and restart (docker compose up -d).'),
+          'No API key configured. Set VEGVESEN_API_KEY in the server’s .env file (or the Portainer stack’s ',
+          'environment variables) and redeploy.'),
+      h('p', { class: 'muted small' },
+        'To replace the key: change VEGVESEN_API_KEY on the server and redeploy (docker compose up -d, or ',
+        '“Update the stack” in Portainer). No rebuild or code change needed.'),
       h('dl', { class: 'kv' },
         [['Synced OK', s.ok], ['Waiting', s.pending], ['Not found in registry', s.not_found], ['Errors', s.error],
           ['Due for sync now', s.due]].map(([k, val]) => [h('dt', {}, k), h('dd', {}, String(val))])),

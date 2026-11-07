@@ -74,7 +74,12 @@ section { margin-bottom: 1rem; }
 .topbar nav { display: flex; gap: .25rem; margin-left: auto; overflow-x: auto; }
 .topbar nav a { color: #cbd5e1; text-decoration: none; padding: .45rem .7rem; border-radius: 8px; white-space: nowrap; }
 .topbar nav a.active { background: rgb(255 255 255 / .12); color: #fff; }
-main { max-width: 980px; margin: 0 auto; padding: 1rem 16px 4rem; }
+main { max-width: 980px; margin: 0 auto; padding: 1rem 16px 2rem; }
+.app-footer {
+  max-width: 980px; margin: 0 auto;
+  padding: 1rem 16px max(1.5rem, env(safe-area-inset-bottom));
+  color: var(--muted); font-size: .8rem; text-align: center;
+}
 .loading { color: var(--muted); padding: 2rem 0; text-align: center; }
 
 .page-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }

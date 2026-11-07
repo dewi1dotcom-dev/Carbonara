@@ -4,7 +4,19 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _read_text(path: Path, default: str) -> str:
+    try:
+        return path.read_text(encoding="utf-8").strip() or default
+    except OSError:
+        return default
+
+
 class Settings:
+    # Bump VERSION (repo root) for each release; BUILD_TIME is stamped by the
+    # Dockerfile so two builds of the same version can be told apart.
+    version = _read_text(ROOT / "VERSION", "dev")
+    build_time = _read_text(ROOT / "BUILD_TIME", "")
+
     database_url = os.environ.get(
         "DATABASE_URL", "postgresql://carbonara:carbonara@localhost:5432/carbonara"
     )

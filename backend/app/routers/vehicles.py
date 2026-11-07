@@ -31,7 +31,10 @@ def registry_status(conn=Depends(get_conn)):
         """SELECT last_error, last_attempt_at FROM vehicle_registry
             WHERE sync_status = 'error' ORDER BY last_attempt_at DESC NULLS LAST LIMIT 1"""
     ).fetchone()
+    key = vegvesen.settings.vegvesen_api_key
     return {"configured": vegvesen.is_configured(), "sync_days": vegvesen.settings.vegvesen_sync_days,
+            # Only the last 4 characters, so staff can confirm which key is active after replacing it.
+            "key_hint": key[-4:] if len(key) >= 8 else None,
             **counts, "last_error": last_error}
 
 
