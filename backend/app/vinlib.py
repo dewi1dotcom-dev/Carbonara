@@ -261,8 +261,14 @@ def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
         if not 6 <= len(compact) <= 16 or any(v in compact or compact in v for v in vins):
             continue
         for m in PLATE_RE.finditer(compact):
-            letters, digits = m.group()[:2], m.group()[2:].translate(_PLATE_DIGIT_FIXES)
+            raw_digits = m.group()[2:]
+            letters, digits = m.group()[:2], raw_digits.translate(_PLATE_DIGIT_FIXES)
             if not digits.isdigit():
+                continue
+            # A real plate reads cleanly: at most one letter->digit fix. "BRISTOL"
+            # would otherwise become "BR 15701" — that is a word (personalised plate).
+            fixes = sum(not c.isdigit() for c in raw_digits)
+            if fixes > 2:
                 continue
             if len(digits) == 6:
                 # Plates have at most 5 digits; a leading "1" is usually a sticker or
@@ -270,7 +276,7 @@ def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
                 if digits[0] != "1":
                     continue
                 digits = digits[1:]
-            out.append((f"{letters} {digits}", len(compact) == len(m.group())))
+            out.append((f"{letters} {digits}", len(compact) == len(m.group()) and fixes <= 1))
     return out
 
 
@@ -281,34 +287,58 @@ def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
 # boxes at any angle, straightens each one and reads it with a neural network.
 
 _engines: dict[bool, object] = {}
-_engine_lock = threading.RLock()  # re-entrant: the hi-res fallback may build the default engine
+_engine_lock = threading.RLock()  # re-entrant: the dense engine may fall back to the default one
 
 
-def _rapid(hires: bool = False):
-    """Default engine (detection on a ~736 px version of the photo, fast) or a
-    high-resolution one for small, crowded text such as door-frame labels."""
-    if hires not in _engines:
+def _rapid(dense: bool = False):
+    """Default engine, or a 'dense' one for tightly packed lines (door-frame
+    labels): tighter boxes so neighbouring lines aren't merged, and keep
+    low-confidence reads (the VIN check digit filters them afterwards)."""
+    if dense not in _engines:
         with _engine_lock:
-            if hires not in _engines:
+            if dense not in _engines:
                 from rapidocr_onnxruntime import RapidOCR
 
-                if hires:
+                if dense:
                     try:
-                        _engines[True] = RapidOCR(det_limit_side_len=1920, det_limit_type="max")
-                    except Exception as exc:  # older/newer option names: use the default
-                        log.warning("hi-res OCR options not accepted (%s); using defaults", exc)
+                        _engines[True] = RapidOCR(det_unclip_ratio=1.3, det_box_thresh=0.4, text_score=0.3)
+                    except Exception as exc:  # option names not accepted: use the default
+                        log.warning("dense OCR options not accepted (%s); using defaults", exc)
                         _engines[True] = _rapid(False)
                 else:
                     _engines[False] = RapidOCR()
-    return _engines[hires]
+    return _engines[dense]
 
 
-def scene_text(rgb: Image.Image, hires: bool = False) -> list[dict]:
+def _zoom_on_text(image: Image.Image, items: list[dict], target_height: float = 56) -> Image.Image | None:
+    """Cut out the area where text was found and enlarge it so small, tightly
+    packed lines (door-frame labels) become big enough to separate."""
+    if not items:
+        return None
+    heights = sorted(i["height"] for i in items)
+    median_h = heights[len(heights) // 2] or 1
+    pad = 2.5 * median_h
+    half = [max(i["width"], i["height"]) / 2 for i in items]
+    left = max(0, min(i["cx"] - h for i, h in zip(items, half)) - pad)
+    top = max(0, min(i["cy"] - h for i, h in zip(items, half)) - pad)
+    right = min(image.width, max(i["cx"] + h for i, h in zip(items, half)) + pad)
+    bottom = min(image.height, max(i["cy"] + h for i, h in zip(items, half)) + pad)
+    if right - left < 20 or bottom - top < 20:
+        return None
+    crop = image.crop((int(left), int(top), int(right), int(bottom)))
+    factor = max(1.5, min(3.0, target_height / median_h))
+    factor = min(factor, 3200 / max(crop.size))  # keep it a sane size
+    if factor <= 1.05:
+        return crop
+    return crop.resize((int(crop.width * factor), int(crop.height * factor)), Image.LANCZOS)
+
+
+def scene_text(rgb: Image.Image, dense: bool = False) -> list[dict]:
     """Every text box in the photo: [{text, score, height, width, cx, cy, ux, uy}]."""
     import numpy as np
 
     arr = np.ascontiguousarray(np.asarray(rgb.convert("RGB"))[:, :, ::-1])  # RGB -> BGR
-    result, _ = _rapid(hires)(arr)
+    result, _ = _rapid(dense)(arr)
     items = []
     for box, text, score in result or []:
         pts = np.asarray(box, dtype=float)  # TL, TR, BR, BL
@@ -382,7 +412,8 @@ def _plates_from_items(items: list[dict], vins: set[str]) -> dict[str, dict]:
             word = re.sub(r"[\s\-]", "", raw)
             if (it["height"] >= 0.6 * tallest and it["score"] > 0.85 and 2 <= len(word) <= 7
                     and re.fullmatch(r"[A-Z0-9ÆØÅ]+", word) and re.search(r"[A-ZÆØÅ]", word)
-                    and word not in _NOT_PLATES and not any(word in v for v in vins)):
+                    and word not in _NOT_PLATES and not word.startswith(("CORP", "MODE", "SUBAR"))
+                    and not any(word in v for v in vins)):
                 add(word, "low", it["height"], custom=True)
     return plates
 
@@ -428,19 +459,33 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
                 or any(p["confidence"] == "medium" for p in plates.values()))
 
     if not found:
-        # Pass 1: normal resolution (fast, ~1 s). If that finds no VIN or clear
-        # plate: pass 2 at full resolution (small text on crowded door-frame
-        # labels), then passes 3–4 with the photo turned ±35° (very steep plates).
-        passes = [("normal", False, 0), ("hi-res", True, 0), ("turned +35°", True, 35), ("turned -35°", True, -35)]
+        # Pass 1: the photo as is (fast, ~1 s). If that finds no VIN or clear
+        # plate: pass 2 zooms in on the text found and reads it with tighter
+        # boxes (crowded door-frame labels), then passes 3–4 turn the photo
+        # ±35° (very steep plates).
+        passes = [("normal", False, 0), ("zoom", True, None), ("turned +35°", False, 35), ("turned -35°", False, -35)]
         ocr_ok = True
-        for name, hires, angle in passes:
-            image = original if not angle else original.rotate(angle, resample=Image.BICUBIC, expand=True)
+        first_items: list[dict] = []
+        for name, dense, angle in passes:
+            if angle is None:
+                image = _zoom_on_text(original, first_items)
+                if image is None:
+                    continue
+            elif angle:
+                image = original.rotate(angle, resample=Image.BICUBIC, expand=True)
+            else:
+                image = original
             try:
-                items = scene_text(image, hires=hires)
-            except Exception as exc:  # engine missing/broken: fall back to Tesseract
+                items = scene_text(image, dense=dense)
+            except Exception as exc:
+                if name != "normal":  # a later pass failed: keep what pass 1 found
+                    log.warning("OCR pass %s failed: %s", name, exc)
+                    continue
                 log.warning("RapidOCR unavailable, falling back to Tesseract: %s", exc)
                 ocr_ok = False
                 break
+            if name == "normal":
+                first_items = items
             seen_text += [f"[{name}] {it['text']} ({it['score']:.2f})" for it in items]
             for it in items + joined_lines(items):  # joined: VINs split over two boxes
                 for vin, exact in _candidates_in_text(it["text"], fix_ocr=True):
