@@ -5,8 +5,11 @@ Vehicle data for registered cars comes from Statens vegvesen, see vegvesen.py.
 Recognition strategy (best first):
   1. 1D/2D barcodes (Code 39/128, QR via zbar; DataMatrix via libdmtx). Door
      jamb / B-pillar labels usually carry one of these, and barcodes are exact.
-  2. OCR with Tesseract on a few pre-processed variants of the image
-     (windscreen plate, stamped chassis number, registration document).
+  2. OCR with Tesseract. Photos are first straightened (the text angle is
+     found from a projection profile), the text band is cut out and scaled,
+     and a few contrast variants are tried — phone photos are rarely level.
+The same OCR text is also searched for Norwegian registration plates
+(two letters + 4–5 digits), which the UI then looks up in Statens vegvesen.
 Every candidate is returned with a confidence; the user always confirms.
 """
 
@@ -106,45 +109,168 @@ def _barcodes(img: Image.Image) -> list[str]:
     return texts
 
 
+# ---- straightening ---------------------------------------------------------
+
+def _profile_score(edges: Image.Image, angle: float) -> float:
+    """How 'line-like' the edge image is after rotating by `angle`: text lines
+    and label borders give sharp peaks in the row sums when they are level."""
+    import numpy as np
+
+    rotated = edges.rotate(angle, resample=Image.BILINEAR, expand=True)
+    rows = np.asarray(rotated, dtype=np.float32).sum(axis=1)
+    return float(np.square(np.diff(rows)).sum())
+
+
+def text_angle(gray: Image.Image) -> float:
+    """Angle (degrees, PIL convention) that makes the text horizontal.
+    Polarity-independent (works on edges), coarse search then refine."""
+    small = gray.copy()
+    small.thumbnail((700, 700))
+    edges = ImageOps.autocontrast(small, cutoff=1).filter(ImageFilter.FIND_EDGES)
+    edges = edges.point(lambda p: 255 if p > 60 else 0)  # drop sensor noise / dust
+    best = max(range(-80, 81, 4), key=lambda a: _profile_score(edges, a))
+    fine = [best + d / 2 for d in range(-8, 9)]
+    return max(fine, key=lambda a: _profile_score(edges, a))
+
+
+def _text_bands(img: Image.Image, max_bands: int = 2) -> list[Image.Image]:
+    """Cut out the horizontal bands holding the most text (after straightening)."""
+    import numpy as np
+
+    small = img.copy()
+    scale = 700 / max(img.size)
+    if scale < 1:
+        small = small.resize((max(1, int(img.width * scale)), max(1, int(img.height * scale))))
+    else:
+        scale = 1.0
+    edges = np.asarray(ImageOps.autocontrast(small, cutoff=1).filter(ImageFilter.FIND_EDGES), dtype=np.float32)
+    rows = np.convolve((edges > 60).sum(axis=1).astype(np.float32), np.ones(5) / 5, mode="same")
+    if rows.max() <= 0:
+        return []
+    bands, taken = [], np.zeros_like(rows, dtype=bool)
+    for _ in range(max_bands):
+        masked = np.where(taken, 0, rows)
+        peak = int(masked.argmax())
+        if masked[peak] < rows.max() * 0.25:
+            break
+        lo = hi = peak
+        thresh = masked[peak] * 0.3
+        while lo > 0 and rows[lo - 1] > thresh and not taken[lo - 1]:
+            lo -= 1
+        while hi < len(rows) - 1 and rows[hi + 1] > thresh and not taken[hi + 1]:
+            hi += 1
+        taken[lo:hi + 1] = True
+        pad = max(4, int((hi - lo) * 0.35))
+        top, bottom = max(0, int((lo - pad) / scale)), min(img.height, int((hi + pad) / scale) + 1)
+        if bottom - top < 8:
+            continue
+        band = img.crop((0, top, img.width, bottom))
+        # Tesseract reads best at ~30–60 px text height.
+        factor = max(0.4, min(3.0, 110 / band.height))
+        bands.append(band.resize((max(1, int(band.width * factor)), max(1, int(band.height * factor))), Image.LANCZOS))
+    return bands
+
+
 def _ocr_variants(img: Image.Image):
-    yield img
     contrast = ImageOps.autocontrast(img, cutoff=2)
-    yield contrast.filter(ImageFilter.SHARPEN)
+    yield contrast
+    yield ImageOps.invert(contrast)  # light text on dark (stamped/engraved/printed labels)
     yield contrast.point(lambda p: 255 if p > 128 else 0)
-    yield ImageOps.invert(contrast)  # light text on dark (stamped/engraved)
 
 
 def _ocr(img: Image.Image) -> list[str]:
+    """OCR on straightened text bands first, then the whole straightened image.
+    Stops as soon as a check-digit-valid VIN turns up."""
     try:
         import pytesseract
     except ImportError:
         log.warning("pytesseract not installed; OCR disabled")
         return []
-    whitelist = "ABCDEFGHJKLMNPRSTUVWXYZ0123456789OQI"
+    whitelist = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+    try:
+        angle = text_angle(img)
+    except Exception as exc:  # numpy missing etc. — fall back to the image as-is
+        log.warning("deskew failed: %s", exc)
+        angle = 0.0
+    level = img.rotate(angle, resample=Image.BICUBIC, expand=True, fillcolor=int(_median(img)))
+    log.info("OCR: text angle %.1f°", angle)
+
+    jobs = []
+    try:
+        for band in _text_bands(level):
+            jobs += [(v, 7) for v in _ocr_variants(band)]  # psm 7: one text line
+            jobs += [(v, 6) for v in list(_ocr_variants(band))[:2]]
+    except Exception as exc:
+        log.warning("band detection failed: %s", exc)
+    whole = level.copy()
+    whole.thumbnail((1800, 1800))
+    jobs += [(v, 11) for v in list(_ocr_variants(whole))[:2]]  # psm 11: sparse text anywhere
+
     texts = []
-    for variant in _ocr_variants(img):
-        for psm in (6, 11):
-            try:
-                text = pytesseract.image_to_string(
-                    variant, config=f"--psm {psm} -c tessedit_char_whitelist={whitelist}", timeout=8
-                )
-            except Exception as exc:
-                log.warning("tesseract failed: %s", exc)
-                return texts
-            texts.append(text)
-            # Stop early once we have a check-digit-valid VIN.
-            if any(check_digit_ok(v) for v, _ in _candidates_in_text(text, True)):
-                return texts
+    for variant, psm in jobs:
+        try:
+            text = pytesseract.image_to_string(
+                variant, config=f"--psm {psm} -c tessedit_char_whitelist={whitelist}", timeout=8
+            )
+        except Exception as exc:
+            log.warning("tesseract failed: %s", exc)
+            break
+        texts.append(text)
+        # Stop early on a check-digit-valid VIN or a line that is exactly a plate.
+        if any(check_digit_ok(v) for v, _ in _candidates_in_text(text, True)) \
+                or any(exact for _, exact in _plates_in_text(text, set())):
+            break
     return texts
 
 
+def _median(img: Image.Image) -> float:
+    hist = img.histogram()
+    half, acc = sum(hist) / 2, 0
+    for value, count in enumerate(hist):
+        acc += count
+        if acc >= half:
+            return value
+    return 128
+
+
+# ---- Norwegian registration plates ------------------------------------------
+
+# Standard plates: two letters + 4 or 5 digits ("EJ 18664", "AB 1234").
+PLATE_RE = re.compile(r"[A-Z]{2}[0-9OQDILZSBG]{4,5}")
+_PLATE_DIGIT_FIXES = str.maketrans({"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1",
+                                    "Z": "2", "S": "5", "B": "8", "G": "6"})
+
+
+def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
+    """(plate, exact_line) pairs, formatted 'EJ 18664'. Text that is part of a
+    VIN on the same line is ignored (VINs contain plate-like runs)."""
+    out = []
+    for line in text.upper().splitlines():
+        compact = re.sub(r"[^A-Z0-9]", "", line)
+        if not 6 <= len(compact) <= 16 or any(v in compact or compact in v for v in vins):
+            continue
+        for m in PLATE_RE.finditer(compact):
+            letters, digits = m.group()[:2], m.group()[2:].translate(_PLATE_DIGIT_FIXES)
+            if not digits.isdigit():
+                continue
+            out.append((f"{letters} {digits}", len(compact) == len(m.group())))
+    return out
+
+
 def recognize(data: bytes, limit: int = 5) -> list[dict]:
+    """VIN candidates only (kept for callers that just want VINs)."""
+    return recognize_all(data, limit)["candidates"]
+
+
+def recognize_all(data: bytes, limit: int = 5) -> dict:
+    """{'candidates': [VIN candidates], 'plates': [registration plate candidates]}"""
     img = Image.open(io.BytesIO(data))
     img = ImageOps.exif_transpose(img).convert("L")
     if max(img.size) > 2400:
         img.thumbnail((2400, 2400))
 
     found: dict[str, dict] = {}
+    plates: dict[str, dict] = {}
 
     def add(vin: str, source: str, exact: bool) -> None:
         ok = check_digit_ok(vin)
@@ -167,11 +293,18 @@ def recognize(data: bytes, limit: int = 5) -> list[dict]:
             add(vin, "barcode", exact)
 
     if not found:
-        for text in _ocr(img):
+        texts = _ocr(img)
+        for text in texts:
             for vin, exact in _candidates_in_text(text, fix_ocr=True):
                 add(vin, "ocr", exact)
+        for text in texts:
+            for plate, exact in _plates_in_text(text, set(found)):
+                prev = plates.get(plate)
+                if prev is None or (exact and prev["confidence"] != "medium"):
+                    plates[plate] = {"plate": plate, "confidence": "medium" if exact else "low"}
 
     ranked = sorted(found.values(), key=lambda c: -c["_score"])[:limit]
     for c in ranked:
         c.pop("_score")
-    return ranked
+    plate_list = sorted(plates.values(), key=lambda p: p["confidence"] != "medium")[:limit]
+    return {"candidates": ranked, "plates": plate_list}

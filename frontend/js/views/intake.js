@@ -47,7 +47,7 @@ export async function intakeView(el) {
   const startBtn = h('button', { class: 'btn primary big', disabled: true }, 'Start inspection');
 
   const picker = cameraPicker(scanPhoto);
-  const scanBtn = h('button', { class: 'btn', type: 'button', onClick: () => picker.open() }, '📷 Read VIN from photo');
+  const scanBtn = h('button', { class: 'btn', type: 'button', onClick: () => picker.open() }, '📷 Read VIN or plate from photo');
 
   function currentVin() { return normalizeVin(vinInput.value); }
 
@@ -239,16 +239,16 @@ export async function intakeView(el) {
 
   async function scanPhoto(file) {
     state.vinPhoto = file;
-    scanResult.replaceChildren(h('div', { class: 'spinner-line' }, 'Reading VIN from photo…'));
+    scanResult.replaceChildren(h('div', { class: 'spinner-line' }, 'Reading photo…'));
     scanBtn.disabled = true;
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const { candidates } = await api.postForm('/vin/recognize', fd);
+      const { candidates = [], plates = [] } = await api.postForm('/vin/recognize', fd);
       scanResult.replaceChildren();
-      if (!candidates.length) {
+      if (!candidates.length && !plates.length) {
         scanResult.append(h('div', { class: 'card notice warn' },
-          'No VIN found. Try again closer and straight-on, avoid glare, or type it in.'));
+          'No VIN or registration plate found. Try again a bit closer, avoid glare, or type it in.'));
         return;
       }
       const choose = (c) => {
@@ -256,14 +256,31 @@ export async function intakeView(el) {
         onVinChanged();
         state.vinSource = c.source;
       };
+      // A plate is checked against Statens vegvesen, which also fills in the VIN.
+      const choosePlate = (p) => {
+        regInput.value = p.plate;
+        findByRegnr();
+      };
       if (candidates.length === 1 && candidates[0].confidence === 'high') choose(candidates[0]);
-      scanResult.append(
-        h('p', { class: 'muted' }, candidates.length === 1 ? 'Found:' : 'Possible VINs — tap the right one:'),
-        h('div', { class: 'candidates' }, candidates.map((c) =>
-          h('button', { class: `candidate conf-${c.confidence}`, type: 'button', onClick: () => choose(c) },
-            h('span', { class: 'mono' }, c.vin),
-            h('small', {}, `${c.source === 'barcode' ? 'Barcode' : 'Text recognition'} · ${c.confidence} confidence`)))),
-        h('p', { class: 'muted small' }, 'Always compare with the car before starting.'));
+      else if (!candidates.length && plates[0].confidence === 'medium') choosePlate(plates[0]);
+
+      if (candidates.length) {
+        scanResult.append(
+          h('p', { class: 'muted' }, candidates.length === 1 ? 'VIN found:' : 'Possible VINs — tap the right one:'),
+          h('div', { class: 'candidates' }, candidates.map((c) =>
+            h('button', { class: `candidate conf-${c.confidence}`, type: 'button', onClick: () => choose(c) },
+              h('span', { class: 'mono' }, c.vin),
+              h('small', {}, `${c.source === 'barcode' ? 'Barcode' : 'Text recognition'} · ${c.confidence} confidence`)))));
+      }
+      if (plates.length) {
+        scanResult.append(
+          h('p', { class: 'muted' }, plates.length === 1 ? 'Registration plate found:' : 'Possible plates — tap the right one:'),
+          h('div', { class: 'candidates' }, plates.map((p) =>
+            h('button', { class: `candidate conf-${p.confidence}`, type: 'button', onClick: () => choosePlate(p) },
+              h('span', { class: 'mono' }, p.plate),
+              h('small', {}, `Plate · ${p.confidence} confidence · tap to look up`)))));
+      }
+      scanResult.append(h('p', { class: 'muted small' }, 'Always compare with the car before starting.'));
     } catch (err) {
       scanResult.replaceChildren();
       showError(err);
@@ -305,7 +322,7 @@ export async function intakeView(el) {
       vinStatus,
       h('div', { class: 'row' }, scanBtn),
       h('p', { class: 'muted small' },
-        'Tip: photograph the VIN plate at the bottom of the windscreen, the label in the driver door frame (barcode), or the registration document.'),
+        'Tip: photograph the registration plate, the VIN plate at the bottom of the windscreen, the label in the driver door frame (barcode), or the registration document. The photo does not need to be level.'),
       scanResult),
     lookupBox,
     registryBox,

@@ -14,10 +14,9 @@ def recognize_vin(file: UploadFile = File(...)):
     if len(data) > settings.max_upload_bytes:
         raise HTTPException(413, "Image too large")
     try:
-        candidates = vinlib.recognize(data)
+        return vinlib.recognize_all(data)  # {"candidates": [...VINs], "plates": [...reg. numbers]}
     except UnidentifiedImageError:
         raise HTTPException(422, "File is not a readable image")
-    return {"candidates": candidates}
 
 
 @router.get("/vin/{vin}")
