@@ -74,17 +74,25 @@ def describe(vin: str) -> dict:
 def _candidates_in_text(text: str, fix_ocr: bool) -> list[tuple[str, bool]]:
     """Return (vin, exact_line) pairs found in free text."""
     out: list[tuple[str, bool]] = []
-    for line in text.upper().splitlines():
-        compact = re.sub(r"[^A-Z0-9]", "", line)
-        if fix_ocr:
-            compact = compact.translate(_OCR_FIXES)
+    for line in text.splitlines():
+        letters = [c for c in line if c.isalpha()]
+        # VINs are printed in capitals; mostly-lowercase text is words, not a VIN.
+        if fix_ocr and letters and sum(c.islower() for c in letters) > 0.3 * len(letters):
+            continue
+        raw = re.sub(r"[^A-Z0-9]", "", line.upper())
+        if len(raw) == 18 and raw[0] == "I":  # Code 39 "import" prefix
+            raw = raw[1:]
+        compact = raw.translate(_OCR_FIXES) if fix_ocr else raw
         if len(compact) < 17:
             continue
-        if len(compact) == 18 and compact[0] == "I":  # Code 39 "import" prefix
-            compact = compact[1:]
         exact = len(compact) == 17
         for i in range(len(compact) - 16):
             window = compact[i : i + 17]
+            # A real VIN never contains I, O or Q. If OCR needed more than two
+            # such fixes it was probably reading words ("SUBARU CORPORATION"),
+            # unless the check digit confirms it (label fonts make 0 look like O).
+            if fix_ocr and sum(c in "IOQ" for c in raw[i : i + 17]) > 2 and not check_digit_ok(window):
+                continue
             if VIN_RE.match(window):
                 out.append((window, exact))
     return out
@@ -237,9 +245,9 @@ def _median(img: Image.Image) -> float:
 # ---- Norwegian registration plates ------------------------------------------
 
 # Standard plates: two letters + 4 or 5 digits ("EJ 18664", "AB 1234").
-PLATE_RE = re.compile(r"[A-Z]{2}[0-9OQDILZSBG]{4,5}")
+PLATE_RE = re.compile(r"[A-Z]{2}[0-9OQDILZSBGAT]{4,5}")
 _PLATE_DIGIT_FIXES = str.maketrans({"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1",
-                                    "Z": "2", "S": "5", "B": "8", "G": "6"})
+                                    "Z": "2", "S": "5", "B": "8", "G": "6", "A": "4", "T": "7"})
 
 
 def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
@@ -289,11 +297,42 @@ def scene_text(rgb: Image.Image) -> list[dict]:
     for box, text, score in result or []:
         pts = np.asarray(box, dtype=float)  # TL, TR, BR, BL
         height = (np.linalg.norm(pts[0] - pts[3]) + np.linalg.norm(pts[1] - pts[2])) / 2
+        width = (np.linalg.norm(pts[1] - pts[0]) + np.linalg.norm(pts[2] - pts[3])) / 2
+        direction = (pts[1] - pts[0]) + (pts[2] - pts[3])  # reading direction (may be slanted)
+        norm = np.linalg.norm(direction) or 1.0
         cx, cy = pts.mean(axis=0)
         items.append({"text": str(text), "score": float(score), "height": float(height),
-                      "cx": float(cx), "cy": float(cy)})
+                      "width": float(width), "cx": float(cx), "cy": float(cy),
+                      "ux": float(direction[0] / norm), "uy": float(direction[1] / norm)})
     log.info("scene text: %s", [(i["text"], round(i["score"], 2)) for i in items])
     return items
+
+
+def _continues(a: dict, b: dict) -> bool:
+    """True if box b continues box a on the same (possibly slanted) text line."""
+    dx, dy = b["cx"] - a["cx"], b["cy"] - a["cy"]
+    along = dx * a["ux"] + dy * a["uy"]           # distance along a's reading direction
+    across = abs(-dx * a["uy"] + dy * a["ux"])    # distance off that line
+    h = max(a["height"], b["height"])
+    gap = along - (a["width"] + b["width"]) / 2
+    return (along > 0 and across < 0.5 * h and gap < 2.5 * h
+            and 0.6 < b["height"] / max(a["height"], 1) < 1.6)
+
+
+def joined_lines(items: list[dict]) -> list[dict]:
+    """Pseudo-boxes for text split over 2–3 boxes on one line ("DR" + "18564",
+    "JF1AABAA1PA" + "000958"), with the weakest score of the parts."""
+    out = []
+    for a in items:
+        for b in items:
+            if b is a or not _continues(a, b):
+                continue
+            ab = {**a, "text": f"{a['text']} {b['text']}", "score": min(a["score"], b["score"])}
+            out.append(ab)
+            for c in items:
+                if c is not a and c is not b and _continues(b, c):
+                    out.append({**ab, "text": f"{ab['text']} {c['text']}", "score": min(ab["score"], c["score"])})
+    return out
 
 
 # Words that are big, uppercase and short but never a plate (labels, dealer frames).
@@ -309,23 +348,11 @@ def _plates_from_items(items: list[dict], vins: set[str]) -> dict[str, dict]:
         if plate not in plates or rank[confidence] > rank[plates[plate]["confidence"]]:
             plates[plate] = {"plate": plate, "confidence": confidence, "custom": custom}
 
-    # 1. Standard plates within one text box ("DR 18564").
-    for it in items:
+    # 1. Standard plates within one text box ("DR 18564"), or 2. split over
+    #    boxes on the same (possibly slanted) line ("EJ" + "18664").
+    for it in items + joined_lines(items):
         for plate, exact in _plates_in_text(it["text"], vins):
             add(plate, "medium" if exact and it["score"] > 0.8 else "low")
-
-    # 2. Plates split over two boxes ("DR" + "18564") on the same line.
-    for a in items:
-        la = re.sub(r"[^A-Z]", "", a["text"].upper())
-        if len(la) != 2:
-            continue
-        for b in items:
-            db = re.sub(r"[^A-Z0-9]", "", b["text"].upper()).translate(_PLATE_DIGIT_FIXES)
-            if b is a or not (4 <= len(db) <= 5 and db.isdigit()):
-                continue
-            same_line = abs(a["cy"] - b["cy"]) < 0.6 * max(a["height"], b["height"])
-            if same_line and b["cx"] > a["cx"] and abs(a["height"] - b["height"]) < 0.4 * a["height"]:
-                add(f"{la} {db}", "medium" if min(a["score"], b["score"]) > 0.8 else "low")
 
     # 3. Personalised plates ("ALPAKKA"): the biggest short all-caps word, offered
     #    for the user to confirm — Statens vegvesen decides if it exists.
@@ -355,6 +382,7 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
 
     found: dict[str, dict] = {}
     plates: dict[str, dict] = {}
+    seen_text: list[str] = []  # what the OCR read, returned for troubleshooting
 
     def add(vin: str, source: str, exact: bool) -> None:
         ok = check_digit_ok(vin)
@@ -384,7 +412,8 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
             log.warning("RapidOCR unavailable, falling back to Tesseract: %s", exc)
 
         if items is not None:
-            for it in items:
+            seen_text = [f"{it['text']} ({it['score']:.2f})" for it in items]
+            for it in items + joined_lines(items):  # joined: VINs split over two boxes
                 for vin, exact in _candidates_in_text(it["text"], fix_ocr=True):
                     add(vin, "ocr", exact)
             plates = _plates_from_items(items, set(found))
@@ -404,4 +433,4 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
     for c in ranked:
         c.pop("_score")
     plate_list = sorted(plates.values(), key=lambda p: p["confidence"] != "medium")[:limit]
-    return {"candidates": ranked, "plates": plate_list}
+    return {"candidates": ranked, "plates": plate_list, "text": seen_text[:60]}
