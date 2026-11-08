@@ -40,7 +40,7 @@ export async function intakeView(el) {
 
   const regInput = h('input', {
     id: 'regnr', class: 'mono', maxlength: 12, autocomplete: 'off', spellcheck: 'false',
-    autocapitalize: 'characters', placeholder: 'e.g. EB 82655',
+    autocapitalize: 'characters', placeholder: 'e.g. EB82655',
   });
   const regBtn = h('button', { class: 'btn', type: 'button' }, 'Find VIN');
   const regStatusLine = h('div', { class: 'vin-status' });

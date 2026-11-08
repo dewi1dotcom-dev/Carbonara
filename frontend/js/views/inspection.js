@@ -1,7 +1,7 @@
 // Arrival inspection: vehicle details -> 4 photos -> damage -> storage.
 import { carDiagram, DIAGRAM_PANELS, EXTRA_PANELS, PANEL_LABELS } from '../diagram.js';
 import {
-  api, busy, cameraPicker, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, busy, cameraPicker, CONDITION, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   showError, spotLabel, toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
 
@@ -78,7 +78,7 @@ export async function inspectionView(el, [id]) {
     async function save(kind, field, raw) {
       let value = typeof raw === 'string' ? raw.trim() : raw;
       if (value === '') value = null;
-      if (['model_year', 'odometer_km', 'keys_count', 'fuel_level_pct'].includes(field) && value != null) value = Number(value);
+      if (['model_year', 'odometer_km', 'keys_count', 'fuel_level_pct', 'last_service_km'].includes(field) && value != null) value = Number(value);
       status.textContent = 'Saving…';
       try {
         if (kind === 'vehicle') await api.patch(`/vehicles/${v.id}`, { [field]: value });
@@ -104,8 +104,26 @@ export async function inspectionView(el, [id]) {
       FUEL_LEVELS.map(([p, l]) => h('option', { value: p }, l)));
     fuelSel.value = data.fuel_level_pct ?? '';
 
+    // New from the factory, or used. Used cars record their last service;
+    // a new car's first service is due one year after registration.
+    const condSel = h('select', {}, h('option', { value: '' }, 'Choose…'),
+      Object.entries(CONDITION).map(([k, l]) => h('option', { value: k }, l)));
+    condSel.value = v.condition ?? '';
+    const today = new Date().toISOString().slice(0, 10);
+    const serviceFields = v.condition === 'used'
+      ? h('div', { class: 'grid' },
+        field('vehicle', 'last_service_date', 'Last service date',
+          h('input', { type: 'date', value: v.last_service_date ?? '', max: today })),
+        field('vehicle', 'last_service_km', 'Odometer at last service (km)', num(v.last_service_km, { min: 0 })))
+      : v.condition === 'new'
+        ? h('p', { class: 'muted small' },
+          'New car: no service record needed. The first service is due one year after registration (date from Statens vegvesen).')
+        : null;
+
     return h('section', { class: 'card step' },
       h('div', { class: 'step-head' }, h('h2', {}, '1. Vehicle details'), status),
+      h('div', { class: 'grid' }, field('vehicle', 'condition', 'New or used? *', condSel)),
+      serviceFields,
       h('div', { class: 'grid' },
         field('vehicle', 'make', 'Make *', text(v.make, { list: 'dl-makes', autocomplete: 'off' })),
         field('vehicle', 'model', 'Model *', text(v.model)),

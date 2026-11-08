@@ -212,6 +212,20 @@ export function regStatus(markedAt, code, name) {
   return { cls: 'bad', text: name || code };
 }
 
+/** Yearly service, "± a month": green until a month before the due date, amber
+ *  from a month before to a month after, red after that. */
+const SERVICE_WINDOW_DAYS = 31;
+export function serviceStatus(service) {
+  const days = daysUntil(service?.due);
+  if (days == null) return null;
+  if (days < -SERVICE_WINDOW_DAYS) return { cls: 'bad', days, text: `Service overdue by ${plural(-days, 'day')}` };
+  if (days < 0) return { cls: 'warn', days, text: `Service due (${plural(-days, 'day')} ago)` };
+  if (days <= SERVICE_WINDOW_DAYS) return { cls: 'warn', days, text: days === 0 ? 'Service due today' : `Service due in ${plural(days, 'day')}` };
+  return { cls: 'good', days, text: 'Service OK' };
+}
+
+export const CONDITION = { new: 'New from factory', used: 'Used' };
+
 export const badge = (st, prefix = '') => st && h('span', { class: `badge ${st.cls}` }, prefix + st.text);
 
 /** Live clock: keeps `el` showing the current time and date, updated on the minute. */

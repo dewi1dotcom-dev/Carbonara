@@ -6,6 +6,8 @@ x-app-env: &app-env
   VEGVESEN_AUTH_HEADER: ${VEGVESEN_AUTH_HEADER:-SVV-Authorization}
   VEGVESEN_AUTH_SCHEME: ${VEGVESEN_AUTH_SCHEME:-Apikey}
   VEGVESEN_SYNC_DAYS: ${VEGVESEN_SYNC_DAYS:-7}
+  TRASH_DAYS: ${TRASH_DAYS:-30}
+  RETENTION_YEARS: ${RETENTION_YEARS:-5}
   TZ: Europe/Oslo
 
 services:
@@ -37,7 +39,8 @@ services:
     ports:
       - "${APP_PORT:-8080}:8000"
 
-  # Keeps Statens vegvesen data fresh for vehicles marked as registered.
+  # Keeps Statens vegvesen data fresh for vehicles marked as registered, and
+  # once a day applies data retention (needs the photos to delete their files).
   worker:
     build: .
     restart: unless-stopped
@@ -46,6 +49,8 @@ services:
       db:
         condition: service_healthy
     environment: *app-env
+    volumes:
+      - ./data/photos:/data/photos
 
 volumes:
   pgdata:

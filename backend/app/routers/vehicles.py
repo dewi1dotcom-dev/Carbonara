@@ -1,13 +1,16 @@
+import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from .. import vegvesen, vinlib
-from ..common import (bad_request, check_staff, conflict, log_event, not_found, patch_fields,
-                      place_in_location, update_row)
+from .. import photostore, vegvesen, vinlib
+from ..common import (RETENTION_DUE_SQL, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
+                      place_in_location, purge_vehicle, service_due, soft_delete_vehicle, update_row)
+from ..config import settings
 from ..db import get_conn
 from ..schemas import MarkRegisteredIn, MoveIn, RepairIn, ResolveMismatchIn, VehicleDetails
 
+log = logging.getLogger("carbonara.vehicles")
 router = APIRouter(tags=["vehicles"])
 
 REGISTRY_COLUMNS = """r.sync_status, r.next_sync_at, r.last_attempt_at, r.last_success_at,
@@ -26,7 +29,7 @@ def registry_status(conn=Depends(get_conn)):
                   count(*) FILTER (WHERE r.sync_status = 'error')     AS error,
                   count(*) FILTER (WHERE r.next_sync_at <= now())     AS due
              FROM vehicle_registry r JOIN vehicles v ON v.id = r.vehicle_id
-            WHERE v.registered_marked_at IS NOT NULL"""
+            WHERE v.registered_marked_at IS NOT NULL AND v.deleted_at IS NULL"""
     ).fetchone()
     last_error = conn.execute(
         """SELECT last_error, last_attempt_at FROM vehicle_registry
@@ -55,7 +58,8 @@ def registry_lookup(vin: Optional[str] = None, regnr: Optional[str] = None, conn
         return {"configured": True, "found": False, "error": True, "message": str(exc)}
 
     info = vegvesen.summary(item)
-    vehicle = info["vin"] and conn.execute("SELECT * FROM vehicles WHERE vin = %s", (info["vin"],)).fetchone()
+    vehicle = info["vin"] and conn.execute(
+        "SELECT * FROM vehicles WHERE vin = %s AND deleted_at IS NULL", (info["vin"],)).fetchone()
     mismatches = []
     if vehicle:
         reg = conn.execute("SELECT kept_values FROM vehicle_registry WHERE vehicle_id = %s",
@@ -69,28 +73,35 @@ def registry_lookup(vin: Optional[str] = None, regnr: Optional[str] = None, conn
 def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, limit: int = 100,
                   conn=Depends(get_conn)):
     term = f"%{q.strip()}%" if q and q.strip() else None
-    return conn.execute(
+    # Reg. numbers are stored without spaces, so "EB 82655" must find "EB82655".
+    regterm = f"%{vegvesen.normalize_regnr(q)}%" if q and vegvesen.normalize_regnr(q) else None
+    rows = conn.execute(
         """SELECT v.*, l.code AS location_code, l.zone AS location_zone,
                   r.sync_status AS registry_status, r.eu_control_due,
                   r.registration_status,
+                  coalesce(r.first_registered, r.first_registered_norway) AS first_registered,
                   r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code
              FROM vehicles v
              LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
              LEFT JOIN storage_spots l ON l.id = a.location_id
              LEFT JOIN vehicle_registry r ON r.vehicle_id = v.id
-            WHERE (%(status)s::text IS NULL OR v.status = %(status)s)
+            WHERE v.deleted_at IS NULL
+              AND (%(status)s::text IS NULL OR v.status = %(status)s)
               AND (%(term)s::text IS NULL
                    OR v.vin ILIKE %(term)s OR v.make ILIKE %(term)s OR v.model ILIKE %(term)s
-                   OR v.registration_number ILIKE %(term)s OR l.code ILIKE %(term)s)
+                   OR v.registration_number ILIKE %(regterm)s OR l.code ILIKE %(term)s)
             ORDER BY v.updated_at DESC
             LIMIT %(limit)s""",
-        {"status": status, "term": term, "limit": max(1, min(limit, 500))},
+        {"status": status, "term": term, "regterm": regterm or term, "limit": max(1, min(limit, 500))},
     ).fetchall()
+    for row in rows:
+        row["service"] = service_due(row, row["first_registered"])
+    return rows
 
 
 @router.get("/vehicles/{vehicle_id}")
 def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
-    vehicle = conn.execute("SELECT * FROM vehicles WHERE id = %s", (vehicle_id,)).fetchone()
+    vehicle = conn.execute("SELECT * FROM vehicles WHERE id = %s AND deleted_at IS NULL", (vehicle_id,)).fetchone()
     if not vehicle:
         raise not_found("Vehicle")
     location = conn.execute(
@@ -159,7 +170,104 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "registry_values": values,          # what Statens vegvesen says, for hints in the edit form
         "registry_mismatches": mismatches,  # differences waiting for staff to confirm
         "registry_configured": vegvesen.is_configured(),
+        "service": service_due(vehicle, registry and (registry["first_registered"] or registry["first_registered_norway"])),
     }
+
+
+# --------------------------------------------------------------------------- #
+# Deleting: Recently deleted (restorable for TRASH_DAYS), then gone for good
+# --------------------------------------------------------------------------- #
+
+@router.delete("/vehicles/{vehicle_id}", status_code=204)
+def delete_vehicle(vehicle_id: int, staff_id: Optional[int] = None, conn=Depends(get_conn)):
+    """Move a car to Recently deleted. It is removed for good, with photos,
+    after TRASH_DAYS unless it is restored."""
+    vehicle = conn.execute(
+        "SELECT * FROM vehicles WHERE id = %s AND deleted_at IS NULL FOR UPDATE", (vehicle_id,)
+    ).fetchone()
+    if not vehicle:
+        raise not_found("Vehicle")
+    check_staff(conn, staff_id)
+    soft_delete_vehicle(conn, vehicle_id, reason="manual", staff_id=staff_id)
+    log.info("Vehicle %s (VIN %s) moved to Recently deleted", vehicle_id, vehicle["vin"])
+
+
+@router.get("/vehicles-deleted")
+def list_deleted(conn=Depends(get_conn)):
+    """Recently deleted cars, newest first, with the date they'll be removed for good."""
+    return conn.execute(
+        """SELECT v.id, v.vin, v.make, v.model, v.model_year, v.color, v.registration_number,
+                  v.deleted_at, v.deleted_reason, s.name AS deleted_by_name,
+                  v.deleted_at + make_interval(days => %s) AS purge_at
+             FROM vehicles v LEFT JOIN staff s ON s.id = v.deleted_by
+            WHERE v.deleted_at IS NOT NULL
+            ORDER BY v.deleted_at DESC""",
+        (settings.trash_days,),
+    ).fetchall()
+
+
+@router.post("/vehicles/{vehicle_id}/restore")
+def restore_vehicle(vehicle_id: int, staff_id: Optional[int] = None, conn=Depends(get_conn)):
+    """Bring a car back from Recently deleted, into its old spot if there is room."""
+    vehicle = conn.execute(
+        "SELECT * FROM vehicles WHERE id = %s AND deleted_at IS NOT NULL FOR UPDATE", (vehicle_id,)
+    ).fetchone()
+    if not vehicle:
+        raise not_found("Deleted vehicle")
+    check_staff(conn, staff_id)
+    if conn.execute("SELECT 1 FROM vehicles WHERE vin = %s AND deleted_at IS NULL AND id <> %s",
+                    (vehicle["vin"], vehicle_id)).fetchone():
+        raise conflict("A car with this VIN has been added again since; it can't be restored")
+    conn.execute("UPDATE vehicles SET deleted_at = NULL, deleted_by = NULL, deleted_reason = NULL WHERE id = %s",
+                 (vehicle_id,))
+    last = conn.execute(
+        "SELECT data FROM vehicle_events WHERE vehicle_id = %s AND event_type = 'deleted' ORDER BY occurred_at DESC LIMIT 1",
+        (vehicle_id,),
+    ).fetchone()
+    spot_id = (last["data"] or {}).get("location_id") if last else None
+    placed = None
+    if vehicle["status"] == "in_storage" and spot_id:
+        try:
+            with conn.transaction():
+                placed = place_in_location(conn, vehicle_id, spot_id, staff_id)
+        except HTTPException:
+            placed = None  # spot gone or full
+    if vehicle["status"] == "in_storage" and not placed:
+        conn.execute("UPDATE vehicles SET status = 'off_site' WHERE id = %s", (vehicle_id,))
+    log_event(conn, vehicle_id, "restored", staff_id=staff_id,
+              data={"location_code": placed["code"] if placed else None})
+    return get_vehicle(vehicle_id, conn)
+
+
+@router.delete("/vehicles/{vehicle_id}/permanent", status_code=204)
+def purge_vehicle_now(vehicle_id: int, conn=Depends(get_conn)):
+    """Remove a car from Recently deleted for good, with all data and photos."""
+    vehicle = conn.execute(
+        "SELECT * FROM vehicles WHERE id = %s AND deleted_at IS NOT NULL FOR UPDATE", (vehicle_id,)
+    ).fetchone()
+    if not vehicle:
+        raise not_found("Deleted vehicle")
+    photos = purge_vehicle(conn, vehicle_id)
+    conn.commit()  # remove files only once the database delete is final
+    for row in photos:
+        photostore.remove(row)
+    log.info("Vehicle %s (VIN %s) deleted permanently, %d photo(s)", vehicle_id, vehicle["vin"], len(photos))
+
+
+@router.get("/retention")
+def retention_info(conn=Depends(get_conn)):
+    """The retention policy and what it will do soon, for the Settings page."""
+    soon = 0
+    if settings.retention_years > 0:
+        soon = conn.execute(
+            "SELECT count(*) AS n FROM (" + RETENTION_DUE_SQL.replace(
+                "now() - make_interval(years => %s)", "now() + interval '30 days' - make_interval(years => %s)")
+            + ") x",
+            (settings.retention_years,),
+        ).fetchone()["n"]
+    trash = conn.execute("SELECT count(*) AS n FROM vehicles WHERE deleted_at IS NOT NULL").fetchone()["n"]
+    return {"trash_days": settings.trash_days, "retention_years": settings.retention_years,
+            "due_within_30_days": soon, "in_trash": trash}
 
 
 # --------------------------------------------------------------------------- #

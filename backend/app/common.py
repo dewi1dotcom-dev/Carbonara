@@ -1,3 +1,6 @@
+import datetime as dt
+import json
+
 from fastapi import HTTPException
 from psycopg import sql
 from psycopg.types.json import Jsonb
@@ -93,5 +96,99 @@ def log_event(conn, vehicle_id: int, event_type: str, *, staff_id=None, inspecti
     conn.execute(
         """INSERT INTO vehicle_events (vehicle_id, event_type, staff_id, inspection_id, data)
            VALUES (%s, %s, %s, %s, %s)""",
-        (vehicle_id, event_type, staff_id, inspection_id, Jsonb(data or {})),
+        # default=str: dates/decimals in event data (e.g. a changed service date)
+        (vehicle_id, event_type, staff_id, inspection_id, Jsonb(data or {}, dumps=lambda o: json.dumps(o, default=str))),
     )
+
+
+# --------------------------------------------------------------------------- #
+# Deleting cars: "Recently deleted" first, removed for good later
+# --------------------------------------------------------------------------- #
+
+def soft_delete_vehicle(conn, vehicle_id: int, *, reason: str, staff_id=None) -> None:
+    """Move a car to Recently deleted: hidden everywhere, storage spot freed,
+    restorable until it is purged."""
+    spot = conn.execute(
+        "SELECT location_id FROM storage_assignments WHERE vehicle_id = %s AND removed_at IS NULL", (vehicle_id,)
+    ).fetchone()
+    conn.execute(
+        "UPDATE storage_assignments SET removed_at = now(), removed_by = %s WHERE vehicle_id = %s AND removed_at IS NULL",
+        (staff_id, vehicle_id),
+    )
+    conn.execute(
+        "UPDATE vehicles SET deleted_at = now(), deleted_by = %s, deleted_reason = %s WHERE id = %s",
+        (staff_id, reason, vehicle_id),
+    )
+    log_event(conn, vehicle_id, "deleted", staff_id=staff_id,
+              data={"reason": reason, "location_id": spot["location_id"] if spot else None})
+
+
+def purge_vehicle(conn, vehicle_id: int) -> list:
+    """Remove a car and everything about it for good. Returns the photo rows;
+    call photostore.remove() on them once the transaction has committed."""
+    photos = conn.execute(
+        """SELECT p.file_key, p.original_ext FROM inspection_photos p
+             JOIN inspections i ON i.id = p.inspection_id WHERE i.vehicle_id = %s""",
+        (vehicle_id,),
+    ).fetchall()
+    for stmt in (
+        "DELETE FROM damages WHERE vehicle_id = %s",
+        "DELETE FROM vehicle_events WHERE vehicle_id = %s",
+        "DELETE FROM inspection_photos WHERE inspection_id IN (SELECT id FROM inspections WHERE vehicle_id = %s)",
+        "DELETE FROM inspections WHERE vehicle_id = %s",
+        "DELETE FROM storage_assignments WHERE vehicle_id = %s",
+        "DELETE FROM vehicle_registry_snapshots WHERE vehicle_id = %s",
+        "DELETE FROM vehicle_registry WHERE vehicle_id = %s",
+        "DELETE FROM vehicles WHERE id = %s",
+    ):
+        conn.execute(stmt, (vehicle_id,))
+    return photos
+
+
+# Cars that have left (off site) with no activity for RETENTION_YEARS. Activity
+# = the car record changing or anything in its history; registry syncs don't count.
+RETENTION_DUE_SQL = """
+    SELECT v.id, v.vin, v.registration_number,
+           greatest(v.updated_at, coalesce(max(e.occurred_at), v.updated_at)) AS last_activity
+      FROM vehicles v
+      LEFT JOIN vehicle_events e ON e.vehicle_id = v.id
+     WHERE v.deleted_at IS NULL AND v.status = 'off_site'
+     GROUP BY v.id
+    HAVING greatest(v.updated_at, coalesce(max(e.occurred_at), v.updated_at)) < now() - make_interval(years => %s)"""
+
+
+def add_years(d: dt.date, years: int) -> dt.date:
+    try:
+        return d.replace(year=d.year + years)
+    except ValueError:  # 29 February -> 28 February
+        return d.replace(year=d.year + years, day=28)
+
+
+SERVICE_WINDOW_DAYS = 31  # "once a year, plus/minus a month"
+
+
+def service_due(vehicle: dict, first_registered: dt.date | None) -> dict:
+    """When the next yearly service is due, and what that is based on.
+
+    - A recorded last service: one year after it.
+    - New car without a service yet: one year after first registration.
+    - Used car without a service record: the next anniversary of first
+      registration (flagged, since the real history is unknown).
+    Returns {due, basis, note}; due is None when there is nothing to go on."""
+    last = vehicle.get("last_service_date")
+    if last:
+        return {"due": add_years(last, 1), "basis": "last_service", "note": None}
+    if not first_registered:
+        note = ("First service is due one year after registration." if vehicle.get("condition") == "new"
+                else "No service history or registration date yet.")
+        return {"due": None, "basis": None, "note": note}
+    if vehicle.get("condition") == "new":
+        return {"due": add_years(first_registered, 1), "basis": "registration",
+                "note": "First service: one year after registration."}
+    # Used / unknown: next registration anniversary that isn't already past the window.
+    today = dt.date.today()
+    years = 1
+    while add_years(first_registered, years) < today - dt.timedelta(days=SERVICE_WINDOW_DAYS):
+        years += 1
+    return {"due": add_years(first_registered, years), "basis": "registration_anniversary",
+            "note": "No service history recorded; based on the registration date."}

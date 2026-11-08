@@ -335,6 +335,9 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .meter.warn > div { background: var(--warn); }
 .meter.bad > div { background: var(--bad); }
 .cap-input { width: 7rem; }
+.deleted-card { opacity: .9; border-style: dashed; }
+.deleted-card .row-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.danger-zone { display: flex; justify-content: flex-end; margin: 1.5rem 0 0; padding-top: 1rem; border-top: 1px solid var(--border); }
 /* Vehicle page header: reg. no in the same size as the make/model title. */
 .reg-big { font-size: 1.5rem; font-weight: 700; line-height: 1.2; margin: .1rem 0 .25rem; letter-spacing: .06em; }
 .reg-big.none { color: var(--muted); font-weight: 600; letter-spacing: 0; }

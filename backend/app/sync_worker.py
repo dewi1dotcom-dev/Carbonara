@@ -1,8 +1,14 @@
-"""Background worker: keeps Statens vegvesen data fresh for registered vehicles.
+"""Background worker.
 
 Run with:  python -m app.sync_worker
-Picks vehicles whose vehicle_registry.next_sync_at is due, one at a time
-(row-locked with SKIP LOCKED, so several workers/the API can't collide).
+
+1. Keeps Statens vegvesen data fresh for registered vehicles: picks vehicles
+   whose vehicle_registry.next_sync_at is due, one at a time (row-locked with
+   SKIP LOCKED, so several workers/the API can't collide).
+2. Once a day, data retention:
+   - cars off site with no activity for RETENTION_YEARS -> Recently deleted;
+   - cars in Recently deleted for more than TRASH_DAYS -> removed for good,
+     including their photo files.
 """
 
 import logging
@@ -11,12 +17,40 @@ import time
 import psycopg
 from psycopg.rows import dict_row
 
-from . import vegvesen
+from . import photostore, vegvesen
+from .common import RETENTION_DUE_SQL, purge_vehicle, soft_delete_vehicle
 from .config import settings
 from .migrate import run_migrations
 
 log = logging.getLogger("carbonara.sync_worker")
 IDLE_SECONDS = 60
+HOUSEKEEPING_EVERY_S = 24 * 3600
+
+
+def housekeeping() -> None:
+    """Apply the retention policy. Each car is handled in its own transaction."""
+    with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+        expired = []
+        if settings.retention_years > 0:
+            expired = conn.execute(RETENTION_DUE_SQL, (settings.retention_years,)).fetchall()
+        trash = conn.execute(
+            "SELECT id, vin FROM vehicles WHERE deleted_at < now() - make_interval(days => %s)",
+            (settings.trash_days,),
+        ).fetchall()
+
+    for car in expired:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+            soft_delete_vehicle(conn, car["id"], reason="retention")
+        log.info("Retention: vehicle %s (VIN %s) inactive since %s -> Recently deleted",
+                 car["id"], car["vin"], car["last_activity"])
+
+    for car in trash:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+            photos = purge_vehicle(conn, car["id"])
+            conn.commit()
+        for row in photos:
+            photostore.remove(row)
+        log.info("Removed vehicle %s (VIN %s) for good, %d photo(s)", car["id"], car["vin"], len(photos))
 
 
 def run_once(max_vehicles: int = 50) -> int:
@@ -38,7 +72,16 @@ def main() -> None:
     run_migrations()
     if not vegvesen.is_configured():
         log.warning("VEGVESEN_API_KEY is not set – registry sync is disabled until it is configured")
+    log.info("Retention: %s; deleted cars kept %d days",
+             f"{settings.retention_years} years" if settings.retention_years > 0 else "off", settings.trash_days)
+    last_housekeeping = 0.0
     while True:
+        if time.monotonic() - last_housekeeping >= HOUSEKEEPING_EVERY_S or not last_housekeeping:
+            try:
+                housekeeping()
+            except Exception:
+                log.exception("housekeeping failed")
+            last_housekeeping = time.monotonic()
         if vegvesen.is_configured():
             try:
                 run_once()

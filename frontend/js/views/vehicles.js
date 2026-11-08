@@ -1,6 +1,6 @@
 import { PANEL_LABELS } from '../diagram.js';
 import {
-  api, append, badge, busy, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, append, badge, busy, CONDITION, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   regStatus, showError, spotLabel, STATUS,
   toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
@@ -25,7 +25,8 @@ export async function vehiclesView(el) {
   statusSel.addEventListener('change', load);
 
   el.append(
-    h('div', { class: 'page-head' }, h('h1', {}, 'Vehicles')),
+    h('div', { class: 'page-head' }, h('h1', {}, 'Vehicles'),
+      h('a', { href: '#/vehicles/deleted', class: 'small' }, '🗑 Recently deleted')),
     h('div', { class: 'toolbar' }, search, statusSel),
     results);
   await load();
@@ -35,13 +36,15 @@ export async function vehiclesView(el) {
  *  `extra` adds text to the meta line, e.g. "In spot since …". */
 export function vehicleCard(v, extra = null) {
   const eu = euStatus(v.eu_control_due);
+  const svc = serviceStatus(v.service);
   return h('a', { class: 'card list-card', href: `#/vehicles/${v.id}` },
     h('div', { class: 'list-main' },
       h('div', { class: 'list-title' }, vehicleTitle(v), ' ', pill(v.status)),
       h('div', { class: 'vin mono' }, v.vin),
       h('div', { class: 'badges' },
         badge(regStatus(v.registered_marked_at, v.registration_status_code, v.registration_status)),
-        eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null)),
+        eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null,
+        svc && svc.cls !== 'good' ? badge(svc) : null)),
     h('div', { class: 'list-meta' },
       [v.registration_number, v.color, v.location_code && `Spot ${v.location_code}`,
         v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`, extra].filter(Boolean).join(' · ')));
@@ -63,12 +66,15 @@ const EVENT_LABELS = {
   damage_repaired: 'Damage repaired',
   damage_repair_undone: '"Repaired" undone',
   registry_mismatch_resolved: 'Checked against Statens vegvesen',
+  deleted: 'Deleted',
+  restored: 'Restored from Recently deleted',
 };
 
 const FIELD_LABELS = {
   registration_number: 'Reg. no', registration_status: 'Registration status', eu_control_due: 'EU-kontroll due',
   eu_control_last_approved: 'EU-kontroll approved', color: 'Colour', make: 'Make', model: 'Model', fuel_type: 'Fuel',
   variant: 'Variant', model_year: 'Model year',
+  condition: 'New/used', last_service_date: 'Last service', last_service_km: 'Km at last service',
 };
 const changeText = (obj) => Object.entries(obj || {})
   .map(([k, [a, b]]) => `${FIELD_LABELS[k] ?? k}: ${a ?? '–'} → ${b ?? '–'}`).join(', ');
@@ -160,7 +166,16 @@ function editDialog(v, done) {
       field('model_year', 'Model year', h('input', { type: 'number', inputmode: 'numeric', min: 1900, max: 2100, value: v.model_year ?? '' })),
       field('color', 'Colour', text(v.color)),
       field('fuel_type', 'Fuel type', text(v.fuel_type, { list: 'edit-dl-fuel' })),
-      field('registration_number', 'Registration no.', text(v.registration_number, { class: 'mono' }))),
+      field('registration_number', 'Registration no.', text(v.registration_number, { class: 'mono' })),
+      field('condition', 'New or used', (() => {
+        const s = h('select', {}, h('option', { value: '' }, '–'),
+          Object.entries(CONDITION).map(([k, l]) => h('option', { value: k }, l)));
+        s.value = v.condition ?? '';
+        return s;
+      })()),
+      field('last_service_date', 'Last service date',
+        h('input', { type: 'date', value: v.last_service_date ?? '', max: new Date().toISOString().slice(0, 10) })),
+      field('last_service_km', 'Km at last service', h('input', { type: 'number', inputmode: 'numeric', min: 0, value: v.last_service_km ?? '' }))),
     h('datalist', { id: 'edit-dl-fuel' }, FUEL_TYPES.map((f) => h('option', { value: f }))),
     h('div', { class: 'actions' }, okBtn));
 
@@ -169,8 +184,8 @@ function editDialog(v, done) {
     const changes = {};
     for (const [name, input] of Object.entries(inputs)) {
       let val = input.value.trim() || null;
-      if (name === 'model_year' && val != null) val = Number(val);
-      if (name === 'registration_number' && val) val = val.toUpperCase();
+      if (['model_year', 'last_service_km'].includes(name) && val != null) val = Number(val);
+      if (name === 'registration_number' && val) val = val.replace(/[^A-Za-z0-9ÆØÅæøå]/g, '').toUpperCase();
       if (val !== (v[name] ?? null)) changes[name] = val;
     }
     if (!Object.keys(changes).length) { close(); return; }
@@ -222,6 +237,101 @@ function moveDialog(v, done) {
     });
   });
   const { close } = openDialog('Move car', form);
+}
+
+/** Record a service done while the car is with us: moves "next service" a year on. */
+function serviceDialog(v, done) {
+  const today = new Date().toISOString().slice(0, 10);
+  const date = h('input', { type: 'date', id: 'svc-date', value: today, max: today, required: true });
+  const km = h('input', { type: 'number', id: 'svc-km', inputmode: 'numeric', min: 0, placeholder: 'Odometer reading' });
+  const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Save service');
+  const form = h('form', { class: 'form' },
+    v.last_service_date ? h('p', { class: 'muted small' },
+      `Previous service: ${fmtDate(v.last_service_date, false)}${v.last_service_km != null ? ` at ${fmtKm(v.last_service_km)}` : ''}.`) : null,
+    h('label', { for: 'svc-date' }, 'Service date'), date,
+    h('label', { for: 'svc-km' }, 'Odometer at service (km)'), km,
+    h('div', { class: 'actions' }, okBtn));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(okBtn, async () => {
+      await api.patch(`/vehicles/${v.id}`, {
+        last_service_date: date.value,
+        ...(km.value ? { last_service_km: Number(km.value) } : {}),
+        ...(v.condition ? {} : { condition: 'used' }),
+      });
+      close();
+      toast('Service recorded', 'success');
+      done();
+    });
+  });
+  const { close } = openDialog('Service done', form);
+}
+
+/** Text + badge for the "Service" row. */
+function serviceRow(v) {
+  const s = v.service || {};
+  const st = serviceStatus(s);
+  const last = v.last_service_date
+    ? `last ${fmtDate(v.last_service_date, false)}${v.last_service_km != null ? ` at ${fmtKm(v.last_service_km)}` : ''}`
+    : null;
+  if (!st) {
+    return h('span', { class: 'muted' },
+      v.condition ? s.note || '–' : 'Choose new or used (Edit details) to track service');
+  }
+  return h('span', { class: 'inline' }, badge(st), `due ${fmtDate(s.due, false)}`,
+    last ? h('span', { class: 'muted small' }, `· ${last}`) : null,
+    s.basis !== 'last_service' && s.note ? h('span', { class: 'muted small block' }, s.note) : null);
+}
+
+async function deleteVehicle(v) {
+  const name = [vehicleTitle(v), v.registration_number, v.vin].filter(Boolean).join(' · ');
+  if (!confirm(`Delete this car?\n\n${name}\n\nIt moves to "Recently deleted" and can be restored from there. `
+    + 'After that period it is removed for good, with its inspections, photos and history.')) return;
+  try {
+    const me = getInspectorId();
+    await api.del(`/vehicles/${v.id}${me ? `?staff_id=${me}` : ''}`);
+    toast(`${vehicleTitle(v)} moved to Recently deleted`, 'success');
+    location.hash = '#/vehicles';
+  } catch (e) { showError(e); }
+}
+
+/** Vehicles › Recently deleted: restore, or remove for good. */
+export async function deletedView(el) {
+  const rows = await api.get('/vehicles-deleted');
+  const list = h('div', { class: 'list' });
+  const render = (items) => list.replaceChildren(...(items.length ? items.map((v) => {
+    const restoreBtn = h('button', { class: 'btn', type: 'button' }, 'Restore');
+    restoreBtn.addEventListener('click', () => busy(restoreBtn, async () => {
+      const me = getInspectorId();
+      const res = await api.post(`/vehicles/${v.id}/restore${me ? `?staff_id=${me}` : ''}`);
+      toast(res.current_location ? `Restored to ${res.current_location.code}` : 'Restored (off site — use Move to place it)', 'success');
+      location.hash = `#/vehicles/${v.id}`;
+    }));
+    const purgeBtn = h('button', { class: 'btn danger', type: 'button' }, 'Delete permanently');
+    purgeBtn.addEventListener('click', () => {
+      if (!confirm(`Delete ${vehicleTitle(v)} (${v.registration_number || v.vin}) permanently?\n\nAll its data and photos are removed now. This cannot be undone.`)) return;
+      busy(purgeBtn, async () => {
+        await api.del(`/vehicles/${v.id}/permanent`);
+        toast('Deleted permanently', 'success');
+        render(items.filter((x) => x.id !== v.id));
+      });
+    });
+    return h('div', { class: 'card list-card deleted-card' },
+      h('div', { class: 'list-main' },
+        h('div', { class: 'list-title' }, vehicleTitle(v), v.registration_number ? h('span', { class: 'mono muted' }, ` ${v.registration_number}`) : null),
+        h('div', { class: 'vin mono' }, v.vin),
+        h('div', { class: 'muted small' },
+          v.deleted_reason === 'retention'
+            ? `Deleted automatically ${fmtDate(v.deleted_at, false)} (no activity for the retention period)`
+            : `Deleted ${fmtDate(v.deleted_at)}${v.deleted_by_name ? ` by ${v.deleted_by_name}` : ''}`,
+          ` · removed for good ${fmtDate(v.purge_at, false)}`)),
+      h('div', { class: 'row-actions' }, restoreBtn, purgeBtn));
+  }) : [h('p', { class: 'empty' }, 'Nothing here. Deleted cars appear here and can be restored for a while.')]));
+  render(rows);
+  el.append(
+    h('div', { class: 'page-head' },
+      h('div', {}, h('a', { href: '#/vehicles', class: 'small' }, '← Vehicles'), h('h1', {}, 'Recently deleted'))),
+    list);
 }
 
 function repairDialog(d, done) {
@@ -380,6 +490,8 @@ function overviewCard(v, rerender) {
         ? h('span', { class: 'inline' }, badge(eu), `due ${fmtDate(r.eu_control_due, false)}`)
         : h('span', { class: 'muted' }, v.registered_marked_at ? 'No date from Statens vegvesen yet' : '–')],
       ['Last approved', r.eu_control_last_approved && fmtDate(r.eu_control_last_approved, false)],
+      ['Service', serviceRow(v)],
+      ['Condition', v.condition ? CONDITION[v.condition] : null],
       ['Colour', v.color ?? r.color ?? '–'],
       ['VIN location', r.vin_location ?? h('span', { class: 'muted' }, '–')],
       ['Storage spot', storageText(v)],
@@ -387,6 +499,7 @@ function overviewCard(v, rerender) {
     v.status === 'intake' ? null : h('div', { class: 'actions' },
       h('button', { class: 'btn', type: 'button', onClick: () => moveDialog(v, rerender) },
         v.status === 'off_site' ? 'Return to storage' : 'Move'),
+      h('button', { class: 'btn', type: 'button', onClick: () => serviceDialog(v, rerender) }, 'Service done'),
       h('button', { class: 'btn', type: 'button', onClick: () => editDialog(v, rerender) }, 'Edit details')));
 }
 
@@ -515,5 +628,7 @@ export async function vehicleView(el, [id]) {
         h('div', {}, h('strong', {}, EVENT_LABELS[e.event_type] ?? e.event_type),
           e.staff_name ? ` — ${e.staff_name}` : ''),
         h('div', { class: 'muted small' }, eventDetail(e)))))),
+    h('div', { class: 'danger-zone' },
+      h('button', { class: 'btn danger', type: 'button', onClick: () => deleteVehicle(v) }, '🗑 Delete car')),
   );
 }

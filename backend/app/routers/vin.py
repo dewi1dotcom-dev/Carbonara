@@ -32,7 +32,7 @@ def lookup_vin(vin: str, conn=Depends(get_conn)):
 
     vehicle = conn.execute(
         """SELECT id, vin, make, model, model_year, color, registration_number, status
-             FROM vehicles WHERE vin = %s""",
+             FROM vehicles WHERE vin = %s AND deleted_at IS NULL""",
         (vin,),
     ).fetchone()
     if vehicle:

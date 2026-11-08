@@ -9,7 +9,7 @@ from psycopg import errors
 from .. import photostore, vegvesen, vinlib
 from ..common import (
     bad_request, check_staff, conflict, insert_row, log_event, not_found, patch_fields, place_in_location,
-    update_row,
+    purge_vehicle, update_row,
 )
 from ..config import settings
 from ..db import get_conn
@@ -55,6 +55,8 @@ def _checklist(insp: dict, vehicle: dict, photos: list, damages: list) -> list[d
     return [
         {"key": "vehicle", "label": "Make and model recorded",
          "done": bool(vehicle["make"] and vehicle["model"])},
+        {"key": "condition", "label": "New or used car selected",
+         "done": vehicle["condition"] is not None},
         {"key": "odometer", "label": "Odometer reading recorded",
          "done": insp["odometer_km"] is not None},
         {"key": "photos", "label": "Photos from all four sides",
@@ -112,6 +114,14 @@ def start_intake(body: IntakeIn, conn=Depends(get_conn)):
     _check_staff(conn, body.inspector_id)
 
     vehicle = conn.execute("SELECT * FROM vehicles WHERE vin = %s FOR UPDATE", (vin,)).fetchone()
+    if vehicle is not None and vehicle["deleted_at"] is not None:
+        # The VIN is in Recently deleted. It was deleted on purpose, so the car
+        # starts fresh: remove the old record for good first.
+        photos = purge_vehicle(conn, vehicle["id"])
+        conn.commit()
+        for row in photos:
+            photostore.remove(row)
+        vehicle = None
     if vehicle is None:
         details = body.vehicle.model_dump(exclude_none=True) if body.vehicle else {}
         try:
@@ -172,7 +182,7 @@ def list_inspections(status: Optional[str] = None, limit: int = 50, conn=Depends
                   (SELECT l.code FROM storage_assignments a JOIN storage_spots l ON l.id = a.location_id
                     WHERE a.vehicle_id = i.vehicle_id AND a.removed_at IS NULL) AS location_code
              FROM inspections i
-             JOIN vehicles v ON v.id = i.vehicle_id
+             JOIN vehicles v ON v.id = i.vehicle_id AND v.deleted_at IS NULL
              LEFT JOIN staff s ON s.id = i.inspector_id
             WHERE (%(status)s::text IS NULL OR i.status = %(status)s)
             ORDER BY coalesce(i.completed_at, i.cancelled_at, i.started_at) DESC

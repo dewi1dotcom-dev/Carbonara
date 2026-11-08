@@ -158,8 +158,9 @@ def extract(item: dict) -> dict:
     motor = dig(td, "motorOgDrivverk", "motor", 0) or {}
     fuel0 = dig(motor, "drivstoff", 0) or {}
     return {
-        "registration_number": _text(dig(item, "kjoretoyId", "kjennemerke"))
-                               or _text(dig(item, "kjennemerke", 0), "kjennemerke"),
+        # Stored without spaces: "EB 82655" -> "EB82655".
+        "registration_number": normalize_regnr(_text(dig(item, "kjoretoyId", "kjennemerke"))
+                                               or _text(dig(item, "kjennemerke", 0), "kjennemerke")) or None,
         "registration_status": _text(dig(item, "registrering", "registreringsstatus")),
         "first_registered_norway": _date(dig(item, "forstegangsregistrering", "registrertForstegangNorgeDato")),
         "first_registered": _date(dig(item, "godkjenning", "forstegangsGodkjenning", "forstegangRegistrertDato")),
@@ -328,7 +329,7 @@ def _fuel_en(item: dict, fuel: str | None) -> str | None:
 
 def vehicle_values(item: dict | None) -> dict:
     """The vehicle-record values according to Statens vegvesen, e.g. for an MG ZS EV:
-    {registration_number: 'EB 82655', make: 'MG', model: 'ZS EV', color: 'Rød',
+    {registration_number: 'EB82655', make: 'MG', model: 'ZS EV', color: 'Rød',
     fuel_type: 'Electric'}. Missing values are None."""
     if not item:
         return {}
@@ -364,7 +365,7 @@ def _same(field: str, a, b) -> bool:
 def compare(vehicle: dict, item: dict | None, kept: dict | None = None) -> tuple[dict, dict]:
     """Split registry values into (auto, mismatches):
     - auto: safe to apply silently — the field is blank, or only formatting differs
-      ("EB82655" -> "EB 82655").
+      ("eb-82655" -> "EB82655").
     - mismatches: a real difference staff must confirm, unless they already chose
       to keep their own value for this exact registry value (`kept`)."""
     auto, mismatches = {}, {}
@@ -504,7 +505,7 @@ def due_vehicle_ids_sql():
     return sql.SQL(
         """SELECT r.vehicle_id
              FROM vehicle_registry r JOIN vehicles v ON v.id = r.vehicle_id
-            WHERE v.registered_marked_at IS NOT NULL AND r.next_sync_at <= now()
+            WHERE v.registered_marked_at IS NOT NULL AND v.deleted_at IS NULL AND r.next_sync_at <= now()
             ORDER BY r.next_sync_at
             LIMIT 1
             FOR UPDATE OF r SKIP LOCKED"""

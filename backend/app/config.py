@@ -40,5 +40,12 @@ class Settings:
     # Pause between API calls in the background worker (be nice to the quota).
     vegvesen_call_interval_s = float(os.environ.get("VEGVESEN_CALL_INTERVAL_S", "1.5"))
 
+    # Data retention. Deleted cars stay in "Recently deleted" for trash_days
+    # before they (and their photos) are removed for good. Cars that are no
+    # longer here (off site) and have had no activity for retention_years are
+    # deleted automatically (via Recently deleted). 0 turns that off.
+    trash_days = int(os.environ.get("TRASH_DAYS", "30"))
+    retention_years = int(os.environ.get("RETENTION_YEARS", "5"))
+
 
 settings = Settings()

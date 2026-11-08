@@ -4,8 +4,25 @@ export async function settingsView(el) {
   const staffBox = h('div');
   const locBox = h('div');
   const registryBox = h('div');
-  el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), staffBox, locBox, registryBox);
-  await Promise.all([renderStaff(), renderLocations(), renderRegistry()]);
+  const retentionBox = h('div');
+  el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), staffBox, locBox, registryBox, retentionBox);
+  await Promise.all([renderStaff(), renderLocations(), renderRegistry(), renderRetention()]);
+
+  async function renderRetention() {
+    const r = await api.get('/retention');
+    retentionBox.replaceChildren(h('section', { class: 'card' },
+      h('h2', {}, 'Data retention'),
+      h('ul', { class: 'plain rows' },
+        h('li', {}, `Deleted cars stay in `, h('a', { href: '#/vehicles/deleted' }, 'Recently deleted'),
+          ` for ${r.trash_days} days and can be restored. After that they are removed for good, with all photos.`),
+        h('li', {}, r.retention_years > 0
+          ? `Cars that are off site (sold/delivered) and have had no activity for ${r.retention_years} years are deleted automatically — they go to Recently deleted first. Cars in storage are never deleted automatically.`
+          : 'Automatic deletion of old cars is turned off.'),
+        h('li', {}, `In Recently deleted now: ${r.in_trash}`
+          + (r.retention_years > 0 ? ` · Due for automatic deletion within 30 days: ${r.due_within_30_days}` : ''))),
+      h('p', { class: 'muted small' },
+        'Change the periods with TRASH_DAYS and RETENTION_YEARS in the server’s .env file (RETENTION_YEARS=0 turns automatic deletion off).')));
+  }
 
   async function renderRegistry() {
     const s = await api.get('/registry/status');

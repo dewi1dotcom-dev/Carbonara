@@ -376,7 +376,7 @@ def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
                 if digits[0] != "1":
                     continue
                 digits = digits[1:]
-            out.append((f"{letters} {digits}", len(compact) == len(m.group()) and fixes <= 1))
+            out.append((f"{letters}{digits}", len(compact) == len(m.group()) and fixes <= 1))  # "EJ18664"
     return out
 
 

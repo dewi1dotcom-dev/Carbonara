@@ -1,3 +1,5 @@
+import datetime as dt
+import re
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
@@ -60,11 +62,24 @@ class VehicleDetails(_Clean):
     color: Optional[str] = Field(None, max_length=40)
     fuel_type: Optional[str] = Field(None, max_length=40)
     registration_number: Optional[str] = Field(None, max_length=20)
+    # New from the factory, or used. Used cars record their last service;
+    # new cars' first service is due one year after first registration.
+    condition: Optional[Literal["new", "used"]] = None
+    last_service_date: Optional[dt.date] = None
+    last_service_km: Optional[int] = Field(None, ge=0, le=5_000_000)
 
     @field_validator("registration_number")
     @classmethod
     def upper_reg(cls, v):
-        return v.upper() if v else v
+        # Stored without spaces/dashes: "eb 82655" -> "EB82655".
+        return re.sub(r"[^A-Za-z0-9ÆØÅæøå]", "", v).upper() or None if v else v
+
+    @field_validator("last_service_date")
+    @classmethod
+    def not_in_future(cls, v):
+        if v and v > dt.date.today():
+            raise ValueError("Last service date cannot be in the future")
+        return v
 
 
 class IntakeIn(BaseModel):
