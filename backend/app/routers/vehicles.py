@@ -1,11 +1,13 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from psycopg import errors
 
 from .. import vegvesen, vinlib
-from ..common import check_staff, conflict, log_event, not_found, patch_fields, update_row
+from ..common import (bad_request, check_staff, conflict, insert_row, log_event, not_found, patch_fields,
+                      update_row)
 from ..db import get_conn
-from ..schemas import MarkRegisteredIn, VehicleDetails
+from ..schemas import MarkRegisteredIn, MoveIn, RepairIn, ResolveMismatchIn, VehicleDetails
 
 router = APIRouter(tags=["vehicles"])
 
@@ -36,6 +38,32 @@ def registry_status(conn=Depends(get_conn)):
             # Only the last 4 characters, so staff can confirm which key is active after replacing it.
             "key_hint": key[-4:] if len(key) >= 8 else None,
             **counts, "last_error": last_error}
+
+
+@router.get("/registry/lookup", tags=["registry"])
+def registry_lookup(vin: Optional[str] = None, regnr: Optional[str] = None, conn=Depends(get_conn)):
+    """Look a car up in Statens vegvesen by VIN or registration number, before
+    an arrival inspection starts. Also reports differences from a car we know."""
+    if not vegvesen.is_configured():
+        return {"configured": False, "found": False}
+    if not (vin or regnr):
+        raise bad_request("Give a VIN or a registration number")
+    try:
+        item = vegvesen.fetch_by_vin(vinlib.normalize(vin)) if vin else vegvesen.fetch_by_regnr(regnr)
+    except vegvesen.NotFound as exc:
+        return {"configured": True, "found": False, "message": str(exc)}
+    except vegvesen.RegistryError as exc:
+        return {"configured": True, "found": False, "error": True, "message": str(exc)}
+
+    info = vegvesen.summary(item)
+    vehicle = info["vin"] and conn.execute("SELECT * FROM vehicles WHERE vin = %s", (info["vin"],)).fetchone()
+    mismatches = []
+    if vehicle:
+        reg = conn.execute("SELECT kept_values FROM vehicle_registry WHERE vehicle_id = %s",
+                           (vehicle["id"],)).fetchone()
+        mismatches = vegvesen.mismatch_list(vehicle, item, reg["kept_values"] if reg else None)
+    return {"configured": True, "found": True, **info,
+            "existing_vehicle_id": vehicle["id"] if vehicle else None, "mismatches": mismatches}
 
 
 @router.get("/vehicles")
@@ -97,14 +125,24 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
             ORDER BY e.occurred_at DESC, e.id DESC""",
         (vehicle_id,),
     ).fetchall()
+    repaired_damages = conn.execute(
+        """SELECT d.*, i.started_at AS inspected_at
+             FROM damages d JOIN inspections i ON i.id = d.inspection_id
+            WHERE d.vehicle_id = %s AND d.repaired_at IS NOT NULL
+            ORDER BY d.repaired_at DESC""",
+        (vehicle_id,),
+    ).fetchall()
     registry = conn.execute(
-        f"SELECT {REGISTRY_COLUMNS}, r.data FROM vehicle_registry r WHERE r.vehicle_id = %s", (vehicle_id,)
+        f"SELECT {REGISTRY_COLUMNS}, r.data, r.kept_values FROM vehicle_registry r WHERE r.vehicle_id = %s",
+        (vehicle_id,),
     ).fetchone()
-    details = []
+    details, values, mismatches = [], {}, []
     if registry:
-        raw = registry.pop("data")
+        raw, kept = registry.pop("data"), registry.pop("kept_values")
         registry |= vegvesen.overview(raw)
         details = vegvesen.details(raw)
+        values = vegvesen.vehicle_values(raw)
+        mismatches = vegvesen.mismatch_list(vehicle, raw, kept)
     marked_by = vehicle["registered_marked_by"] and conn.execute(
         "SELECT name FROM staff WHERE id = %s", (vehicle["registered_marked_by"],)
     ).fetchone()
@@ -117,7 +155,10 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "open_damages": open_damages,
         "events": events,
         "registry": registry,
+        "repaired_damages": repaired_damages,
         "registry_details": details,
+        "registry_values": values,          # what Statens vegvesen says, for hints in the edit form
+        "registry_mismatches": mismatches,  # differences waiting for staff to confirm
         "registry_configured": vegvesen.is_configured(),
     }
 
@@ -179,6 +220,106 @@ def sync_now(vehicle_id: int, conn=Depends(get_conn)):
         raise HTTPException(503, "Statens vegvesen API key is not configured on the server")
     result = vegvesen.sync_vehicle(conn, vehicle_id)
     return {"result": result, "vehicle": get_vehicle(vehicle_id, conn)}
+
+
+# --------------------------------------------------------------------------- #
+# Cars in storage: move, take off site, mark damage repaired
+# --------------------------------------------------------------------------- #
+
+@router.post("/vehicles/{vehicle_id}/move")
+def move_vehicle(vehicle_id: int, body: MoveIn, conn=Depends(get_conn)):
+    vehicle = conn.execute("SELECT * FROM vehicles WHERE id = %s FOR UPDATE", (vehicle_id,)).fetchone()
+    if not vehicle:
+        raise not_found("Vehicle")
+    if vehicle["status"] == "intake":
+        raise conflict("Finish the arrival inspection first; it places the car in storage")
+    check_staff(conn, body.staff_id)
+    current = conn.execute(
+        """SELECT a.id, l.id AS location_id, l.code FROM storage_assignments a
+             JOIN storage_locations l ON l.id = a.location_id
+            WHERE a.vehicle_id = %s AND a.removed_at IS NULL""",
+        (vehicle_id,),
+    ).fetchone()
+
+    location = None
+    if body.location_id is not None:
+        location = conn.execute(
+            "SELECT * FROM storage_locations WHERE id = %s AND active", (body.location_id,)
+        ).fetchone()
+        if not location:
+            raise bad_request("Unknown or inactive storage location")
+        if current and current["location_id"] == location["id"]:
+            raise conflict(f"The car is already at {location['code']}")
+    elif vehicle["status"] == "off_site":
+        raise conflict("The car is already off site")
+
+    if current:
+        conn.execute(
+            "UPDATE storage_assignments SET removed_at = now(), removed_by = %s WHERE id = %s",
+            (body.staff_id, current["id"]),
+        )
+    from_code = current["code"] if current else None
+    if location:
+        try:
+            with conn.transaction():
+                insert_row(conn, "storage_assignments", {
+                    "vehicle_id": vehicle_id, "location_id": location["id"], "placed_by": body.staff_id,
+                })
+        except errors.UniqueViolation:
+            raise conflict(f"Location {location['code']} is already occupied")
+        conn.execute("UPDATE vehicles SET status = 'in_storage' WHERE id = %s", (vehicle_id,))
+        log_event(conn, vehicle_id, "moved", staff_id=body.staff_id, data={
+            "from": from_code, "to": location["code"], "location_id": location["id"], "note": body.note,
+        })
+    else:
+        conn.execute("UPDATE vehicles SET status = 'off_site' WHERE id = %s", (vehicle_id,))
+        log_event(conn, vehicle_id, "moved_off_site", staff_id=body.staff_id,
+                  data={"from": from_code, "note": body.note})
+    return get_vehicle(vehicle_id, conn)
+
+
+@router.post("/damages/{damage_id}/repaired")
+def mark_damage_repaired(damage_id: int, body: RepairIn, conn=Depends(get_conn)):
+    damage = conn.execute("SELECT * FROM damages WHERE id = %s FOR UPDATE", (damage_id,)).fetchone()
+    if not damage:
+        raise not_found("Damage")
+    if damage["repaired_at"]:
+        raise conflict("This damage is already marked as repaired")
+    check_staff(conn, body.staff_id)
+    conn.execute("UPDATE damages SET repaired_at = now(), repair_note = %s WHERE id = %s",
+                 (body.note, damage_id))
+    log_event(conn, damage["vehicle_id"], "damage_repaired", staff_id=body.staff_id, data={
+        "damage_id": damage_id, "panel": damage["panel"], "damage_type": damage["damage_type"],
+        "severity": damage["severity"], "note": body.note,
+    })
+    return get_vehicle(damage["vehicle_id"], conn)
+
+
+@router.delete("/damages/{damage_id}/repaired")
+def undo_damage_repaired(damage_id: int, staff_id: Optional[int] = None, conn=Depends(get_conn)):
+    """Undo a repair marked by mistake: the damage is open again."""
+    damage = conn.execute("SELECT * FROM damages WHERE id = %s FOR UPDATE", (damage_id,)).fetchone()
+    if not damage:
+        raise not_found("Damage")
+    if not damage["repaired_at"]:
+        raise conflict("This damage is not marked as repaired")
+    check_staff(conn, staff_id)
+    conn.execute("UPDATE damages SET repaired_at = NULL, repair_note = NULL WHERE id = %s", (damage_id,))
+    log_event(conn, damage["vehicle_id"], "damage_repair_undone", staff_id=staff_id, data={
+        "damage_id": damage_id, "panel": damage["panel"], "damage_type": damage["damage_type"],
+        "severity": damage["severity"], "note": damage["repair_note"],
+    })
+    return get_vehicle(damage["vehicle_id"], conn)
+
+
+@router.post("/vehicles/{vehicle_id}/registry/resolve")
+def resolve_registry_mismatch(vehicle_id: int, body: ResolveMismatchIn, conn=Depends(get_conn)):
+    """Staff confirm differences from Statens vegvesen: use theirs or keep ours."""
+    if not conn.execute("SELECT 1 FROM vehicles WHERE id = %s", (vehicle_id,)).fetchone():
+        raise not_found("Vehicle")
+    check_staff(conn, body.staff_id)
+    vegvesen.resolve_mismatches(conn, vehicle_id, use=body.use, keep=body.keep, staff_id=body.staff_id)
+    return get_vehicle(vehicle_id, conn)
 
 
 @router.get("/vehicles/{vehicle_id}/registry/raw")

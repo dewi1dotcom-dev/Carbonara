@@ -43,7 +43,13 @@ def is_configured() -> bool:
     return bool(settings.vegvesen_api_key)
 
 
-def fetch_by_vin(vin: str) -> dict:
+def normalize_regnr(regnr: str) -> str:
+    """'eb 82655' -> 'EB82655' (the registry's lookup format)."""
+    return "".join(ch for ch in (regnr or "").upper() if ch.isalnum())
+
+
+def _fetch(params: dict) -> list:
+    """Raw lookup; returns the list of vehicle elements (never empty)."""
     if not is_configured():
         raise NotConfigured("VEGVESEN_API_KEY is not set")
     headers = {
@@ -52,8 +58,7 @@ def fetch_by_vin(vin: str) -> dict:
         "Accept": "application/json",
     }
     try:
-        r = httpx.get(settings.vegvesen_api_url, params={"understellsnummer": vin},
-                      headers=headers, timeout=15)
+        r = httpx.get(settings.vegvesen_api_url, params=params, headers=headers, timeout=15)
     except httpx.HTTPError as exc:
         raise RegistryError(f"Network error: {exc}") from exc
 
@@ -73,6 +78,20 @@ def fetch_by_vin(vin: str) -> dict:
     items = body.get("kjoretoydataListe") or []
     if not items:
         raise NotFound(body.get("feilmelding") or "Not found in the vehicle registry")
+    return items
+
+
+def fetch_by_regnr(regnr: str) -> dict:
+    regnr = normalize_regnr(regnr)
+    items = _fetch({"kjennemerke": regnr})
+    for item in items:
+        if normalize_regnr(dig(item, "kjoretoyId", "kjennemerke") or "") == regnr:
+            return item
+    return items[0]
+
+
+def fetch_by_vin(vin: str) -> dict:
+    items = _fetch({"understellsnummer": vin})
     for item in items:
         if (dig(item, "kjoretoyId", "understellsnummer") or "").upper() == vin:
             return item
@@ -289,10 +308,78 @@ def details(item: dict | None) -> list:
 TRACKED = ("registration_number", "registration_status", "eu_control_due",
            "eu_control_last_approved", "color")
 
-# vehicles column <- registry field. Registration number is authoritative and
-# always overwritten; the rest only fill in blanks typed at arrival.
-OVERWRITE = {"registration_number": "registration_number"}
-FILL_BLANK = {"make": "make", "model": "model", "color": "color", "fuel_type": "fuel"}
+# Vehicle fields Statens vegvesen also knows. Blanks are filled automatically;
+# real differences are shown to staff to confirm (see compare()).
+FUEL_EN = {"bensin": "Petrol", "diesel": "Diesel", "elektrisk": "Electric", "hydrogen": "Hydrogen"}
+
+
+def _fuel_en(item: dict, fuel: str | None) -> str | None:
+    """Registry fuel in the app's own vocabulary (see FUEL_TYPES in the UI)."""
+    hybrid = dig(item, "godkjenning", "tekniskGodkjenning", "tekniskeData", "motorOgDrivverk", "hybridKategori")
+    if isinstance(hybrid, dict) and hybrid.get("kodeVerdi") not in (None, "", "INGEN"):
+        name = (_text(hybrid) or "").lower()
+        return "Plug-in hybrid" if ("ladbar" in name and "ikke" not in name) or "plug" in name else "Hybrid"
+    if not fuel:
+        return None
+    return FUEL_EN.get(fuel.strip().lower(), fuel)
+
+
+def vehicle_values(item: dict | None) -> dict:
+    """The vehicle-record values according to Statens vegvesen, e.g. for an MG ZS EV:
+    {registration_number: 'EB 82655', make: 'MG', model: 'ZS EV', color: 'Rød',
+    fuel_type: 'Electric'}. Missing values are None."""
+    if not item:
+        return {}
+    f = extract(item)
+    make, model = f["make"], f["model"]
+    if make and model and model.lower().startswith(make.lower() + " "):
+        model = model[len(make) + 1:]  # "MG ZS EV" -> "ZS EV", so the title isn't "MG MG ZS EV"
+    return {"registration_number": f["registration_number"], "make": make, "model": model,
+            "color": f["color"], "fuel_type": _fuel_en(item, f["fuel"])}
+
+
+def summary(item: dict) -> dict:
+    """What the arrival screen shows right after a lookup."""
+    f = extract(item)
+    return {
+        "vin": (dig(item, "kjoretoyId", "understellsnummer") or "").upper() or None,
+        "values": vehicle_values(item),
+        "registration_status": f["registration_status"],
+        "eu_control_due": f["eu_control_due"],
+        "eu_control_last_approved": f["eu_control_last_approved"],
+        **overview(item),
+    }
+
+
+def _same(field: str, a, b) -> bool:
+    """Equal apart from case/spacing (and dashes in reg. numbers)."""
+    def norm(v):
+        s = " ".join(str(v or "").lower().split())
+        return s.replace(" ", "").replace("-", "") if field == "registration_number" else s
+    return norm(a) == norm(b)
+
+
+def compare(vehicle: dict, item: dict | None, kept: dict | None = None) -> tuple[dict, dict]:
+    """Split registry values into (auto, mismatches):
+    - auto: safe to apply silently — the field is blank, or only formatting differs
+      ("EB82655" -> "EB 82655").
+    - mismatches: a real difference staff must confirm, unless they already chose
+      to keep their own value for this exact registry value (`kept`)."""
+    auto, mismatches = {}, {}
+    for field, val in vehicle_values(item).items():
+        cur = vehicle.get(field)
+        if not val or cur == val:
+            continue
+        if not cur or _same(field, cur, val):
+            auto[field] = val
+        elif (kept or {}).get(field) != val:
+            mismatches[field] = val
+    return auto, mismatches
+
+
+def mismatch_list(vehicle: dict, item: dict | None, kept: dict | None) -> list:
+    _, mism = compare(vehicle, item, kept)
+    return [{"field": f, "current": vehicle.get(f), "registry": v} for f, v in mism.items()]
 
 
 def _plain(v):
@@ -311,9 +398,13 @@ def _set_registry(conn, vehicle_id: int, fields: dict) -> None:
     update_row(conn, "vehicle_registry", vehicle_id, fields, key="vehicle_id")
 
 
-def sync_vehicle(conn, vehicle_id: int) -> dict:
+def sync_vehicle(conn, vehicle_id: int, accept=()) -> dict:
     """Fetch and store registry data for one vehicle. Never raises for API
-    problems – the outcome is recorded on the vehicle_registry row."""
+    problems – the outcome is recorded on the vehicle_registry row.
+
+    Blank vehicle fields are filled from the registry; real differences are
+    left for staff to confirm, except fields listed in `accept` (already
+    confirmed, e.g. on the arrival screen), which take the registry value."""
     vehicle = conn.execute("SELECT * FROM vehicles WHERE id = %s", (vehicle_id,)).fetchone()
     conn.execute(
         "INSERT INTO vehicle_registry (vehicle_id) VALUES (%s) ON CONFLICT (vehicle_id) DO NOTHING",
@@ -361,15 +452,10 @@ def sync_vehicle(conn, vehicle_id: int) -> dict:
         "next_sync_at": now + dt.timedelta(days=settings.vegvesen_sync_days),
     })
 
-    # Copy into the vehicle record.
-    updates = {col: fields[src] for col, src in OVERWRITE.items()
-               if fields[src] and fields[src] != vehicle[col]}
-    # Fill blanks, and also refresh values that were copied from the registry
-    # earlier (vehicle value == previous registry value), so corrections flow
-    # through without overwriting anything staff typed in themselves.
-    updates |= {col: fields[src] for col, src in FILL_BLANK.items()
-                if fields[src] and fields[src] != vehicle[col]
-                and (not vehicle[col] or vehicle[col] == prev[src])}
+    # Copy into the vehicle record: blanks/formatting automatically, real
+    # differences only when already confirmed; the rest wait for staff.
+    auto, mismatches = compare(vehicle, item, prev["kept_values"])
+    updates = auto | {f: v for f, v in mismatches.items() if f in set(accept)}
     if updates:
         update_row(conn, "vehicles", vehicle_id, updates)
 
@@ -385,7 +471,31 @@ def sync_vehicle(conn, vehicle_id: int) -> dict:
         if changes or vehicle_changes:
             log_event(conn, vehicle_id, "registry_changed",
                       data={"changes": changes, "vehicle_changes": vehicle_changes})
-    return {"status": "ok"}
+    return {"status": "ok", "status_code": dig(item, "registrering", "registreringsstatus", "kodeVerdi")}
+
+
+def resolve_mismatches(conn, vehicle_id: int, use=(), keep=(), staff_id=None) -> None:
+    """Staff decision on differences: `use` takes the registry value, `keep`
+    keeps ours and remembers the declined registry value."""
+    vehicle = conn.execute("SELECT * FROM vehicles WHERE id = %s FOR UPDATE", (vehicle_id,)).fetchone()
+    reg = conn.execute(
+        "SELECT data, kept_values FROM vehicle_registry WHERE vehicle_id = %s FOR UPDATE", (vehicle_id,)
+    ).fetchone()
+    if not vehicle or not reg or not reg["data"]:
+        return
+    _, mismatches = compare(vehicle, reg["data"], reg["kept_values"])
+    used = {f: mismatches[f] for f in use if f in mismatches}
+    kept = {f: mismatches[f] for f in keep if f in mismatches and f not in used}
+    if used:
+        update_row(conn, "vehicles", vehicle_id, used)
+    if kept:
+        conn.execute("UPDATE vehicle_registry SET kept_values = kept_values || %s WHERE vehicle_id = %s",
+                     (Jsonb(kept), vehicle_id))
+    if used or kept:
+        log_event(conn, vehicle_id, "registry_mismatch_resolved", staff_id=staff_id, data={
+            "used": {f: [vehicle[f], v] for f, v in used.items()},
+            "kept": {f: [vehicle[f], v] for f, v in kept.items()},
+        })
 
 
 def due_vehicle_ids_sql():

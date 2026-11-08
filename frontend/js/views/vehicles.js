@@ -1,6 +1,7 @@
 import { PANEL_LABELS } from '../diagram.js';
 import {
-  api, busy, debounce, fmtDate, fmtKm, getInspectorId, h, openDialog, photoUrl, pill, showError, STATUS,
+  api, badge, busy, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  regStatus, showError, STATUS,
   toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
 
@@ -51,12 +52,18 @@ const EVENT_LABELS = {
   marked_registered: 'Marked as registered in Norway',
   registered_mark_removed: '"Registered" mark removed',
   registry_first_sync: 'Data fetched from Statens vegvesen',
-  registry_changed: 'Change in Statens vegvesen registry',
+  registry_changed: 'Updated from Statens vegvesen',
+  moved: 'Moved',
+  moved_off_site: 'Taken off site',
+  damage_repaired: 'Damage repaired',
+  damage_repair_undone: '"Repaired" undone',
+  registry_mismatch_resolved: 'Checked against Statens vegvesen',
 };
 
 const FIELD_LABELS = {
   registration_number: 'Reg. no', registration_status: 'Registration status', eu_control_due: 'EU-kontroll due',
   eu_control_last_approved: 'EU-kontroll approved', color: 'Colour', make: 'Make', model: 'Model', fuel_type: 'Fuel',
+  variant: 'Variant', model_year: 'Model year',
 };
 const changeText = (obj) => Object.entries(obj || {})
   .map(([k, [a, b]]) => `${FIELD_LABELS[k] ?? k}: ${a ?? '–'} → ${b ?? '–'}`).join(', ');
@@ -75,6 +82,20 @@ function eventDetail(e) {
         changeText(d.vehicle_changes)].filter(Boolean).join(' · ');
     case 'registry_changed':
       return [changeText(d.changes), changeText(d.vehicle_changes)].filter(Boolean).join(' · ');
+    case 'moved':
+      return [d.from ? `${d.from} → ${d.to}` : `To ${d.to}`, d.note].filter(Boolean).join(' — ');
+    case 'moved_off_site':
+      return [d.from && `From ${d.from}`, d.note].filter(Boolean).join(' — ');
+    case 'marked_registered':
+      return d.source === 'statens_vegvesen' ? 'Automatically — listed as registered in Statens vegvesen' : '';
+    case 'registry_mismatch_resolved':
+      return [d.used && Object.keys(d.used).length && `Used Statens vegvesen: ${changeText(d.used)}`,
+        d.kept && Object.keys(d.kept).length &&
+          `Kept ours: ${Object.entries(d.kept).map(([k, [ours, theirs]]) => `${FIELD_LABELS[k] ?? k} "${ours}" (registry: "${theirs}")`).join(', ')}`,
+      ].filter(Boolean).join(' · ');
+    case 'damage_repair_undone':
+    case 'damage_repaired':
+      return [`${PANEL_LABELS[d.panel] ?? d.panel} — ${d.damage_type}, ${d.severity}`, d.note].filter(Boolean).join(' — ');
     default: return '';
   }
 }
@@ -88,51 +109,138 @@ const SYNC_TEXT = {
   error: 'Sync failed — will retry automatically',
 };
 
-// ------------------------------------------------------------ status badges
 
-const EU_WARN_DAYS = 60; // amber from this many days before the deadline
-const EU_RED_DAYS = 1;   // red from this many days before the deadline
-const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+/** Staff picker, preselecting the person last chosen on this device. */
+function staffSelect(id) {
+  const sel = h('select', { id }, h('option', { value: '' }, 'Loading…'));
+  api.get('/staff').then((staff) => {
+    sel.replaceChildren(h('option', { value: '' }, 'Select…'), staff.map((s) => h('option', { value: s.id }, s.name)));
+    if (staff.some((s) => String(s.id) === getInspectorId())) sel.value = getInspectorId();
+  }).catch(showError);
+  return sel;
+}
+const staffId = (sel) => (sel.value ? Number(sel.value) : null);
 
-/** Whole days from today (local) until an ISO date; negative when passed. */
-function daysUntil(iso) {
-  if (!iso) return null;
-  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
-  const now = new Date();
-  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())) / 86400000);
+/** Edit vehicle details. Where Statens vegvesen has a different value, it is
+ *  shown under the field with a one-tap "use" link. */
+function editDialog(v, done) {
+  const reg = v.registry_values || {};
+  const inputs = {};
+  const field = (name, label, input) => {
+    input.id = `edit-${name}`;
+    inputs[name] = input;
+    const regVal = reg[name];
+    const hint = regVal ? h('div', { class: 'reg-hint small' }) : null;
+    const updateHint = () => {
+      if (!hint) return;
+      const same = input.value.trim().toLowerCase() === String(regVal).toLowerCase();
+      hint.replaceChildren(same ? '✓ Matches Statens vegvesen'
+        : h('span', {}, `Statens vegvesen: ${regVal} · `,
+          h('button', { class: 'link', type: 'button', onClick: () => { input.value = regVal; updateHint(); } }, 'use')));
+      hint.classList.toggle('differs', !same);
+    };
+    input.addEventListener('input', updateHint);
+    updateHint();
+    return h('div', { class: 'field' }, h('label', { for: input.id }, label), input, hint);
+  };
+  const text = (val, attrs = {}) => h('input', { type: 'text', value: val ?? '', ...attrs });
+
+  const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
+  const form = h('form', { class: 'form' },
+    h('div', { class: 'grid' },
+      field('make', 'Make', text(v.make)),
+      field('model', 'Model', text(v.model)),
+      field('variant', 'Variant / trim', text(v.variant)),
+      field('model_year', 'Model year', h('input', { type: 'number', inputmode: 'numeric', min: 1900, max: 2100, value: v.model_year ?? '' })),
+      field('color', 'Colour', text(v.color)),
+      field('fuel_type', 'Fuel type', text(v.fuel_type, { list: 'edit-dl-fuel' })),
+      field('registration_number', 'Registration no.', text(v.registration_number, { class: 'mono' }))),
+    h('datalist', { id: 'edit-dl-fuel' }, FUEL_TYPES.map((f) => h('option', { value: f }))),
+    h('div', { class: 'actions' }, okBtn));
+
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const changes = {};
+    for (const [name, input] of Object.entries(inputs)) {
+      let val = input.value.trim() || null;
+      if (name === 'model_year' && val != null) val = Number(val);
+      if (name === 'registration_number' && val) val = val.toUpperCase();
+      if (val !== (v[name] ?? null)) changes[name] = val;
+    }
+    if (!Object.keys(changes).length) { close(); return; }
+    busy(okBtn, async () => {
+      await api.patch(`/vehicles/${v.id}`, changes);
+      close();
+      toast('Details saved', 'success');
+      done();
+    });
+  });
+  const { close } = openDialog('Edit vehicle details', form);
 }
 
-/** EU-kontroll: red within EU_RED_DAYS or passed, amber within EU_WARN_DAYS, green otherwise. */
-function euStatus(due) {
-  const days = daysUntil(due);
-  if (days == null) return null;
-  if (days < 0) return { cls: 'bad', days, text: `Overdue by ${plural(-days, 'day')}` };
-  if (days <= EU_RED_DAYS) {
-    return { cls: 'bad', days, text: days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days} days` };
-  }
-  if (days <= EU_WARN_DAYS) return { cls: 'warn', days, text: `Due in ${plural(days, 'day')}` };
-  return { cls: 'good', days, text: 'Valid' };
+/** Move to another free spot, or take the car off site (workshop, test drive…). */
+function moveDialog(v, done) {
+  const here = v.current_location;
+  const spotSel = h('select', { id: 'move-spot', required: true }, h('option', { value: '' }, 'Loading…'));
+  api.get('/storage-locations?available_only=true').then((locs) => {
+    const byZone = new Map();
+    locs.forEach((l) => byZone.set(l.zone || 'Other', [...(byZone.get(l.zone || 'Other') || []), l]));
+    spotSel.replaceChildren(
+      h('option', { value: '' }, 'Select…'),
+      v.status !== 'off_site' ? h('option', { value: 'off' }, 'Off site (workshop, test drive, delivered…)') : null,
+      [...byZone].map(([zone, list]) => h('optgroup', { label: zone },
+        list.map((l) => h('option', { value: l.id }, l.description ? `${l.code} — ${l.description}` : l.code)))));
+  }).catch(showError);
+  const note = h('input', { type: 'text', id: 'move-note', maxlength: 200, placeholder: 'Optional, e.g. "At workshop for paint"' });
+  const staffSel = staffSelect('move-staff');
+  const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Move');
+
+  const form = h('form', { class: 'form' },
+    h('p', {}, here ? `Currently at ${here.code}${here.zone ? ` (${here.zone})` : ''}.` : 'Currently off site.'),
+    h('label', { for: 'move-spot' }, 'Move to'), spotSel,
+    h('label', { for: 'move-note' }, 'Note'), note,
+    h('label', { for: 'move-staff' }, 'Moved by'), staffSel,
+    h('div', { class: 'actions' }, okBtn));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (!spotSel.value) return;
+    busy(okBtn, async () => {
+      await api.post(`/vehicles/${v.id}/move`, {
+        location_id: spotSel.value === 'off' ? null : Number(spotSel.value),
+        note: note.value.trim() || null, staff_id: staffId(staffSel),
+      });
+      close();
+      toast(spotSel.value === 'off' ? 'Marked as off site' : 'Moved', 'success');
+      done();
+    });
+  });
+  const { close } = openDialog('Move car', form);
 }
 
-/** Registration: amber when not registered, red when Vegvesen says anything
- *  other than registered (deregistered, scrapped…), green when registered. */
-function regStatus(markedAt, code, name) {
-  if (!markedAt) return { cls: 'warn', text: 'Not registered' };
-  if (!code) return { cls: '', text: 'Registered · awaiting data' };
-  if (code === 'REGISTRERT') {
-    return { cls: 'good', text: name && name !== 'Registrert' ? `Registered (${name})` : 'Registered' };
-  }
-  return { cls: 'bad', text: name || code };
+function repairDialog(d, done) {
+  const note = h('textarea', { id: 'repair-note', rows: 3, maxlength: 1000, placeholder: 'Optional, e.g. "Repainted by workshop"' });
+  const staffSel = staffSelect('repair-staff');
+  const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Mark repaired');
+  const form = h('form', { class: 'form' },
+    h('p', {}, h('strong', {}, PANEL_LABELS[d.panel] ?? d.panel), ` — ${d.damage_type}, ${d.severity}`,
+      d.description ? ` — ${d.description}` : ''),
+    h('label', { for: 'repair-note' }, 'Repair note'), note,
+    h('label', { for: 'repair-staff' }, 'Marked by'), staffSel,
+    h('div', { class: 'actions' }, okBtn));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(okBtn, async () => {
+      await api.post(`/damages/${d.id}/repaired`, { note: note.value.trim() || null, staff_id: staffId(staffSel) });
+      close();
+      toast('Damage marked as repaired', 'success');
+      done();
+    });
+  });
+  const { close } = openDialog('Damage repaired', form);
 }
-
-const badge = (st, prefix = '') => st && h('span', { class: `badge ${st.cls}` }, prefix + st.text);
 
 function markDialog(v, done) {
-  const staffSel = h('select', { id: 'reg-staff' }, h('option', { value: '' }, 'Loading…'));
-  api.get('/staff').then((staff) => {
-    staffSel.replaceChildren(h('option', { value: '' }, 'Select…'), staff.map((s) => h('option', { value: s.id }, s.name)));
-    if (staff.some((s) => String(s.id) === getInspectorId())) staffSel.value = getInspectorId();
-  }).catch(showError);
+  const staffSel = staffSelect('reg-staff');
   const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Mark as registered');
   const form = h('form', { class: 'form' },
     h('p', {}, `Confirm that ${vehicleTitle(v)} (${v.vin}) has been registered in Norway.`),
@@ -143,7 +251,7 @@ function markDialog(v, done) {
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(okBtn, async () => {
-      const res = await api.post(`/vehicles/${v.id}/registered`, { staff_id: staffSel.value ? Number(staffSel.value) : null });
+      const res = await api.post(`/vehicles/${v.id}/registered`, { staff_id: staffId(staffSel) });
       close();
       const st = res.registry?.sync_status;
       if (!res.registry_configured) toast('Marked as registered. Registry sync starts once the API key is configured.');
@@ -169,12 +277,76 @@ async function showRaw(v) {
 const kv = (rows) => h('dl', { class: 'kv' },
   rows.filter(([, val]) => val != null && val !== '').map(([k, val]) => [h('dt', {}, k), h('dd', {}, val)]));
 
+/** Prompt shown when Statens vegvesen disagrees with what was typed in. */
+function mismatchCard(v, rerender) {
+  const list = v.registry_mismatches || [];
+  if (!list.length) return null;
+  const checks = {};
+  const staffSel = staffSelect('mm-staff');
+  const useBtn = h('button', { class: 'btn primary', type: 'button' }, 'Use Statens vegvesen');
+  const keepBtn = h('button', { class: 'btn', type: 'button' }, 'Keep ours');
+  const send = (btn, mode) => {
+    const chosen = list.filter((m) => checks[m.field].checked).map((m) => m.field);
+    if (!chosen.length) { toast('Tick at least one field', 'error'); return; }
+    busy(btn, async () => {
+      await api.post(`/vehicles/${v.id}/registry/resolve`, { [mode]: chosen, staff_id: staffId(staffSel) });
+      toast(mode === 'use' ? 'Updated from Statens vegvesen' : 'Kept our values', 'success');
+      rerender();
+    });
+  };
+  useBtn.addEventListener('click', () => send(useBtn, 'use'));
+  keepBtn.addEventListener('click', () => send(keepBtn, 'keep'));
+
+  return h('section', { class: 'card mismatch' },
+    h('h2', {}, `Check data: Statens vegvesen differs (${list.length})`),
+    h('p', { class: 'muted small' },
+      'Tick the fields this applies to and choose which value is right. ',
+      '"Keep ours" is remembered until Statens vegvesen changes the value again.'),
+    h('div', { class: 'table-wrap' }, h('table', {},
+      h('thead', {}, h('tr', {}, ['', 'Field', 'In Carbonara', 'Statens vegvesen'].map((t) => h('th', {}, t)))),
+      h('tbody', {}, list.map((m) => {
+        const cb = h('input', { type: 'checkbox', id: `mm-${m.field}` });
+        cb.checked = true;
+        checks[m.field] = cb;
+        return h('tr', {},
+          h('td', {}, cb),
+          h('td', {}, h('label', { for: cb.id }, FIELD_LABELS[m.field] ?? m.field)),
+          h('td', { class: 'old' }, m.current ?? '–'),
+          h('td', { class: 'strong' }, m.registry));
+      })))),
+    h('div', { class: 'inline mm-staff' }, h('label', { for: 'mm-staff' }, 'Checked by'), staffSel),
+    h('div', { class: 'actions' }, keepBtn, useBtn));
+}
+
+function repairedList(v, rerender) {
+  const list = v.repaired_damages || [];
+  if (!list.length) return null;
+  return h('details', { class: 'more' },
+    h('summary', {}, `Repaired damage (${list.length})`),
+    h('ul', { class: 'plain' }, list.map((d) => h('li', { class: 'damage-row repaired' },
+      h('span', { class: 'grow' }, h('strong', {}, PANEL_LABELS[d.panel] ?? d.panel), ` — ${d.damage_type}, ${d.severity}`,
+        d.description ? ` — ${d.description}` : '',
+        h('span', { class: 'muted small block' },
+          `Repaired ${fmtDate(d.repaired_at)}${d.repair_note ? ` — ${d.repair_note}` : ''}`)),
+      h('button', {
+        class: 'btn small', type: 'button',
+        onClick: async () => {
+          if (!confirm('Undo "repaired"? The damage will be listed as known damage again.')) return;
+          try {
+            const me = getInspectorId();
+            await api.del(`/damages/${d.id}/repaired${me ? `?staff_id=${me}` : ''}`);
+            toast('Repair undone', 'success');
+            rerender();
+          } catch (e) { showError(e); }
+        },
+      }, 'Undo')))));
+}
+
 /** Top of the vehicle page: the facts staff need at a glance. */
 function overviewCard(v, rerender) {
   const r = v.registry || {};
   const reg = regStatus(v.registered_marked_at, r.status_code, r.registration_status);
   const eu = euStatus(r.eu_control_due);
-  const loc = v.current_location;
 
   const alerts = [];
   if (eu?.cls === 'bad') {
@@ -203,8 +375,23 @@ function overviewCard(v, rerender) {
       ['Last approved', r.eu_control_last_approved && fmtDate(r.eu_control_last_approved, false)],
       ['Colour', v.color ?? r.color ?? '–'],
       ['VIN location', r.vin_location ?? h('span', { class: 'muted' }, '–')],
-      ['Storage spot', loc ? `${loc.code}${loc.zone ? ` (${loc.zone})` : ''} since ${fmtDate(loc.placed_at)}` : '–'],
-    ]));
+      ['Storage spot', storageText(v)],
+    ]),
+    v.status === 'intake' ? null : h('div', { class: 'actions' },
+      h('button', { class: 'btn', type: 'button', onClick: () => moveDialog(v, rerender) },
+        v.status === 'off_site' ? 'Return to storage' : 'Move'),
+      h('button', { class: 'btn', type: 'button', onClick: () => editDialog(v, rerender) }, 'Edit details')));
+}
+
+function storageText(v) {
+  const loc = v.current_location;
+  if (loc) return `${loc.code}${loc.zone ? ` (${loc.zone})` : ''} since ${fmtDate(loc.placed_at)}`;
+  if (v.status === 'off_site') {
+    const ev = v.events.find((e) => e.event_type === 'moved_off_site');
+    return h('span', { class: 'inline' }, h('span', { class: 'badge warn' }, 'Off site'),
+      ev ? `${ev.data?.note ? `${ev.data.note} · ` : ''}since ${fmtDate(ev.occurred_at)}` : '');
+  }
+  return v.status === 'intake' ? 'Placed when the arrival inspection is completed' : '–';
 }
 
 /** Everything else, folded away under "All vehicle data". */
@@ -281,6 +468,7 @@ export async function vehicleView(el, [id]) {
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, vehicleTitle(v)), h('div', { class: 'vin mono big' }, v.vin)),
       pill(v.status)),
+    mismatchCard(v, rerender),
     overviewCard(v, rerender),
     registryCard(v, rerender),
     h('section', { class: 'card' },
@@ -291,10 +479,12 @@ export async function vehicleView(el, [id]) {
             ? h('button', { class: 'thumb small', type: 'button', onClick: () => viewPhoto(d.photo_id, 'Damage') },
               h('img', { src: photoUrl(d.photo_id), alt: '' }))
             : null,
-          h('span', {}, h('strong', {}, PANEL_LABELS[d.panel] ?? d.panel), ` — ${d.damage_type}, ${d.severity}`,
+          h('span', { class: 'grow' }, h('strong', {}, PANEL_LABELS[d.panel] ?? d.panel), ` — ${d.damage_type}, ${d.severity}`,
             d.description ? ` — ${d.description}` : '',
-            h('span', { class: 'muted small block' }, `Found ${fmtDate(d.inspected_at, false)}`)))))
-        : h('p', { class: 'empty' }, 'No unrepaired damage on record.')),
+            h('span', { class: 'muted small block' }, `Found ${fmtDate(d.inspected_at, false)}`)),
+          h('button', { class: 'btn small', type: 'button', onClick: () => repairDialog(d, rerender) }, '✓ Repaired'))))
+        : h('p', { class: 'empty' }, 'No unrepaired damage on record.'),
+      repairedList(v, rerender)),
     h('section', { class: 'card' },
       h('h2', {}, 'Inspections'),
       h('div', { class: 'list' }, v.inspections.map((i) =>

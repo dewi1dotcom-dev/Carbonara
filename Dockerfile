@@ -13,7 +13,7 @@ COPY backend backend
 COPY frontend frontend
 COPY VERSION VERSION
 # Stamp the build time (UTC) so the footer shows exactly which build is running.
-RUN date -u +"%Y-%m-%d %H:%M UTC" > BUILD_TIME
+RUN date -u +"%Y-%m-%dT%H:%M:%SZ" > BUILD_TIME
 
 WORKDIR /app/backend
 ENV PHOTO_DIR=/data/photos \

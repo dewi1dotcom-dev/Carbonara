@@ -1,8 +1,13 @@
-// Step 0 of an arrival: identify the car by VIN (typed or read from a photo).
+// Step 0 of an arrival: identify the car by VIN (typed, read from a photo, or
+// found from the registration number) and pull its data from Statens vegvesen.
 import {
-  api, busy, cameraPicker, debounce, getInspectorId, h, normalizeVin, setInspectorId, showError,
-  STATUS, vehicleTitle, vinCheckDigitOk, vinFormatOk,
+  api, badge, busy, cameraPicker, debounce, euStatus, fmtDate, getInspectorId, h, normalizeVin, regStatus,
+  setInspectorId, showError, STATUS, vehicleTitle, vinCheckDigitOk, vinFormatOk,
 } from '../ui.js';
+
+const FIELD_LABELS = {
+  registration_number: 'Reg. no', make: 'Make', model: 'Model', color: 'Colour', fuel_type: 'Fuel',
+};
 
 export async function intakeView(el) {
   const staff = await api.get('/staff');
@@ -15,7 +20,9 @@ export async function intakeView(el) {
     return;
   }
 
-  const state = { vinSource: 'manual', vinPhoto: null, lookup: null };
+  // registry: Statens vegvesen lookup for the current VIN; accept: checkboxes
+  // for differences the inspector confirms (take the registry value).
+  const state = { vinSource: 'manual', vinPhoto: null, lookup: null, registry: null, accept: {} };
 
   const inspectorSel = h('select', { id: 'inspector', required: true },
     h('option', { value: '' }, 'Select inspector…'),
@@ -29,6 +36,14 @@ export async function intakeView(el) {
   const vinStatus = h('div', { class: 'vin-status' });
   const scanResult = h('div', { class: 'scan-result' });
   const lookupBox = h('div');
+  const registryBox = h('div', { class: 'registry-box' });
+
+  const regInput = h('input', {
+    id: 'regnr', class: 'mono', maxlength: 12, autocomplete: 'off', spellcheck: 'false',
+    autocapitalize: 'characters', placeholder: 'e.g. EB 82655',
+  });
+  const regBtn = h('button', { class: 'btn', type: 'button' }, 'Find VIN');
+  const regStatusLine = h('div', { class: 'vin-status' });
   const startBtn = h('button', { class: 'btn primary big', disabled: true }, 'Start inspection');
 
   const picker = cameraPicker(scanPhoto);
@@ -69,6 +84,7 @@ export async function intakeView(el) {
   const doLookup = debounce(async () => {
     const vin = currentVin();
     if (!vinFormatOk(vin)) return;
+    if (state.registry?.vin !== vin) fetchRegistry({ vin });
     try {
       const res = await api.get(`/vin/${vin}`);
       if (res.vin !== currentVin()) return; // input changed meanwhile
@@ -77,6 +93,105 @@ export async function intakeView(el) {
       updateStart();
     } catch (err) { showError(err); }
   }, 350);
+
+  // ---- Statens vegvesen
+  async function fetchRegistry(query) {
+    const key = query.vin || query.regnr;
+    state.registry = { loading: true, key };
+    renderRegistry();
+    try {
+      const res = await api.get(`/registry/lookup?${new URLSearchParams(query)}`);
+      // Ignore answers that were superseded by a newer lookup or a changed VIN.
+      if (state.registry?.key !== key || (query.vin && query.vin !== currentVin())) return null;
+      state.registry = { ...res, key, vin: res.vin || query.vin || null };
+      state.accept = {};
+      renderRegistry();
+      return res;
+    } catch (err) {
+      state.registry = null;
+      renderRegistry();
+      showError(err);
+      return null;
+    }
+  }
+
+  function renderRegistry() {
+    const r = state.registry;
+    registryBox.replaceChildren();
+    if (!r || r.configured === false) return;
+    if (r.loading) {
+      registryBox.append(h('div', { class: 'card spinner-line' }, 'Checking Statens vegvesen…'));
+      return;
+    }
+    if (!r.found) {
+      registryBox.append(h('div', { class: `card notice ${r.error ? 'warn' : ''}` },
+        r.error ? `Could not reach Statens vegvesen: ${r.message}`
+          : 'Not found in Statens vegvesen — normal for cars not yet registered in Norway.'));
+      return;
+    }
+    const val = r.values || {};
+    const eu = euStatus(r.eu_control_due);
+    const rows = [
+      ['Car', [val.make, val.model].filter(Boolean).join(' ')],
+      ['Reg. no', val.registration_number && h('span', { class: 'mono strong' }, val.registration_number)],
+      ['Registration', badge(regStatus(true, r.status_code, r.registration_status))],
+      ['EU-kontroll', eu && h('span', { class: 'inline' }, badge(eu), `due ${fmtDate(r.eu_control_due, false)}`)],
+      ['Colour', val.color],
+      ['Fuel', val.fuel_type],
+      ['VIN location', r.vin_location],
+    ].filter(([, v]) => v);
+
+    const mism = r.mismatches || [];
+    registryBox.append(h('section', { class: 'card' },
+      h('h2', {}, 'Statens vegvesen'),
+      h('dl', { class: 'kv' }, rows.map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
+      mism.length ? h('div', { class: 'mismatch-box' },
+        h('h3', {}, 'Differs from what we have on file'),
+        h('p', { class: 'muted small' }, 'Ticked fields are updated to the Statens vegvesen value when the inspection starts.'),
+        h('div', { class: 'table-wrap' }, h('table', {},
+          h('thead', {}, h('tr', {}, ['Use', 'Field', 'On file', 'Statens vegvesen'].map((t) => h('th', {}, t)))),
+          h('tbody', {}, mism.map((m) => {
+            const cb = h('input', { type: 'checkbox', id: `acc-${m.field}` });
+            cb.checked = state.accept[m.field] ?? true;
+            state.accept[m.field] = cb.checked;
+            cb.addEventListener('change', () => { state.accept[m.field] = cb.checked; });
+            return h('tr', {}, h('td', {}, cb),
+              h('td', {}, h('label', { for: cb.id }, FIELD_LABELS[m.field] ?? m.field)),
+              h('td', { class: 'old' }, m.current ?? '–'),
+              h('td', { class: 'strong' }, m.registry));
+          }))))) : null,
+      h('p', { class: 'muted small' },
+        r.status_code === 'REGISTRERT'
+          ? 'The data is saved and the car is marked as registered when the inspection starts.'
+          : 'The data is saved when the inspection starts.')));
+  }
+
+  async function findByRegnr() {
+    const regnr = regInput.value.replace(/[^A-Za-z0-9]/g, '').toUpperCase();
+    regStatusLine.className = 'vin-status';
+    if (regnr.length < 2) { regStatusLine.textContent = 'Type a registration number first.'; return; }
+    regStatusLine.textContent = 'Looking up…';
+    await busy(regBtn, async () => {
+      const res = await fetchRegistry({ regnr });
+      if (!res) { regStatusLine.textContent = ''; return; }
+      if (!res.configured) {
+        regStatusLine.textContent = 'Statens vegvesen API key is not configured on the server.';
+      } else if (!res.found || !res.vin) {
+        regStatusLine.classList.add('bad');
+        regStatusLine.textContent = res.message || 'No car found with this registration number.';
+      } else {
+        regStatusLine.classList.add('good');
+        regStatusLine.textContent = `✓ Found — VIN filled in from Statens vegvesen`;
+        state.registry.key = res.vin; // the registry result belongs to this VIN now
+        state.registry.vin = res.vin;
+        vinInput.value = res.vin;
+        onVinChanged();
+        state.vinSource = 'registry';
+      }
+    });
+  }
+  regBtn.addEventListener('click', findByRegnr);
+  regInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); findByRegnr(); } });
 
   function renderLookup() {
     const lk = state.lookup;
@@ -101,6 +216,10 @@ export async function intakeView(el) {
   function onVinChanged() {
     updateStatus();
     state.lookup = null;
+    if (state.registry && state.registry.vin !== currentVin() && !state.registry.loading) {
+      state.registry = null;
+      renderRegistry();
+    }
     renderLookup();
     updateStart();
     doLookup();
@@ -154,10 +273,14 @@ export async function intakeView(el) {
   }
 
   startBtn.addEventListener('click', () => busy(startBtn, async () => {
+    const reg = state.registry;
     const res = await api.post('/intake', {
       vin: currentVin(),
       inspector_id: Number(inspectorSel.value),
       vin_source: state.vinSource,
+      use_registry: true, // the server pulls Statens vegvesen data if the API key is configured
+      accept_fields: reg?.found && reg.vin === currentVin()
+        ? Object.entries(state.accept).filter(([, on]) => on).map(([f]) => f) : [],
     });
     if (state.vinPhoto && state.vinSource !== 'manual') {
       const fd = new FormData();
@@ -174,6 +297,9 @@ export async function intakeView(el) {
     h('div', { class: 'card form' },
       h('label', { for: 'inspector' }, 'Inspector'),
       inspectorSel,
+      h('label', { for: 'regnr' }, 'Registration number (if the car has one)'),
+      h('div', { class: 'inline-form' }, regInput, regBtn),
+      regStatusLine,
       h('label', { for: 'vin' }, 'VIN (chassis number)'),
       vinInput,
       vinStatus,
@@ -182,6 +308,7 @@ export async function intakeView(el) {
         'Tip: photograph the VIN plate at the bottom of the windscreen, the label in the driver door frame (barcode), or the registration document.'),
       scanResult),
     lookupBox,
+    registryBox,
     h('div', { class: 'actions' }, startBtn),
   );
   setTimeout(() => vinInput.focus(), 0); // after the router attaches the view

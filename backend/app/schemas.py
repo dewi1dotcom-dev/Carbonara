@@ -67,8 +67,18 @@ class VehicleDetails(_Clean):
 class IntakeIn(BaseModel):
     vin: str
     inspector_id: int
-    vin_source: Literal["manual", "barcode", "ocr"] = "manual"
+    vin_source: Literal["manual", "barcode", "ocr", "registry"] = "manual"
     vehicle: Optional[VehicleDetails] = None
+    # Fetch Statens vegvesen data when the inspection starts. accept_fields are
+    # differences the inspector confirmed on the arrival screen (registry wins).
+    use_registry: bool = False
+    accept_fields: list[str] = []
+
+
+class ResolveMismatchIn(BaseModel):
+    use: list[str] = []    # take the Statens vegvesen value
+    keep: list[str] = []   # keep ours (remembered for this registry value)
+    staff_id: Optional[int] = None
 
 
 class InspectionPatch(_Clean):
@@ -103,6 +113,19 @@ class DamagePatch(_Clean):
 
 
 class MarkRegisteredIn(BaseModel):
+    staff_id: Optional[int] = None
+
+
+class MoveIn(_Clean):
+    """Move a stored car to another spot (location_id), or take it off site
+    (location_id = None) with an optional note such as "At workshop"."""
+    location_id: Optional[int] = None
+    note: Optional[str] = Field(None, max_length=200)
+    staff_id: Optional[int] = None
+
+
+class RepairIn(_Clean):
+    note: Optional[str] = Field(None, max_length=1000)
     staff_id: Optional[int] = None
 
 

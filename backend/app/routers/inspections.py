@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse
 from psycopg import errors
 
-from .. import photostore, vinlib
+from .. import photostore, vegvesen, vinlib
 from ..common import (
     bad_request, check_staff, conflict, insert_row, log_event, not_found, patch_fields, update_row,
 )
@@ -125,6 +125,7 @@ def start_intake(body: IntakeIn, conn=Depends(get_conn)):
             (vehicle["id"],),
         ).fetchone()
         if open_insp:
+            _registry_step(conn, vehicle, body)
             return {"inspection_id": open_insp["id"], "resumed": True}
         if vehicle["status"] == "in_storage":
             raise conflict("This vehicle is already in stock")
@@ -138,7 +139,24 @@ def start_intake(body: IntakeIn, conn=Depends(get_conn)):
     })
     log_event(conn, vehicle["id"], "arrival_inspection_started", staff_id=body.inspector_id,
               inspection_id=insp["id"], data={"vin_source": body.vin_source})
+    _registry_step(conn, vehicle, body)
     return {"inspection_id": insp["id"], "resumed": False}
+
+
+def _registry_step(conn, vehicle: dict, body: IntakeIn) -> None:
+    """Pull Statens vegvesen data as the inspection starts. Blanks are filled,
+    differences confirmed on the arrival screen are applied, and a car the
+    registry lists as registered is marked as registered so syncing continues."""
+    if not (body.use_registry and vegvesen.is_configured()):
+        return
+    res = vegvesen.sync_vehicle(conn, vehicle["id"], accept=body.accept_fields)
+    if res.get("status_code") == "REGISTRERT" and not vehicle["registered_marked_at"]:
+        conn.execute(
+            "UPDATE vehicles SET registered_marked_at = now(), registered_marked_by = %s WHERE id = %s",
+            (body.inspector_id, vehicle["id"]),
+        )
+        log_event(conn, vehicle["id"], "marked_registered", staff_id=body.inspector_id,
+                  data={"source": "statens_vegvesen"})
 
 
 @router.get("/inspections")

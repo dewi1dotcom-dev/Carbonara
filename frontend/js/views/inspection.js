@@ -1,7 +1,7 @@
 // Arrival inspection: vehicle details -> 4 photos -> damage -> storage.
 import { carDiagram, DIAGRAM_PANELS, EXTRA_PANELS, PANEL_LABELS } from '../diagram.js';
 import {
-  api, busy, cameraPicker, fmtDate, fmtKm, getInspectorId, h, openDialog, photoUrl, pill,
+  api, busy, cameraPicker, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   showError, toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
 
@@ -17,7 +17,6 @@ const FUEL_LEVELS = [
   [0, 'Empty'], [13, '1/8'], [25, '1/4'], [38, '3/8'], [50, '1/2'],
   [63, '5/8'], [75, '3/4'], [88, '7/8'], [100, 'Full'],
 ];
-const FUEL_TYPES = ['Petrol', 'Diesel', 'Hybrid', 'Plug-in hybrid', 'Electric', 'LPG', 'CNG', 'Hydrogen'];
 const cap = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export async function inspectionView(el, [id]) {

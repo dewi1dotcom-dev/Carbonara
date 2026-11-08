@@ -1,4 +1,4 @@
-import { api, busy, h, showError, toast } from '../ui.js';
+import { api, busy, fmtDate, h, showError, toast } from '../ui.js';
 
 export async function settingsView(el) {
   const staffBox = h('div');
@@ -25,7 +25,7 @@ export async function settingsView(el) {
         [['Synced OK', s.ok], ['Waiting', s.pending], ['Not found in registry', s.not_found], ['Errors', s.error],
           ['Due for sync now', s.due]].map(([k, val]) => [h('dt', {}, k), h('dd', {}, String(val))])),
       s.last_error ? h('p', { class: 'muted small' },
-        `Latest error (${new Date(s.last_error.last_attempt_at).toLocaleString()}): ${s.last_error.last_error}`) : null));
+        `Latest error (${fmtDate(s.last_error.last_attempt_at)}): ${s.last_error.last_error}`) : null));
   }
 
   async function renderStaff() {

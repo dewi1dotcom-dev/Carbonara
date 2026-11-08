@@ -1,4 +1,4 @@
-import { h } from './ui.js';
+import { fmtDate, h, startClock } from './ui.js';
 import { dashboardView } from './views/dashboard.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
@@ -48,6 +48,7 @@ async function render() {
 
 window.addEventListener('hashchange', render);
 render();
+startClock(document.getElementById('clock'));
 
 // Show which version/build is running, so it is easy to check after an update.
 fetch('/api/version')
@@ -56,7 +57,7 @@ fetch('/api/version')
     if (!v) return;
     const el = document.getElementById('app-version');
     el.textContent = v.build_time
-      ? `Carbonara v${v.version} · built ${v.build_time}`
+      ? `Carbonara v${v.version} · built ${fmtDate(v.build_time)}`
       : `Carbonara v${v.version}`;
   })
   .catch(() => {});

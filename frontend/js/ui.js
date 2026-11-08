@@ -145,12 +145,78 @@ export function viewPhoto(id, title = 'Photo') {
 
 // ---------------------------------------------------------------- formatting
 
+// All dates/times are shown in Norwegian, 24-hour, Oslo time, regardless of
+// the device's language settings: "00:48, søndag 8. november 2026".
+const TZ = 'Europe/Oslo';
+const fmtTime = new Intl.DateTimeFormat('nb-NO', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+const fmtLongDate = new Intl.DateTimeFormat('nb-NO', {
+  timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+});
+const fmtDay = new Intl.DateTimeFormat('nb-NO', { timeZone: TZ, day: 'numeric', month: 'long', year: 'numeric' });
+
+/** With time: "00:48, søndag 8. november 2026". Date only: "8. november 2026". */
 export function fmtDate(iso, withTime = true) {
   if (!iso) return '–';
-  const d = new Date(iso);
-  return withTime
-    ? d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
-    : d.toLocaleDateString(undefined, { dateStyle: 'medium' });
+  const d = iso instanceof Date ? iso : new Date(iso);
+  if (Number.isNaN(d.getTime())) return String(iso);
+  return withTime ? `${fmtTime.format(d)}, ${fmtLongDate.format(d)}` : fmtDay.format(d);
+}
+
+/** Today's date in Oslo as [year, month, day]. */
+export function osloToday() {
+  const [y, m, d] = new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date()).split('-').map(Number);
+  return [y, m, d];
+}
+
+// ---------------------------------------------------------------- status badges
+
+const EU_WARN_DAYS = 60; // amber from this many days before the deadline
+const EU_RED_DAYS = 1;   // red from this many days before the deadline
+const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
+
+/** Whole days from today (Oslo) until an ISO date; negative when passed. */
+export function daysUntil(iso) {
+  if (!iso) return null;
+  const [y, m, d] = iso.slice(0, 10).split('-').map(Number);
+  const [ty, tm, td] = osloToday();
+  return Math.round((Date.UTC(y, m - 1, d) - Date.UTC(ty, tm - 1, td)) / 86400000);
+}
+
+/** EU-kontroll: red within EU_RED_DAYS or passed, amber within EU_WARN_DAYS, green otherwise. */
+export function euStatus(due) {
+  const days = daysUntil(due);
+  if (days == null) return null;
+  if (days < 0) return { cls: 'bad', days, text: `Overdue by ${plural(-days, 'day')}` };
+  if (days <= EU_RED_DAYS) {
+    return { cls: 'bad', days, text: days === 0 ? 'Due today' : days === 1 ? 'Due tomorrow' : `Due in ${days} days` };
+  }
+  if (days <= EU_WARN_DAYS) return { cls: 'warn', days, text: `Due in ${plural(days, 'day')}` };
+  return { cls: 'good', days, text: 'Valid' };
+}
+
+/** Registration: amber when not registered, red when Vegvesen says anything
+ *  other than registered (deregistered, scrapped…), green when registered. */
+export function regStatus(markedAt, code, name) {
+  if (!markedAt) return { cls: 'warn', text: 'Not registered' };
+  if (!code) return { cls: '', text: 'Registered · awaiting data' };
+  if (code === 'REGISTRERT') {
+    return { cls: 'good', text: name && name !== 'Registrert' ? `Registered (${name})` : 'Registered' };
+  }
+  return { cls: 'bad', text: name || code };
+}
+
+export const badge = (st, prefix = '') => st && h('span', { class: `badge ${st.cls}` }, prefix + st.text);
+
+/** Live clock: keeps `el` showing the current time and date, updated on the minute. */
+export function startClock(el) {
+  const tick = () => {
+    const now = new Date();
+    el.replaceChildren(
+      h('span', { class: 'clock-time' }, fmtTime.format(now)),
+      h('span', { class: 'clock-date' }, fmtLongDate.format(now)));
+    setTimeout(tick, 60000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
+  };
+  tick();
 }
 
 export const fmtKm = (n) => (n == null ? '–' : `${Number(n).toLocaleString()} km`);
@@ -163,6 +229,8 @@ export const STATUS = {
   completed: 'Completed',
   cancelled: 'Cancelled',
 };
+
+export const FUEL_TYPES = ['Petrol', 'Diesel', 'Hybrid', 'Plug-in hybrid', 'Electric', 'LPG', 'CNG', 'Hydrogen'];
 
 export const pill = (status) => h('span', { class: `pill st-${status}` }, STATUS[status] ?? status);
 
