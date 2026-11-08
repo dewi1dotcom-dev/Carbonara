@@ -68,9 +68,13 @@ export async function intakeView(el) {
     } else if (vinCheckDigitOk(vin)) {
       vinStatus.classList.add('good');
       vinStatus.append('✓ Valid VIN (check digit matches)');
+    } else if ('12345L'.includes(vin[0])) {
+      // North America / China: the check digit is mandatory, so a mismatch means a typo.
+      vinStatus.classList.add('bad');
+      vinStatus.append('Check digit does not match — for this manufacturer a character is probably wrong.');
     } else {
       vinStatus.classList.add('warn');
-      vinStatus.append('✓ Valid format. (Check digit not used by this manufacturer — normal for most European cars.)');
+      vinStatus.append('✓ Valid format. (Check digit not used by this manufacturer — normal for many European cars.)');
     }
   }
 
@@ -209,7 +213,15 @@ export async function intakeView(el) {
       lookupBox.append(h('div', { class: 'card notice' },
         `Known vehicle: ${vehicleTitle(v)}. A new arrival inspection will be added to its history.`));
     } else {
-      lookupBox.append(h('div', { class: 'card notice' }, 'New vehicle — not seen before.'));
+      const decoded = [lk.make, lk.model_year && `model year ${lk.model_year}`].filter(Boolean).join(', ');
+      lookupBox.append(h('div', { class: 'card notice' },
+        'New vehicle — not seen before.', decoded ? ` From the VIN: ${decoded}.` : ''));
+    }
+    // NA/China VINs (e.g. MG) must pass the check digit; if not, a character is misread.
+    if (lk.check_digit_required && lk.check_digit_ok === false) {
+      lookupBox.append(h('div', { class: 'card notice bad' },
+        h('strong', {}, 'Check digit does not match. '),
+        'For this manufacturer that means a character is probably wrong (8/B, 5/S, 0/D, 2/Z…). Compare with the car.'));
     }
   }
 
@@ -270,7 +282,12 @@ export async function intakeView(el) {
           h('div', { class: 'candidates' }, candidates.map((c) =>
             h('button', { class: `candidate conf-${c.confidence}`, type: 'button', onClick: () => choose(c) },
               h('span', { class: 'mono' }, c.vin),
-              h('small', {}, `${c.source === 'barcode' ? 'Barcode' : 'Text recognition'} · ${c.confidence} confidence`)))));
+              h('small', {}, [
+                c.make && `${c.make}${c.model_year ? ` ${c.model_year}` : ''}`,
+                c.source === 'barcode' ? 'Barcode' : 'Text recognition',
+                `${c.confidence} confidence`,
+                c.repaired_from && `1 character corrected (read as ${c.repaired_from})`,
+              ].filter(Boolean).join(' · '))))));
       }
       if (plates.length) {
         scanResult.append(
@@ -297,6 +314,10 @@ export async function intakeView(el) {
       vin: currentVin(),
       inspector_id: Number(inspectorSel.value),
       vin_source: state.vinSource,
+      // Make and model year decoded from the VIN, used for new cars only; Statens
+      // vegvesen data (if the car is registered) is checked against them later.
+      vehicle: state.lookup?.vin === currentVin() && (state.lookup.make || state.lookup.model_year)
+        ? { make: state.lookup.make || null, model_year: state.lookup.model_year || null } : null,
       use_registry: true, // the server pulls Statens vegvesen data if the API key is configured
       accept_fields: reg?.found && reg.vin === currentVin()
         ? Object.entries(state.accept).filter(([, on]) => on).map(([f]) => f) : [],

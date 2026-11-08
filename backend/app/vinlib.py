@@ -58,13 +58,109 @@ def check_digit_ok(vin: str) -> bool:
     return is_valid_format(vin) and vin[8] == check_digit(vin)
 
 
+# ---- VIN structure (ISO 3779 / 3780) -----------------------------------------
+#   1-3  WMI  world manufacturer identifier      4-8  vehicle attributes
+#   9    check digit (mandatory in North America and China, optional elsewhere)
+#   10   model year (mandatory NA/China; many — not all — European makers use it)
+#   11   plant        12-17 serial number; 14-17 are always digits
+
+# WMI -> (make, encodes model year in position 10). Common makes in Norway;
+# unknown WMIs simply aren't decoded.
+WMI_MAKES: dict[str, tuple[str, bool]] = {
+    "LSJ": ("MG", True),
+    "JF1": ("Subaru", True), "JF2": ("Subaru", True),
+    "WVW": ("Volkswagen", True), "WV1": ("Volkswagen", True), "WV2": ("Volkswagen", True),
+    "WVG": ("Volkswagen", True), "WAU": ("Audi", True), "WUA": ("Audi", True),
+    "TMB": ("Skoda", True), "VSS": ("Seat", True), "VS6": ("Cupra", True),
+    "WBA": ("BMW", True), "WBY": ("BMW", True), "WBS": ("BMW", True), "WMW": ("Mini", True),
+    "WDD": ("Mercedes-Benz", False), "WDB": ("Mercedes-Benz", False), "WDC": ("Mercedes-Benz", False),
+    "W1K": ("Mercedes-Benz", False), "W1N": ("Mercedes-Benz", False), "W1V": ("Mercedes-Benz", False),
+    "YV1": ("Volvo", True), "YV4": ("Volvo", True), "LYV": ("Volvo", True),
+    "LPS": ("Polestar", True),
+    "5YJ": ("Tesla", True), "7SA": ("Tesla", True), "LRW": ("Tesla", True), "XP7": ("Tesla", True),
+    "JTD": ("Toyota", True), "JTM": ("Toyota", True), "JTN": ("Toyota", True), "JTE": ("Toyota", True),
+    "SB1": ("Toyota", True), "VNK": ("Toyota", True), "NMT": ("Toyota", True), "JTH": ("Lexus", True),
+    "KMH": ("Hyundai", True), "KMF": ("Hyundai", True), "TMA": ("Hyundai", True),
+    "KNA": ("Kia", True), "KNE": ("Kia", True), "U5Y": ("Kia", True),
+    "JN1": ("Nissan", True), "SJN": ("Nissan", True), "VSK": ("Nissan", True),
+    "JMZ": ("Mazda", True), "JM1": ("Mazda", True), "JHM": ("Honda", True), "SHH": ("Honda", True),
+    "JMB": ("Mitsubishi", True), "JA3": ("Mitsubishi", True), "JS3": ("Suzuki", True), "TSM": ("Suzuki", True),
+    "SAL": ("Land Rover", True), "SAJ": ("Jaguar", True), "LGX": ("BYD", True),
+    "VF1": ("Renault", False), "UU1": ("Dacia", False), "VF3": ("Peugeot", False), "VF7": ("Citroën", False),
+    "VR3": ("Peugeot", False), "VR7": ("Citroën", False), "W0L": ("Opel", False), "W0V": ("Opel", False),
+    "WF0": ("Ford", False), "ZFA": ("Fiat", False), "ZAR": ("Alfa Romeo", False),
+}
+
+# Position 10 codes repeat every 30 years: A=1980/2010 … Y=2000/2030, 1=2001/2031 … 9=2009/2039.
+_YEAR_CODES = "ABCDEFGHJKLMNPRSTVWXY123456789"
+
+
+def requires_check_digit(vin: str) -> bool:
+    """North America (1-5) and China (L) make the position-9 check digit mandatory."""
+    return bool(vin) and vin[0] in "12345L"
+
+
+def model_year(vin: str) -> int | None:
+    """Model year from position 10, for makes known to encode it there (and all
+    NA/China VINs). The most recent matching year not after next year."""
+    if not is_valid_format(vin) or vin[9] not in _YEAR_CODES:
+        return None
+    known = WMI_MAKES.get(vin[:3])
+    if not (requires_check_digit(vin) or (known and known[1])):
+        return None
+    import datetime as _dt
+
+    latest = _dt.date.today().year + 1
+    year = 1980 + _YEAR_CODES.index(vin[9])
+    while year + 30 <= latest:
+        year += 30
+    return year
+
+
 def describe(vin: str) -> dict:
     valid = is_valid_format(vin)
+    known = WMI_MAKES.get(vin[:3]) if valid else None
     return {
         "vin": vin,
         "valid_format": valid,
         "check_digit_ok": check_digit_ok(vin) if valid else None,
+        "check_digit_required": requires_check_digit(vin) if valid else None,
+        "make": known[0] if known else None,   # from the manufacturer code (WMI)
+        "model_year": model_year(vin) if valid else None,
     }
+
+
+# Characters OCR commonly confuses, used to repair one misread character when
+# the (mandatory) check digit says something is wrong.
+_LOOKALIKES = {"8": "B", "B": "8", "5": "S", "S": "5", "0": "D", "D": "0", "2": "Z", "Z": "2",
+               "6": "G", "G": "6", "1": "L", "L": "1", "4": "A", "A": "4", "7": "T", "T": "7"}
+# Positions 14-17 are always digits.
+_SERIAL_DIGIT_FIXES = str.maketrans({"S": "5", "B": "8", "G": "6", "Z": "2", "D": "0", "L": "1",
+                                     "T": "7", "A": "4"})
+
+
+def _plausible(vin: str) -> bool:
+    """Structure checks beyond the character set."""
+    return (vin[0] != "0"                       # no WMI starts with 0
+            and vin[9] not in "UZ0"             # never a model-year code
+            and vin[13:].isdigit())             # serial: last four always digits
+
+
+def repair_with_check_digit(vin: str) -> str | None:
+    """If a VIN that must carry a valid check digit doesn't, try swapping one
+    look-alike character (8/B, 5/S, 0/D, 2/Z…). Returns the repaired VIN only
+    if exactly one swap makes it valid and plausible."""
+    if not requires_check_digit(vin) or check_digit_ok(vin):
+        return None
+    fixes = set()
+    for i, c in enumerate(vin):
+        alt = _LOOKALIKES.get(c)
+        if not alt:
+            continue
+        candidate = vin[:i] + alt + vin[i + 1:]
+        if VIN_RE.match(candidate) and _plausible(candidate) and check_digit_ok(candidate):
+            fixes.add(candidate)
+    return fixes.pop() if len(fixes) == 1 else None
 
 
 # --------------------------------------------------------------------------- #
@@ -88,7 +184,9 @@ def _candidates_in_text(text: str, fix_ocr: bool) -> list[tuple[str, bool]]:
         exact = len(compact) == 17
         for i in range(len(compact) - 16):
             window = compact[i : i + 17]
-            if window[0] == "0":  # no manufacturer code (WMI) starts with 0
+            if fix_ocr:  # positions 14-17 are always digits
+                window = window[:13] + window[13:].translate(_SERIAL_DIGIT_FIXES)
+            if not _plausible(window):
                 continue
             # A real VIN never contains I, O or Q. If OCR needed more than two
             # such fixes it was probably reading words ("SUBARU CORPORATION"),
@@ -489,20 +587,31 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
     plates: dict[str, dict] = {}
     seen_text: list[str] = []  # what the OCR read, returned for troubleshooting
 
-    def add(vin: str, source: str, exact: bool) -> None:
+    def add(vin: str, source: str, exact: bool, repaired_from: str | None = None) -> None:
         ok = check_digit_ok(vin)
         if source == "barcode" or ok:
             confidence = "high"
+        elif requires_check_digit(vin):
+            # NA/China VINs must pass the check digit: a failing one is misread.
+            # Try repairing one look-alike character before giving up on it.
+            fixed = repair_with_check_digit(vin)
+            if fixed:
+                add(fixed, source, exact, repaired_from=vin)
+            confidence = "low"
         elif exact:
             confidence = "medium"
         else:
             confidence = "low"
         score = {"high": 3, "medium": 2, "low": 1}[confidence]
+        if repaired_from:
+            score -= 0.5  # below a VIN that was read correctly as is
         prev = found.get(vin)
         if prev is None or score > prev["_score"]:
+            info = describe(vin)
             found[vin] = {
                 "vin": vin, "source": source, "confidence": confidence,
-                "check_digit_ok": ok, "_score": score,
+                "check_digit_ok": ok, "make": info["make"], "model_year": info["model_year"],
+                "repaired_from": repaired_from, "_score": score,
             }
 
     for text in _barcodes(img):
