@@ -18,6 +18,7 @@ from __future__ import annotations
 import io
 import logging
 import re
+import threading
 
 from PIL import Image, ImageFilter, ImageOps
 
@@ -257,6 +258,89 @@ def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
     return out
 
 
+# ---- scene-text OCR (RapidOCR / PaddleOCR models) ----------------------------
+#
+# Tesseract is built for flat documents; phone photos of labels behind dusty
+# glass and plates at an angle are "scene text". RapidOCR first detects text
+# boxes at any angle, straightens each one and reads it with a neural network.
+
+_engine = None
+_engine_lock = threading.Lock()
+
+
+def _rapid():
+    global _engine
+    if _engine is None:
+        with _engine_lock:
+            if _engine is None:
+                from rapidocr_onnxruntime import RapidOCR
+
+                _engine = RapidOCR()
+    return _engine
+
+
+def scene_text(rgb: Image.Image) -> list[dict]:
+    """Every text box in the photo: [{text, score, height, cx, cy}], height in px."""
+    import numpy as np
+
+    arr = np.ascontiguousarray(np.asarray(rgb.convert("RGB"))[:, :, ::-1])  # RGB -> BGR
+    result, _ = _rapid()(arr)
+    items = []
+    for box, text, score in result or []:
+        pts = np.asarray(box, dtype=float)  # TL, TR, BR, BL
+        height = (np.linalg.norm(pts[0] - pts[3]) + np.linalg.norm(pts[1] - pts[2])) / 2
+        cx, cy = pts.mean(axis=0)
+        items.append({"text": str(text), "score": float(score), "height": float(height),
+                      "cx": float(cx), "cy": float(cy)})
+    log.info("scene text: %s", [(i["text"], round(i["score"], 2)) for i in items])
+    return items
+
+
+# Words that are big, uppercase and short but never a plate (labels, dealer frames).
+_NOT_PLATES = {"MODEL", "SUBARU", "TOYOTA", "AUDI", "SKODA", "VOLVO", "TESLA", "NISSAN", "MAZDA",
+               "KIA", "BMW", "FORD", "OPEL", "MG", "VW", "TDI", "AS", "N", "NOR", "NORGE", "KG"}
+
+
+def _plates_from_items(items: list[dict], vins: set[str]) -> dict[str, dict]:
+    plates: dict[str, dict] = {}
+
+    def add(plate, confidence, custom=False):
+        rank = {"medium": 2, "low": 1}
+        if plate not in plates or rank[confidence] > rank[plates[plate]["confidence"]]:
+            plates[plate] = {"plate": plate, "confidence": confidence, "custom": custom}
+
+    # 1. Standard plates within one text box ("DR 18564").
+    for it in items:
+        for plate, exact in _plates_in_text(it["text"], vins):
+            add(plate, "medium" if exact and it["score"] > 0.8 else "low")
+
+    # 2. Plates split over two boxes ("DR" + "18564") on the same line.
+    for a in items:
+        la = re.sub(r"[^A-Z]", "", a["text"].upper())
+        if len(la) != 2:
+            continue
+        for b in items:
+            db = re.sub(r"[^A-Z0-9]", "", b["text"].upper()).translate(_PLATE_DIGIT_FIXES)
+            if b is a or not (4 <= len(db) <= 5 and db.isdigit()):
+                continue
+            same_line = abs(a["cy"] - b["cy"]) < 0.6 * max(a["height"], b["height"])
+            if same_line and b["cx"] > a["cx"] and abs(a["height"] - b["height"]) < 0.4 * a["height"]:
+                add(f"{la} {db}", "medium" if min(a["score"], b["score"]) > 0.8 else "low")
+
+    # 3. Personalised plates ("ALPAKKA"): the biggest short all-caps word, offered
+    #    for the user to confirm — Statens vegvesen decides if it exists.
+    if not plates and not vins and items:
+        tallest = max(i["height"] for i in items)
+        for it in sorted(items, key=lambda i: -i["height"]):
+            raw = it["text"].strip()
+            word = re.sub(r"[\s\-]", "", raw)
+            if (it["height"] >= 0.6 * tallest and it["score"] > 0.85 and 2 <= len(word) <= 7
+                    and re.fullmatch(r"[A-Z0-9ÆØÅ]+", word) and re.search(r"[A-ZÆØÅ]", word)
+                    and word not in _NOT_PLATES and not any(word in v for v in vins)):
+                add(word, "low", custom=True)
+    return plates
+
+
 def recognize(data: bytes, limit: int = 5) -> list[dict]:
     """VIN candidates only (kept for callers that just want VINs)."""
     return recognize_all(data, limit)["candidates"]
@@ -264,10 +348,10 @@ def recognize(data: bytes, limit: int = 5) -> list[dict]:
 
 def recognize_all(data: bytes, limit: int = 5) -> dict:
     """{'candidates': [VIN candidates], 'plates': [registration plate candidates]}"""
-    img = Image.open(io.BytesIO(data))
-    img = ImageOps.exif_transpose(img).convert("L")
-    if max(img.size) > 2400:
-        img.thumbnail((2400, 2400))
+    original = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+    if max(original.size) > 2400:
+        original.thumbnail((2400, 2400))
+    img = original.convert("L")
 
     found: dict[str, dict] = {}
     plates: dict[str, dict] = {}
@@ -293,15 +377,28 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
             add(vin, "barcode", exact)
 
     if not found:
-        texts = _ocr(img)
-        for text in texts:
-            for vin, exact in _candidates_in_text(text, fix_ocr=True):
-                add(vin, "ocr", exact)
-        for text in texts:
-            for plate, exact in _plates_in_text(text, set(found)):
-                prev = plates.get(plate)
-                if prev is None or (exact and prev["confidence"] != "medium"):
-                    plates[plate] = {"plate": plate, "confidence": "medium" if exact else "low"}
+        items = None
+        try:
+            items = scene_text(original)
+        except Exception as exc:  # engine missing/broken: fall back to Tesseract
+            log.warning("RapidOCR unavailable, falling back to Tesseract: %s", exc)
+
+        if items is not None:
+            for it in items:
+                for vin, exact in _candidates_in_text(it["text"], fix_ocr=True):
+                    add(vin, "ocr", exact)
+            plates = _plates_from_items(items, set(found))
+        else:
+            texts = _ocr(img)
+            for text in texts:
+                for vin, exact in _candidates_in_text(text, fix_ocr=True):
+                    add(vin, "ocr", exact)
+            for text in texts:
+                for plate, exact in _plates_in_text(text, set(found)):
+                    prev = plates.get(plate)
+                    if prev is None or (exact and prev["confidence"] != "medium"):
+                        plates[plate] = {"plate": plate, "confidence": "medium" if exact else "low",
+                                         "custom": False}
 
     ranked = sorted(found.values(), key=lambda c: -c["_score"])[:limit]
     for c in ranked:

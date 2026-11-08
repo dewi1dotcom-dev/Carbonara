@@ -278,7 +278,9 @@ export async function intakeView(el) {
           h('div', { class: 'candidates' }, plates.map((p) =>
             h('button', { class: `candidate conf-${p.confidence}`, type: 'button', onClick: () => choosePlate(p) },
               h('span', { class: 'mono' }, p.plate),
-              h('small', {}, `Plate · ${p.confidence} confidence · tap to look up`)))));
+              h('small', {}, p.custom
+                ? 'Personalised plate? · tap to look up'
+                : `Plate · ${p.confidence} confidence · tap to look up`)))));
       }
       scanResult.append(h('p', { class: 'muted small' }, 'Always compare with the car before starting.'));
     } catch (err) {
