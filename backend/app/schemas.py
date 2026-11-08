@@ -36,6 +36,7 @@ class LocationIn(_Clean):
     zone: Optional[str] = Field(None, max_length=60)
     description: Optional[str] = Field(None, max_length=200)
     capacity: Optional[int] = Field(None, ge=1, le=10_000)  # max cars; None = unlimited
+    parent_id: Optional[int] = None  # set to create a sub-zone inside that spot
 
     @field_validator("code")
     @classmethod

@@ -1,4 +1,4 @@
-import { api, busy, fmtDate, h, showError, toast } from '../ui.js';
+import { api, busy, fmtDate, h, openDialog, showError, toast } from '../ui.js';
 
 export async function settingsView(el) {
   const staffBox = h('div');
@@ -116,24 +116,77 @@ export async function settingsView(el) {
       });
     });
 
+    // Add a sub-zone (e.g. RAD 1) inside a top-level spot.
+    const subZoneDialog = (parent) => {
+      const sCode = h('input', { type: 'text', id: 'sz-code', required: true, maxlength: 30, placeholder: 'e.g. RAD 1' });
+      const sCap = h('input', { type: 'number', id: 'sz-cap', min: 1, max: 10000, inputmode: 'numeric', placeholder: 'Empty = no limit' });
+      const sDesc = h('input', { type: 'text', id: 'sz-desc', maxlength: 200, placeholder: 'Optional' });
+      const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Add sub-zone');
+      const form = h('form', { class: 'form' },
+        !parent.child_count && parent.vehicle_count
+          ? h('div', { class: 'notice warn' },
+            `The ${parent.vehicle_count} ${parent.vehicle_count === 1 ? 'car' : 'cars'} already in ${parent.code} stay there `
+            + 'as "not in a sub-zone" until moved into one. New cars must go into a sub-zone.')
+          : null,
+        h('label', { for: 'sz-code' }, 'Sub-zone name'), sCode,
+        h('label', { for: 'sz-cap' }, 'Max cars'), sCap,
+        h('label', { for: 'sz-desc' }, 'Description'), sDesc,
+        h('div', { class: 'actions' }, ok));
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        busy(ok, async () => {
+          await api.post('/storage-locations', {
+            code: sCode.value, parent_id: parent.id, description: sDesc.value || null,
+            capacity: sCap.value ? Number(sCap.value) : null,
+          });
+          close();
+          toast(`Added ${parent.code} › ${sCode.value.toUpperCase()}`, 'success');
+          await renderLocations();
+        });
+      });
+      const { close } = openDialog(`Sub-zone in ${parent.code}`, form);
+    };
+
+    const toggleActive = async (l) => {
+      if (l.active && l.child_count && !confirm(`Deactivate ${l.code} and all its sub-zones?`)) return;
+      try { await api.patch(`/storage-locations/${l.id}`, { active: !l.active }); await renderLocations(); } catch (e) { showError(e); }
+    };
+    const carsLink = (l, n) => h('a', { href: `#/storage/${l.id}` }, n ? `${n} ${n === 1 ? 'car' : 'cars'} →` : 'empty →');
+
+    // Each top-level spot followed by its sub-zones.
+    const tops = locs.filter((l) => !l.parent_id);
+    const rows = tops.flatMap((p) => {
+      const kids = locs.filter((c) => c.parent_id === p.id).sort((a, b) => a.own_code.localeCompare(b.own_code, 'nb'));
+      return [
+        h('tr', { class: p.active ? '' : 'inactive' },
+          h('td', { class: 'mono strong' }, p.code),
+          h('td', {}, p.zone ?? ''),
+          h('td', {}, p.description ?? ''),
+          h('td', {}, p.child_count
+            ? h('span', { class: 'muted', title: 'Sum of the sub-zones' }, p.total_capacity ? `${p.total_capacity} total` : 'No limit')
+            : capacityInput(p)),
+          h('td', {}, carsLink(p, p.total_count)),
+          h('td', { class: 'row-actions' },
+            p.active ? h('button', { class: 'link', type: 'button', onClick: () => subZoneDialog(p) }, '+ Sub-zone') : null,
+            h('button', { class: 'link', type: 'button', onClick: () => toggleActive(p) }, p.active ? 'Deactivate' : 'Activate'))),
+        ...kids.map((c) => h('tr', { class: `sub-row${c.active ? '' : ' inactive'}` },
+          h('td', { class: 'mono' }, `↳ ${c.own_code}`),
+          h('td', {}, ''),
+          h('td', {}, c.description ?? ''),
+          h('td', {}, capacityInput(c)),
+          h('td', {}, carsLink(c, c.vehicle_count)),
+          h('td', { class: 'row-actions' },
+            p.active ? h('button', { class: 'link', type: 'button', onClick: () => toggleActive(c) }, c.active ? 'Deactivate' : 'Activate') : null))),
+      ];
+    });
+
     locBox.replaceChildren(h('section', { class: 'card' },
-      h('h2', {}, `Storage spots (${locs.filter((l) => l.active).length} active)`),
+      h('h2', {}, `Storage spots (${tops.filter((l) => l.active).length} active)`),
+      h('p', { class: 'muted small' }, 'Split a spot into sub-zones (rows, areas) with "+ Sub-zone"; cars are then placed in a sub-zone.'),
       locs.length
         ? h('div', { class: 'table-wrap' }, h('table', {},
           h('thead', {}, h('tr', {}, ['Code', 'Zone', 'Description', 'Capacity', 'Cars', ''].map((t) => h('th', {}, t)))),
-          h('tbody', {}, locs.map((l) => h('tr', { class: l.active ? '' : 'inactive' },
-            h('td', { class: 'mono' }, l.code),
-            h('td', {}, l.zone ?? ''),
-            h('td', {}, l.description ?? ''),
-            h('td', {}, capacityInput(l)),
-            h('td', {}, h('a', { href: `#/storage/${l.id}` },
-              l.vehicle_count ? `${l.vehicle_count} ${l.vehicle_count === 1 ? 'car' : 'cars'} →` : 'empty →')),
-            h('td', {}, h('button', {
-              class: 'link', type: 'button',
-              onClick: async () => {
-                try { await api.patch(`/storage-locations/${l.id}`, { active: !l.active }); await renderLocations(); } catch (e) { showError(e); }
-              },
-            }, l.active ? 'Deactivate' : 'Activate')))))))
+          h('tbody', {}, rows)))
         : h('p', { class: 'empty' }, 'No storage spots yet.'),
       h('h3', {}, 'Add a spot'), single,
       h('h3', {}, 'Add a numbered range'), range));

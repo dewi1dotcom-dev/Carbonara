@@ -1,6 +1,6 @@
 import { PANEL_LABELS } from '../diagram.js';
 import {
-  api, badge, busy, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, append, badge, busy, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   regStatus, showError, spotLabel, STATUS,
   toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
@@ -471,9 +471,15 @@ export async function vehicleView(el, [id]) {
       el.replaceChildren(...fresh.childNodes);
     } catch (e) { showError(e); }
   };
-  el.append(
+  append(el, // mismatchCard() is null when there is nothing to confirm
     h('div', { class: 'page-head' },
-      h('div', {}, h('h1', {}, vehicleTitle(v)), h('div', { class: 'vin mono big' }, v.vin)),
+      h('div', {},
+        h('h1', {}, vehicleTitle(v)),
+        // Reg. no in the same size as the title, so it can be read at a glance.
+        v.registration_number
+          ? h('div', { class: 'reg-big mono' }, v.registration_number)
+          : h('div', { class: 'reg-big none' }, 'No reg. no'),
+        h('div', { class: 'vin mono big' }, v.vin)),
       pill(v.status)),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),

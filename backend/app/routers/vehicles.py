@@ -76,7 +76,7 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, limit: 
                   r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code
              FROM vehicles v
              LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
-             LEFT JOIN storage_locations l ON l.id = a.location_id
+             LEFT JOIN storage_spots l ON l.id = a.location_id
              LEFT JOIN vehicle_registry r ON r.vehicle_id = v.id
             WHERE (%(status)s::text IS NULL OR v.status = %(status)s)
               AND (%(term)s::text IS NULL
@@ -95,7 +95,7 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         raise not_found("Vehicle")
     location = conn.execute(
         """SELECT l.id, l.code, l.zone, a.placed_at
-             FROM storage_assignments a JOIN storage_locations l ON l.id = a.location_id
+             FROM storage_assignments a JOIN storage_spots l ON l.id = a.location_id
             WHERE a.vehicle_id = %s AND a.removed_at IS NULL""",
         (vehicle_id,),
     ).fetchone()
@@ -235,7 +235,7 @@ def move_vehicle(vehicle_id: int, body: MoveIn, conn=Depends(get_conn)):
     check_staff(conn, body.staff_id)
     current = conn.execute(
         """SELECT a.id, l.id AS location_id, l.code FROM storage_assignments a
-             JOIN storage_locations l ON l.id = a.location_id
+             JOIN storage_spots l ON l.id = a.location_id
             WHERE a.vehicle_id = %s AND a.removed_at IS NULL""",
         (vehicle_id,),
     ).fetchone()

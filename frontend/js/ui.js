@@ -62,6 +62,13 @@ function addChildren(el, children) {
   }
 }
 
+/** Like el.append(), but skips null/false and unpacks arrays (the DOM's own
+ *  append()/replaceChildren() would print them as "null" / "[object …]"). */
+export function append(el, ...children) {
+  addChildren(el, children);
+  return el;
+}
+
 /** h('div', {class: 'x', onClick}, ...children) */
 export function h(tag, props, ...children) {
   const el = document.createElement(tag);

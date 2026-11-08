@@ -64,6 +64,13 @@ def place_in_location(conn, vehicle_id: int, location_id: int, staff_id=None) ->
     ).fetchone()
     if not location:
         raise bad_request("Unknown or inactive storage location")
+    spot = conn.execute("SELECT code, active FROM storage_spots WHERE id = %s", (location_id,)).fetchone()
+    name = spot["code"]  # full name, e.g. "BRUKTBILREKKE › RAD 1"
+    if not spot["active"]:
+        raise bad_request(f"{name} is inactive")
+    if conn.execute("SELECT 1 FROM storage_locations WHERE parent_id = %s AND active LIMIT 1",
+                    (location_id,)).fetchone():
+        raise bad_request(f"{name} is split into sub-zones; choose one of them")
     if location["capacity"] is not None:
         used = conn.execute(
             """SELECT count(*) AS n FROM storage_assignments
@@ -71,7 +78,7 @@ def place_in_location(conn, vehicle_id: int, location_id: int, staff_id=None) ->
             (location_id, vehicle_id),
         ).fetchone()["n"]
         if used >= location["capacity"]:
-            raise conflict(f"{location['code']} is full ({used} of {location['capacity']} cars)")
+            raise conflict(f"{name} is full ({used} of {location['capacity']} cars)")
     conn.execute(
         "UPDATE storage_assignments SET removed_at = now(), removed_by = %s "
         "WHERE vehicle_id = %s AND removed_at IS NULL",
@@ -79,7 +86,7 @@ def place_in_location(conn, vehicle_id: int, location_id: int, staff_id=None) ->
     )
     insert_row(conn, "storage_assignments",
                {"vehicle_id": vehicle_id, "location_id": location_id, "placed_by": staff_id})
-    return location
+    return {**location, "code": name}
 
 
 def log_event(conn, vehicle_id: int, event_type: str, *, staff_id=None, inspection_id=None, data=None):

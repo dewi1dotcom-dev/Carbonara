@@ -83,7 +83,7 @@ def load_inspection(conn, inspection_id: int) -> dict:
     ).fetchall()
     location = conn.execute(
         """SELECT l.id, l.code, l.zone, a.placed_at
-             FROM storage_assignments a JOIN storage_locations l ON l.id = a.location_id
+             FROM storage_assignments a JOIN storage_spots l ON l.id = a.location_id
             WHERE a.vehicle_id = %s AND a.removed_at IS NULL""",
         (insp["vehicle_id"],),
     ).fetchone()
@@ -169,7 +169,7 @@ def list_inspections(status: Optional[str] = None, limit: int = 50, conn=Depends
                   (SELECT count(*) FROM inspection_photos p
                     WHERE p.inspection_id = i.id AND p.kind IN ('front','rear','left','right')) AS angle_photos,
                   (SELECT count(*) FROM damages d WHERE d.inspection_id = i.id) AS damage_count,
-                  (SELECT l.code FROM storage_assignments a JOIN storage_locations l ON l.id = a.location_id
+                  (SELECT l.code FROM storage_assignments a JOIN storage_spots l ON l.id = a.location_id
                     WHERE a.vehicle_id = i.vehicle_id AND a.removed_at IS NULL) AS location_code
              FROM inspections i
              JOIN vehicles v ON v.id = i.vehicle_id
