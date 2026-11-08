@@ -230,6 +230,10 @@ export const STATUS = {
   cancelled: 'Cancelled',
 };
 
+/** "BRUKTBILREKKE — Front row (12/20)" for spot pickers. */
+export const spotLabel = (l) => `${l.code}${l.description ? ` — ${l.description}` : ''}`
+  + ` (${l.vehicle_count ?? 0}${l.capacity ? `/${l.capacity}` : ''} ${(l.vehicle_count === 1 && !l.capacity) ? 'car' : 'cars'})`;
+
 export const FUEL_TYPES = ['Petrol', 'Diesel', 'Hybrid', 'Plug-in hybrid', 'Electric', 'LPG', 'CNG', 'Hydrogen'];
 
 export const pill = (status) => h('span', { class: `pill st-${status}` }, STATUS[status] ?? status);

@@ -245,7 +245,9 @@ def details(item: dict | None) -> list:
         size = " × ".join(str(dims[k]) for k in ("lengde", "bredde", "hoyde") if dims.get(k)) + " mm"
     else:
         size = None
-    notes = "; ".join(n.get("merknad") for n in appr.get("kjoretoymerknad") or [] if n.get("merknad")) or None
+    # Remarks sit on godkjenning itself, next to tekniskGodkjenning.
+    remarks = dig(item, "godkjenning", "kjoretoymerknad") or []
+    notes = "; ".join(n.get("merknad") for n in remarks if isinstance(n, dict) and n.get("merknad")) or None
 
     sections = [
         ("Registration", [

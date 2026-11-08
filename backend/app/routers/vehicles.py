@@ -1,11 +1,10 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
-from psycopg import errors
 
 from .. import vegvesen, vinlib
-from ..common import (bad_request, check_staff, conflict, insert_row, log_event, not_found, patch_fields,
-                      update_row)
+from ..common import (bad_request, check_staff, conflict, log_event, not_found, patch_fields,
+                      place_in_location, update_row)
 from ..db import get_conn
 from ..schemas import MarkRegisteredIn, MoveIn, RepairIn, ResolveMismatchIn, VehicleDetails
 
@@ -241,37 +240,23 @@ def move_vehicle(vehicle_id: int, body: MoveIn, conn=Depends(get_conn)):
         (vehicle_id,),
     ).fetchone()
 
-    location = None
-    if body.location_id is not None:
-        location = conn.execute(
-            "SELECT * FROM storage_locations WHERE id = %s AND active", (body.location_id,)
-        ).fetchone()
-        if not location:
-            raise bad_request("Unknown or inactive storage location")
-        if current and current["location_id"] == location["id"]:
-            raise conflict(f"The car is already at {location['code']}")
-    elif vehicle["status"] == "off_site":
-        raise conflict("The car is already off site")
-
-    if current:
-        conn.execute(
-            "UPDATE storage_assignments SET removed_at = now(), removed_by = %s WHERE id = %s",
-            (body.staff_id, current["id"]),
-        )
     from_code = current["code"] if current else None
-    if location:
-        try:
-            with conn.transaction():
-                insert_row(conn, "storage_assignments", {
-                    "vehicle_id": vehicle_id, "location_id": location["id"], "placed_by": body.staff_id,
-                })
-        except errors.UniqueViolation:
-            raise conflict(f"Location {location['code']} is already occupied")
+    if body.location_id is not None:
+        if current and current["location_id"] == body.location_id:
+            raise conflict(f"The car is already at {current['code']}")
+        location = place_in_location(conn, vehicle_id, body.location_id, body.staff_id)
         conn.execute("UPDATE vehicles SET status = 'in_storage' WHERE id = %s", (vehicle_id,))
         log_event(conn, vehicle_id, "moved", staff_id=body.staff_id, data={
             "from": from_code, "to": location["code"], "location_id": location["id"], "note": body.note,
         })
     else:
+        if vehicle["status"] == "off_site":
+            raise conflict("The car is already off site")
+        if current:
+            conn.execute(
+                "UPDATE storage_assignments SET removed_at = now(), removed_by = %s WHERE id = %s",
+                (body.staff_id, current["id"]),
+            )
         conn.execute("UPDATE vehicles SET status = 'off_site' WHERE id = %s", (vehicle_id,))
         log_event(conn, vehicle_id, "moved_off_site", staff_id=body.staff_id,
                   data={"from": from_code, "note": body.note})

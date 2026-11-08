@@ -30,21 +30,42 @@ def patch_staff(staff_id: int, body: StaffPatch, conn=Depends(get_conn)):
     return row
 
 
+LOCATION_SELECT = """
+    SELECT l.*, coalesce(c.n, 0) AS vehicle_count
+      FROM storage_locations l
+      LEFT JOIN (SELECT location_id, count(*) AS n FROM storage_assignments
+                  WHERE removed_at IS NULL GROUP BY location_id) c ON c.location_id = l.id"""
+
+
 @router.get("/storage-locations")
 def list_locations(include_inactive: bool = False, available_only: bool = False, conn=Depends(get_conn)):
+    """Spots with how many cars are in each. available_only = spots with room left."""
     return conn.execute(
-        """SELECT l.*,
-                  a.vehicle_id AS occupied_by_vehicle_id,
-                  v.vin        AS occupied_by_vin,
-                  a.placed_at  AS occupied_since
-             FROM storage_locations l
-             LEFT JOIN storage_assignments a ON a.location_id = l.id AND a.removed_at IS NULL
-             LEFT JOIN vehicles v ON v.id = a.vehicle_id
+        LOCATION_SELECT + """
             WHERE (%(inactive)s OR l.active)
-              AND (NOT %(available)s OR a.id IS NULL)
+              AND (NOT %(available)s OR l.capacity IS NULL OR coalesce(c.n, 0) < l.capacity)
             ORDER BY l.zone NULLS LAST, l.code""",
         {"inactive": include_inactive, "available": available_only},
     ).fetchall()
+
+
+@router.get("/storage-locations/{location_id}")
+def get_location(location_id: int, conn=Depends(get_conn)):
+    """One spot and the cars in it, newest arrival first."""
+    location = conn.execute(LOCATION_SELECT + " WHERE l.id = %s", (location_id,)).fetchone()
+    if not location:
+        raise not_found("Storage location")
+    vehicles = conn.execute(
+        """SELECT v.*, a.placed_at, r.eu_control_due, r.registration_status,
+                  r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code
+             FROM storage_assignments a
+             JOIN vehicles v ON v.id = a.vehicle_id
+             LEFT JOIN vehicle_registry r ON r.vehicle_id = v.id
+            WHERE a.location_id = %s AND a.removed_at IS NULL
+            ORDER BY a.placed_at DESC""",
+        (location_id,),
+    ).fetchall()
+    return {**location, "vehicles": vehicles}
 
 
 @router.post("/storage-locations", status_code=201)
@@ -66,7 +87,14 @@ def patch_location(location_id: int, body: LocationPatch, conn=Depends(get_conn)
             (location_id,),
         ).fetchone()
         if occupied:
-            raise conflict("Location is occupied; move the vehicle before deactivating it")
+            raise conflict("There are cars in this spot; move them before deactivating it")
+    if fields.get("capacity") is not None:
+        n = conn.execute(
+            "SELECT count(*) AS n FROM storage_assignments WHERE location_id = %s AND removed_at IS NULL",
+            (location_id,),
+        ).fetchone()["n"]
+        if n > fields["capacity"]:
+            raise conflict(f"There are already {n} cars in this spot; capacity can't be lower than that")
     try:
         row = update_row(conn, "storage_locations", location_id, fields)
     except errors.UniqueViolation:

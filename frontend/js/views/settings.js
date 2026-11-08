@@ -56,15 +56,38 @@ export async function settingsView(el) {
     const code = h('input', { type: 'text', placeholder: 'Code, e.g. A-12', required: true, maxlength: 30 });
     const zone = h('input', { type: 'text', placeholder: 'Zone, e.g. Yard A', maxlength: 60 });
     const desc = h('input', { type: 'text', placeholder: 'Description (optional)', maxlength: 200 });
+    const cap = h('input', { type: 'number', placeholder: 'Max cars (empty = no limit)', min: 1, max: 10000, inputmode: 'numeric' });
     const addBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Add spot');
-    const single = h('form', { class: 'inline-form wrap' }, code, zone, desc, addBtn);
+    const single = h('form', { class: 'inline-form wrap' }, code, zone, desc, cap, addBtn);
     single.addEventListener('submit', (e) => {
       e.preventDefault();
       busy(addBtn, async () => {
-        await api.post('/storage-locations', { code: code.value, zone: zone.value || null, description: desc.value || null });
+        await api.post('/storage-locations', {
+          code: code.value, zone: zone.value || null, description: desc.value || null,
+          capacity: cap.value ? Number(cap.value) : null,
+        });
         await renderLocations();
       });
     });
+
+    // Capacity is edited in place: change the number and leave the field to save.
+    const capacityInput = (l) => {
+      const input = h('input', {
+        type: 'number', class: 'cap-input', min: 1, max: 10000, inputmode: 'numeric',
+        value: l.capacity ?? '', placeholder: 'No limit', 'aria-label': `Capacity for ${l.code}`,
+      });
+      input.addEventListener('change', async () => {
+        try {
+          await api.patch(`/storage-locations/${l.id}`, { capacity: input.value ? Number(input.value) : null });
+          toast(`${l.code}: ${input.value ? `max ${input.value} cars` : 'no limit'}`, 'success');
+          await renderLocations();
+        } catch (err) {
+          input.value = l.capacity ?? '';
+          showError(err);
+        }
+      });
+      return input;
+    };
 
     const prefix = h('input', { type: 'text', placeholder: 'Prefix, e.g. A-', maxlength: 20 });
     const from = h('input', { type: 'number', placeholder: 'From', min: 0, value: 1 });
@@ -97,14 +120,14 @@ export async function settingsView(el) {
       h('h2', {}, `Storage spots (${locs.filter((l) => l.active).length} active)`),
       locs.length
         ? h('div', { class: 'table-wrap' }, h('table', {},
-          h('thead', {}, h('tr', {}, ['Code', 'Zone', 'Description', 'Occupied by', ''].map((t) => h('th', {}, t)))),
+          h('thead', {}, h('tr', {}, ['Code', 'Zone', 'Description', 'Capacity', 'Cars', ''].map((t) => h('th', {}, t)))),
           h('tbody', {}, locs.map((l) => h('tr', { class: l.active ? '' : 'inactive' },
             h('td', { class: 'mono' }, l.code),
             h('td', {}, l.zone ?? ''),
             h('td', {}, l.description ?? ''),
-            h('td', {}, l.occupied_by_vehicle_id
-              ? h('a', { href: `#/vehicles/${l.occupied_by_vehicle_id}`, class: 'mono' }, l.occupied_by_vin)
-              : h('span', { class: 'muted' }, 'free')),
+            h('td', {}, capacityInput(l)),
+            h('td', {}, h('a', { href: `#/storage/${l.id}` },
+              l.vehicle_count ? `${l.vehicle_count} ${l.vehicle_count === 1 ? 'car' : 'cars'} →` : 'empty →')),
             h('td', {}, h('button', {
               class: 'link', type: 'button',
               onClick: async () => {

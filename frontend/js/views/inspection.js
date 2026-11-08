@@ -2,7 +2,7 @@
 import { carDiagram, DIAGRAM_PANELS, EXTRA_PANELS, PANEL_LABELS } from '../diagram.js';
 import {
   api, busy, cameraPicker, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
-  showError, toast, vehicleTitle, viewPhoto,
+  showError, spotLabel, toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
 
 const ANGLES = [
@@ -340,9 +340,9 @@ export async function inspectionView(el, [id]) {
       if (!zones.has(z)) zones.set(z, []);
       zones.get(z).push(l);
     }
-    const locSel = h('select', { id: 'loc' }, h('option', { value: '' }, 'Choose a free spot…'),
+    const locSel = h('select', { id: 'loc' }, h('option', { value: '' }, 'Choose a spot…'),
       [...zones].map(([z, ls]) => h('optgroup', { label: z },
-        ls.map((l) => h('option', { value: l.id }, l.code + (l.description ? ` — ${l.description}` : ''))))));
+        ls.map((l) => h('option', { value: l.id }, spotLabel(l))))));
 
     const missing = data.checklist.filter((c) => !c.done);
     const completeBtn = h('button', { class: 'btn primary big', type: 'button', disabled: missing.length > 0 },
@@ -372,7 +372,7 @@ export async function inspectionView(el, [id]) {
         : null,
       locations.length
         ? h('div', { class: 'form' }, h('label', { for: 'loc' }, 'Storage spot'), locSel)
-        : h('div', { class: 'notice warn' }, 'No free storage spots. ', h('a', { href: '#/settings' }, 'Add spots in settings')),
+        : h('div', { class: 'notice warn' }, 'All storage spots are full. ', h('a', { href: '#/settings' }, 'Add spots or raise capacity in settings')),
       h('div', { class: 'actions spread' }, cancelBtn, completeBtn)));
   }
 

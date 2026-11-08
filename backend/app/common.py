@@ -55,6 +55,33 @@ def insert_row(conn, table: str, fields: dict):
     return conn.execute(query, list(fields.values())).fetchone()
 
 
+def place_in_location(conn, vehicle_id: int, location_id: int, staff_id=None) -> dict:
+    """Put a car in a storage spot: lock the spot (so two people can't fill the
+    last place at once), check capacity, end the car's current assignment and
+    create the new one. Returns the location row."""
+    location = conn.execute(
+        "SELECT * FROM storage_locations WHERE id = %s AND active FOR UPDATE", (location_id,)
+    ).fetchone()
+    if not location:
+        raise bad_request("Unknown or inactive storage location")
+    if location["capacity"] is not None:
+        used = conn.execute(
+            """SELECT count(*) AS n FROM storage_assignments
+                WHERE location_id = %s AND removed_at IS NULL AND vehicle_id <> %s""",
+            (location_id, vehicle_id),
+        ).fetchone()["n"]
+        if used >= location["capacity"]:
+            raise conflict(f"{location['code']} is full ({used} of {location['capacity']} cars)")
+    conn.execute(
+        "UPDATE storage_assignments SET removed_at = now(), removed_by = %s "
+        "WHERE vehicle_id = %s AND removed_at IS NULL",
+        (staff_id, vehicle_id),
+    )
+    insert_row(conn, "storage_assignments",
+               {"vehicle_id": vehicle_id, "location_id": location_id, "placed_by": staff_id})
+    return location
+
+
 def log_event(conn, vehicle_id: int, event_type: str, *, staff_id=None, inspection_id=None, data=None):
     conn.execute(
         """INSERT INTO vehicle_events (vehicle_id, event_type, staff_id, inspection_id, data)

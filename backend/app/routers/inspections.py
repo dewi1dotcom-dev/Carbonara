@@ -8,7 +8,8 @@ from psycopg import errors
 
 from .. import photostore, vegvesen, vinlib
 from ..common import (
-    bad_request, check_staff, conflict, insert_row, log_event, not_found, patch_fields, update_row,
+    bad_request, check_staff, conflict, insert_row, log_event, not_found, patch_fields, place_in_location,
+    update_row,
 )
 from ..config import settings
 from ..db import get_conn
@@ -209,26 +210,9 @@ def complete_inspection(inspection_id: int, body: CompleteIn, conn=Depends(get_c
         todo = ", ".join(c["label"].lower() for c in detail["checklist"] if not c["done"])
         raise conflict(f"Inspection is not complete yet: {todo}")
 
-    location = conn.execute(
-        "SELECT * FROM storage_locations WHERE id = %s AND active", (body.location_id,)
-    ).fetchone()
-    if not location:
-        raise bad_request("Unknown or inactive storage location")
-
     staff_id = body.staff_id or insp["inspector_id"]
     vehicle_id = insp["vehicle_id"]
-    conn.execute(
-        "UPDATE storage_assignments SET removed_at = now(), removed_by = %s "
-        "WHERE vehicle_id = %s AND removed_at IS NULL",
-        (staff_id, vehicle_id),
-    )
-    try:
-        with conn.transaction():  # savepoint so we can report a clean error
-            insert_row(conn, "storage_assignments", {
-                "vehicle_id": vehicle_id, "location_id": location["id"], "placed_by": staff_id,
-            })
-    except errors.UniqueViolation:
-        raise conflict(f"Location {location['code']} is already occupied")
+    location = place_in_location(conn, vehicle_id, body.location_id, staff_id)
 
     conn.execute(
         "UPDATE inspections SET status = 'completed', completed_at = now() WHERE id = %s",

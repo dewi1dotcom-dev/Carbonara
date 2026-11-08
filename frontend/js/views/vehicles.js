@@ -1,7 +1,7 @@
 import { PANEL_LABELS } from '../diagram.js';
 import {
   api, badge, busy, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
-  regStatus, showError, STATUS,
+  regStatus, showError, spotLabel, STATUS,
   toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
 
@@ -17,19 +17,8 @@ export async function vehiclesView(el) {
     if (statusSel.value) params.set('status', statusSel.value);
     try {
       const rows = await api.get(`/vehicles?${params}`);
-      results.replaceChildren(...(rows.length ? rows.map((v) => {
-        const eu = euStatus(v.eu_control_due);
-        return h('a', { class: 'card list-card', href: `#/vehicles/${v.id}` },
-          h('div', { class: 'list-main' },
-            h('div', { class: 'list-title' }, vehicleTitle(v), ' ', pill(v.status)),
-            h('div', { class: 'vin mono' }, v.vin),
-            h('div', { class: 'badges' },
-              badge(regStatus(v.registered_marked_at, v.registration_status_code, v.registration_status)),
-              eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null)),
-          h('div', { class: 'list-meta' },
-            [v.registration_number, v.color, v.location_code && `Spot ${v.location_code}`,
-              v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`].filter(Boolean).join(' · ')));
-      }) : [h('p', { class: 'empty' }, 'No vehicles found.')]));
+      results.replaceChildren(...(rows.length ? rows.map((v) => vehicleCard(v))
+        : [h('p', { class: 'empty' }, 'No vehicles found.')]));
     } catch (e) { showError(e); }
   }
   search.addEventListener('input', debounce(load, 250));
@@ -40,6 +29,22 @@ export async function vehiclesView(el) {
     h('div', { class: 'toolbar' }, search, statusSel),
     results);
   await load();
+}
+
+/** One car in a list (vehicle list, storage spot): title, VIN, status badges.
+ *  `extra` adds text to the meta line, e.g. "In spot since …". */
+export function vehicleCard(v, extra = null) {
+  const eu = euStatus(v.eu_control_due);
+  return h('a', { class: 'card list-card', href: `#/vehicles/${v.id}` },
+    h('div', { class: 'list-main' },
+      h('div', { class: 'list-title' }, vehicleTitle(v), ' ', pill(v.status)),
+      h('div', { class: 'vin mono' }, v.vin),
+      h('div', { class: 'badges' },
+        badge(regStatus(v.registered_marked_at, v.registration_status_code, v.registration_status)),
+        eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null)),
+    h('div', { class: 'list-meta' },
+      [v.registration_number, v.color, v.location_code && `Spot ${v.location_code}`,
+        v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`, extra].filter(Boolean).join(' · ')));
 }
 
 const EVENT_LABELS = {
@@ -114,7 +119,8 @@ const SYNC_TEXT = {
 function staffSelect(id) {
   const sel = h('select', { id }, h('option', { value: '' }, 'Loading…'));
   api.get('/staff').then((staff) => {
-    sel.replaceChildren(h('option', { value: '' }, 'Select…'), staff.map((s) => h('option', { value: s.id }, s.name)));
+    // replaceChildren() does not accept arrays, so spread the options.
+    sel.replaceChildren(h('option', { value: '' }, 'Select…'), ...staff.map((s) => h('option', { value: s.id }, s.name)));
     if (staff.some((s) => String(s.id) === getInspectorId())) sel.value = getInspectorId();
   }).catch(showError);
   return sel;
@@ -185,11 +191,12 @@ function moveDialog(v, done) {
   api.get('/storage-locations?available_only=true').then((locs) => {
     const byZone = new Map();
     locs.forEach((l) => byZone.set(l.zone || 'Other', [...(byZone.get(l.zone || 'Other') || []), l]));
-    spotSel.replaceChildren(
+    spotSel.replaceChildren(...[ // spread: replaceChildren() does not accept arrays or null
       h('option', { value: '' }, 'Select…'),
       v.status !== 'off_site' ? h('option', { value: 'off' }, 'Off site (workshop, test drive, delivered…)') : null,
-      [...byZone].map(([zone, list]) => h('optgroup', { label: zone },
-        list.map((l) => h('option', { value: l.id }, l.description ? `${l.code} — ${l.description}` : l.code)))));
+      ...[...byZone].map(([zone, list]) => h('optgroup', { label: zone },
+        list.map((l) => h('option', { value: l.id }, spotLabel(l))))),
+    ].filter(Boolean));
   }).catch(showError);
   const note = h('input', { type: 'text', id: 'move-note', maxlength: 200, placeholder: 'Optional, e.g. "At workshop for paint"' });
   const staffSel = staffSelect('move-staff');

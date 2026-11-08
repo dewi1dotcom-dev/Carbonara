@@ -35,6 +35,7 @@ class LocationIn(_Clean):
     code: str = Field(min_length=1, max_length=30)
     zone: Optional[str] = Field(None, max_length=60)
     description: Optional[str] = Field(None, max_length=200)
+    capacity: Optional[int] = Field(None, ge=1, le=10_000)  # max cars; None = unlimited
 
     @field_validator("code")
     @classmethod
@@ -46,6 +47,7 @@ class LocationPatch(_Clean):
     code: Optional[str] = Field(None, min_length=1, max_length=30)
     zone: Optional[str] = Field(None, max_length=60)
     description: Optional[str] = Field(None, max_length=200)
+    capacity: Optional[int] = Field(None, ge=1, le=10_000)  # send null for unlimited
     active: Optional[bool] = None
 
 
