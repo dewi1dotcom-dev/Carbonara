@@ -1,14 +1,18 @@
 FROM python:3.12-slim-bookworm
 
 # OCR + barcode libraries used for VIN/plate recognition
-# (libgl1/libglib2.0-0 are needed by OpenCV, which RapidOCR uses)
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tesseract-ocr libzbar0 libdmtx0b libgl1 libglib2.0-0 \
+ && apt-get install -y --no-install-recommends tesseract-ocr libzbar0 libdmtx0b \
  && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 COPY backend/requirements.txt backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# RapidOCR is installed without its own dependency list (it would pull the
+# full, GUI-enabled opencv-python); its real dependencies are in
+# requirements.txt. The last line fails the build early if OCR can't load.
+RUN pip install --no-cache-dir -r backend/requirements.txt \
+ && pip install --no-cache-dir --no-deps rapidocr-onnxruntime==1.3.24 \
+ && python -c "import rapidocr_onnxruntime, cv2, onnxruntime; print('OCR runtime OK')"
 
 COPY backend backend
 COPY frontend frontend

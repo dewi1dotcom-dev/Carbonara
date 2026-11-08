@@ -4,10 +4,17 @@ python-multipart==0.0.19
 psycopg[binary]==3.2.3
 psycopg-pool==3.2.4
 pillow==11.0.0
-numpy==2.1.3
-# Scene-text OCR (PaddleOCR models on ONNX Runtime, models bundled, CPU only)
-rapidocr-onnxruntime==1.3.24
+# numpy must stay < 2.0: rapidocr-onnxruntime 1.3.x requires it.
+numpy==1.26.4
+# Scene-text OCR runtime. rapidocr-onnxruntime itself is installed in the
+# Dockerfile with --no-deps, because it asks for the full opencv-python (with
+# GUI/graphics libraries); the headless build below is all it needs.
 onnxruntime==1.20.1
+opencv-python-headless==4.10.0.84
+shapely==2.0.6
+pyclipper==1.3.0.post6
+PyYAML==6.0.2
+six==1.16.0
 pillow-heif==0.21.0
 pytesseract==0.3.13
 pyzbar==0.1.9
