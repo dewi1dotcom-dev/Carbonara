@@ -88,6 +88,8 @@ def _candidates_in_text(text: str, fix_ocr: bool) -> list[tuple[str, bool]]:
         exact = len(compact) == 17
         for i in range(len(compact) - 16):
             window = compact[i : i + 17]
+            if window[0] == "0":  # no manufacturer code (WMI) starts with 0
+                continue
             # A real VIN never contains I, O or Q. If OCR needed more than two
             # such fixes it was probably reading words ("SUBARU CORPORATION"),
             # unless the check digit confirms it (label fonts make 0 look like O).
@@ -333,6 +335,58 @@ def _zoom_on_text(image: Image.Image, items: list[dict], target_height: float = 
     return crop.resize((int(crop.width * factor), int(crop.height * factor)), Image.LANCZOS)
 
 
+def _read_line(strip: Image.Image) -> tuple[str, float]:
+    """Recognition only (no text detection) on a strip holding one line of text."""
+    import numpy as np
+
+    arr = np.ascontiguousarray(np.asarray(strip.convert("RGB"))[:, :, ::-1])
+    result, _ = _rapid(False)(arr, use_det=False, use_cls=False, use_rec=True)
+    if not result:
+        return "", 0.0
+    first = result[0]
+    if isinstance(first, (list, tuple)) and len(first) >= 2 and isinstance(first[0], str):
+        return first[0], float(first[1])
+    if isinstance(first, (list, tuple)) and len(first) >= 3:  # [box, text, score]
+        return str(first[1]), float(first[2])
+    return str(first), 0.0
+
+
+def label_lines(image: Image.Image, items: list[dict], max_anchors: int = 4) -> list[dict]:
+    """Door-frame labels pack their lines so tightly that text detection merges
+    them and loses the VIN. Use the long lines that WERE found (e.g. "SUBARU
+    CORPORATION") as a ruler: straighten the photo along each, cut thin strips
+    one line-height apart below it, and read each strip directly."""
+    import math
+
+    anchors = sorted((i for i in items if i["width"] > 4 * i["height"]), key=lambda i: -i["width"])[:max_anchors]
+    out = []
+    for a in anchors:
+        h = a["height"]
+        angle = math.degrees(math.atan2(a["uy"], a["ux"]))
+        level = image.rotate(angle, resample=Image.BICUBIC, center=(a["cx"], a["cy"]), fillcolor=(0, 0, 0))
+        # Span the whole label: from the leftmost to the rightmost text found near
+        # this line ("SUBARU" + "CORPORATION" are often two boxes, and the VIN
+        # line starts under the first), capped to a sensible width.
+        near = [i for i in items if abs(i["cy"] - a["cy"]) < 8 * h]
+        left = max(a["cx"] - 14 * h, min(i["cx"] - i["width"] / 2 for i in near) - 0.5 * h)
+        right = min(a["cx"] + 14 * h, max(i["cx"] + i["width"] / 2 for i in near) + 0.5 * h)
+        for k in (1, 2, 3, 4):
+            for pitch in (0.9, 1.05, 1.2):
+                mid = a["cy"] + k * pitch * h
+                box = (int(max(0, left)), int(max(0, mid - 0.62 * h)),
+                       int(min(level.width, right)), int(min(level.height, mid + 0.62 * h)))
+                if box[2] - box[0] < 2 * h or box[3] - box[1] < 0.5 * h:
+                    continue
+                try:
+                    text, score = _read_line(level.crop(box))
+                except Exception as exc:
+                    log.warning("line read failed: %s", exc)
+                    return out
+                if text:
+                    out.append({**a, "text": text, "score": score, "cy": mid})
+    return out
+
+
 def scene_text(rgb: Image.Image, dense: bool = False) -> list[dict]:
     """Every text box in the photo: [{text, score, height, width, cx, cy, ux, uy}]."""
     import numpy as np
@@ -415,6 +469,7 @@ def _plates_from_items(items: list[dict], vins: set[str]) -> dict[str, dict]:
                     and word not in _NOT_PLATES and not word.startswith(("CORP", "MODE", "SUBAR"))
                     and not any(word in v for v in vins)):
                 add(word, "low", it["height"], custom=True)
+                plates[word]["_s"] = max(plates[word].get("_s", 0), it["score"])
     return plates
 
 
@@ -456,17 +511,36 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
 
     def confident() -> bool:
         return (any(c["confidence"] in ("high", "medium") for c in found.values())
-                or any(p["confidence"] == "medium" for p in plates.values()))
+                or any(p["confidence"] == "medium" for p in plates.values())
+                # a clearly read personalised plate ("HANSOLO") needs no more passes
+                or any(p.get("custom") and p.get("_s", 0) >= 0.95 and len(p["plate"]) >= 4
+                       for p in plates.values()))
 
     if not found:
         # Pass 1: the photo as is (fast, ~1 s). If that finds no VIN or clear
-        # plate: pass 2 zooms in on the text found and reads it with tighter
-        # boxes (crowded door-frame labels), then passes 3–4 turn the photo
-        # ±35° (very steep plates).
-        passes = [("normal", False, 0), ("zoom", True, None), ("turned +35°", False, 35), ("turned -35°", False, -35)]
+        # plate: pass 2 reads the lines under each long line of text one by one
+        # (door-frame labels), pass 3 zooms in with tighter boxes, then passes
+        # 4–5 turn the photo ±35° (very steep plates).
+        passes = [("normal", False, 0), ("label lines", False, "lines"), ("zoom", True, None),
+                  ("turned +35°", False, 35), ("turned -35°", False, -35)]
         ocr_ok = True
         first_items: list[dict] = []
         for name, dense, angle in passes:
+            if angle == "lines":
+                if not first_items:
+                    continue
+                try:
+                    lines = label_lines(original, first_items)
+                except Exception as exc:
+                    log.warning("label line reading failed: %s", exc)
+                    continue
+                seen_text += [f"[{name}] {it['text']} ({it['score']:.2f})" for it in lines]
+                for it in lines:  # VINs only: these strips are label lines, not plates
+                    for vin, exact in _candidates_in_text(it["text"], fix_ocr=True):
+                        add(vin, "ocr", exact)
+                if confident():
+                    break
+                continue
             if angle is None:
                 image = _zoom_on_text(original, first_items)
                 if image is None:
@@ -516,4 +590,5 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
     plate_list = sorted(plates.values(), key=lambda p: (p["confidence"] != "medium", -p.get("_h", 0)))[:limit]
     for p in plate_list:
         p.pop("_h", None)
+        p.pop("_s", None)
     return {"candidates": ranked, "plates": plate_list, "text": seen_text[:80]}
