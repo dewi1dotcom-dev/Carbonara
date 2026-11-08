@@ -245,7 +245,7 @@ def _median(img: Image.Image) -> float:
 # ---- Norwegian registration plates ------------------------------------------
 
 # Standard plates: two letters + 4 or 5 digits ("EJ 18664", "AB 1234").
-PLATE_RE = re.compile(r"[A-Z]{2}[0-9OQDILZSBGAT]{4,5}")
+PLATE_RE = re.compile(r"[A-Z]{2}[0-9OQDILZSBGAT]{4,6}")
 _PLATE_DIGIT_FIXES = str.maketrans({"O": "0", "Q": "0", "D": "0", "I": "1", "L": "1",
                                     "Z": "2", "S": "5", "B": "8", "G": "6", "A": "4", "T": "7"})
 
@@ -254,14 +254,22 @@ def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
     """(plate, exact_line) pairs, formatted 'EJ 18664'. Text that is part of a
     VIN on the same line is ignored (VINs contain plate-like runs)."""
     out = []
-    for line in text.upper().splitlines():
-        compact = re.sub(r"[^A-Z0-9]", "", line)
+    for line in text.splitlines():
+        if any(c.islower() for c in line):  # plates are all capitals ("Tf90177632" is a phone no.)
+            continue
+        compact = re.sub(r"[^A-Z0-9]", "", line.upper())
         if not 6 <= len(compact) <= 16 or any(v in compact or compact in v for v in vins):
             continue
         for m in PLATE_RE.finditer(compact):
             letters, digits = m.group()[:2], m.group()[2:].translate(_PLATE_DIGIT_FIXES)
             if not digits.isdigit():
                 continue
+            if len(digits) == 6:
+                # Plates have at most 5 digits; a leading "1" is usually a sticker or
+                # separator between letters and digits read as a 1 ("KT 1 77829").
+                if digits[0] != "1":
+                    continue
+                digits = digits[1:]
             out.append((f"{letters} {digits}", len(compact) == len(m.group())))
     return out
 
@@ -272,27 +280,35 @@ def _plates_in_text(text: str, vins: set[str]) -> list[tuple[str, bool]]:
 # glass and plates at an angle are "scene text". RapidOCR first detects text
 # boxes at any angle, straightens each one and reads it with a neural network.
 
-_engine = None
-_engine_lock = threading.Lock()
+_engines: dict[bool, object] = {}
+_engine_lock = threading.RLock()  # re-entrant: the hi-res fallback may build the default engine
 
 
-def _rapid():
-    global _engine
-    if _engine is None:
+def _rapid(hires: bool = False):
+    """Default engine (detection on a ~736 px version of the photo, fast) or a
+    high-resolution one for small, crowded text such as door-frame labels."""
+    if hires not in _engines:
         with _engine_lock:
-            if _engine is None:
+            if hires not in _engines:
                 from rapidocr_onnxruntime import RapidOCR
 
-                _engine = RapidOCR()
-    return _engine
+                if hires:
+                    try:
+                        _engines[True] = RapidOCR(det_limit_side_len=1920, det_limit_type="max")
+                    except Exception as exc:  # older/newer option names: use the default
+                        log.warning("hi-res OCR options not accepted (%s); using defaults", exc)
+                        _engines[True] = _rapid(False)
+                else:
+                    _engines[False] = RapidOCR()
+    return _engines[hires]
 
 
-def scene_text(rgb: Image.Image) -> list[dict]:
-    """Every text box in the photo: [{text, score, height, cx, cy}], height in px."""
+def scene_text(rgb: Image.Image, hires: bool = False) -> list[dict]:
+    """Every text box in the photo: [{text, score, height, width, cx, cy, ux, uy}]."""
     import numpy as np
 
     arr = np.ascontiguousarray(np.asarray(rgb.convert("RGB"))[:, :, ::-1])  # RGB -> BGR
-    result, _ = _rapid()(arr)
+    result, _ = _rapid(hires)(arr)
     items = []
     for box, text, score in result or []:
         pts = np.asarray(box, dtype=float)  # TL, TR, BR, BL
@@ -343,20 +359,23 @@ _NOT_PLATES = {"MODEL", "SUBARU", "TOYOTA", "AUDI", "SKODA", "VOLVO", "TESLA", "
 def _plates_from_items(items: list[dict], vins: set[str]) -> dict[str, dict]:
     plates: dict[str, dict] = {}
 
-    def add(plate, confidence, custom=False):
+    def add(plate, confidence, height, custom=False):
+        # _h (text height in px) ranks plates: the car being photographed is the
+        # biggest plate, not one on a car in the background.
         rank = {"medium": 2, "low": 1}
-        if plate not in plates or rank[confidence] > rank[plates[plate]["confidence"]]:
-            plates[plate] = {"plate": plate, "confidence": confidence, "custom": custom}
+        prev = plates.get(plate)
+        if prev is None or rank[confidence] > rank[prev["confidence"]]:
+            plates[plate] = {"plate": plate, "confidence": confidence, "custom": custom, "_h": height}
 
     # 1. Standard plates within one text box ("DR 18564"), or 2. split over
     #    boxes on the same (possibly slanted) line ("EJ" + "18664").
     for it in items + joined_lines(items):
         for plate, exact in _plates_in_text(it["text"], vins):
-            add(plate, "medium" if exact and it["score"] > 0.8 else "low")
+            add(plate, "medium" if exact and it["score"] > 0.8 else "low", it["height"])
 
     # 3. Personalised plates ("ALPAKKA"): the biggest short all-caps word, offered
     #    for the user to confirm — Statens vegvesen decides if it exists.
-    if not plates and not vins and items:
+    if not any(p["confidence"] == "medium" for p in plates.values()) and not vins and items:
         tallest = max(i["height"] for i in items)
         for it in sorted(items, key=lambda i: -i["height"]):
             raw = it["text"].strip()
@@ -364,7 +383,7 @@ def _plates_from_items(items: list[dict], vins: set[str]) -> dict[str, dict]:
             if (it["height"] >= 0.6 * tallest and it["score"] > 0.85 and 2 <= len(word) <= 7
                     and re.fullmatch(r"[A-Z0-9ÆØÅ]+", word) and re.search(r"[A-ZÆØÅ]", word)
                     and word not in _NOT_PLATES and not any(word in v for v in vins)):
-                add(word, "low", custom=True)
+                add(word, "low", it["height"], custom=True)
     return plates
 
 
@@ -375,7 +394,7 @@ def recognize(data: bytes, limit: int = 5) -> list[dict]:
 
 def recognize_all(data: bytes, limit: int = 5) -> dict:
     """{'candidates': [VIN candidates], 'plates': [registration plate candidates]}"""
-    original = ImageOps.exif_transpose(Image.open(io.BytesIO(data)))
+    original = ImageOps.exif_transpose(Image.open(io.BytesIO(data))).convert("RGB")
     if max(original.size) > 2400:
         original.thumbnail((2400, 2400))
     img = original.convert("L")
@@ -404,20 +423,36 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
         for vin, exact in _candidates_in_text(text, fix_ocr=False):
             add(vin, "barcode", exact)
 
-    if not found:
-        items = None
-        try:
-            items = scene_text(original)
-        except Exception as exc:  # engine missing/broken: fall back to Tesseract
-            log.warning("RapidOCR unavailable, falling back to Tesseract: %s", exc)
+    def confident() -> bool:
+        return (any(c["confidence"] in ("high", "medium") for c in found.values())
+                or any(p["confidence"] == "medium" for p in plates.values()))
 
-        if items is not None:
-            seen_text = [f"{it['text']} ({it['score']:.2f})" for it in items]
+    if not found:
+        # Pass 1: normal resolution (fast, ~1 s). If that finds no VIN or clear
+        # plate: pass 2 at full resolution (small text on crowded door-frame
+        # labels), then passes 3–4 with the photo turned ±35° (very steep plates).
+        passes = [("normal", False, 0), ("hi-res", True, 0), ("turned +35°", True, 35), ("turned -35°", True, -35)]
+        ocr_ok = True
+        for name, hires, angle in passes:
+            image = original if not angle else original.rotate(angle, resample=Image.BICUBIC, expand=True)
+            try:
+                items = scene_text(image, hires=hires)
+            except Exception as exc:  # engine missing/broken: fall back to Tesseract
+                log.warning("RapidOCR unavailable, falling back to Tesseract: %s", exc)
+                ocr_ok = False
+                break
+            seen_text += [f"[{name}] {it['text']} ({it['score']:.2f})" for it in items]
             for it in items + joined_lines(items):  # joined: VINs split over two boxes
                 for vin, exact in _candidates_in_text(it["text"], fix_ocr=True):
                     add(vin, "ocr", exact)
-            plates = _plates_from_items(items, set(found))
-        else:
+            for plate, p in _plates_from_items(items, set(found)).items():
+                prev = plates.get(plate)
+                if prev is None or (p["confidence"] == "medium" and prev["confidence"] != "medium"):
+                    plates[plate] = p
+            if confident():
+                break
+
+        if not ocr_ok:
             texts = _ocr(img)
             for text in texts:
                 for vin, exact in _candidates_in_text(text, fix_ocr=True):
@@ -427,10 +462,13 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
                     prev = plates.get(plate)
                     if prev is None or (exact and prev["confidence"] != "medium"):
                         plates[plate] = {"plate": plate, "confidence": "medium" if exact else "low",
-                                         "custom": False}
+                                         "custom": False, "_h": 0}
 
     ranked = sorted(found.values(), key=lambda c: -c["_score"])[:limit]
     for c in ranked:
         c.pop("_score")
-    plate_list = sorted(plates.values(), key=lambda p: p["confidence"] != "medium")[:limit]
-    return {"candidates": ranked, "plates": plate_list, "text": seen_text[:60]}
+    # Clear plates first; among those, the biggest (closest car) first.
+    plate_list = sorted(plates.values(), key=lambda p: (p["confidence"] != "medium", -p.get("_h", 0)))[:limit]
+    for p in plate_list:
+        p.pop("_h", None)
+    return {"candidates": ranked, "plates": plate_list, "text": seen_text[:80]}
