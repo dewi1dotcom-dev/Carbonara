@@ -256,7 +256,13 @@ export async function intakeView(el) {
     try {
       const fd = new FormData();
       fd.append('file', file);
-      const { candidates = [], plates = [] } = await api.postForm('/vin/recognize', fd);
+      const res = await api.postForm('/vin/recognize', fd);
+      const plates = res.plates || [];
+      let candidates = res.candidates || [];
+      // One clear high-confidence VIN: show just that (and fill it in), not the
+      // low-confidence fragments the reader also found around it.
+      const high = candidates.filter((c) => c.confidence === 'high');
+      if (high.length === 1) candidates = high;
       scanResult.replaceChildren();
       if (!candidates.length && !plates.length) {
         scanResult.append(h('div', { class: 'card notice warn' },
