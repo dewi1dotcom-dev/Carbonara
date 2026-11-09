@@ -220,6 +220,11 @@ warning offers "Use this VIN".
     the text in the same box or the next box on the line. It tries 0°/90°/270°/180°.
   - The name is filled in as "Given Surname"; confidence is high only when both fields are
     read at ≥ 0.85. A name the staff typed is never overwritten.
+  - The OCR model often **drops spaces** ("ANDERS STRANG" → "ANDERSSTRANG"). `_respace`
+    straightens the box and finds ink column runs (one per letter). A gap ≥ max(0.45 ×
+    median letter width, 2.2 × median letter gap) counts as a space. It is only used if the
+    letters are unchanged, and it never cuts off a single letter. Test photo: user's own
+    licence (THORKILDSEN / ANDERS STRANG); ask for it again if needed.
   - The photo is only read in memory. OCR text from licences is **not logged**
     (`scene_text(log_text=False)`).
 - **Personal data never goes into `vehicle_events`.** The history only logs items, km and
@@ -295,6 +300,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.9.3 | Duplicate warnings (reg. no / VIN distance 1); finn.no link (manual code); fix: service fields appear at once at arrival |
 | 0.9.4 | Dates shown as Norwegian standard `dd.mm.yyyy` (+ `HH:mm`); frontend served with `Cache-Control: no-cache` |
 | 0.10.0 | **Test drive** page: start (customer, licence photo, items out/in), cars out now, return with item check; customer name auto-filled from the licence photo (OCR); customer details trashed on return and wiped after 30 days; vehicle search also matches variant/colour |
+| 0.10.1 | Licence names: spaces the OCR dropped are restored from the gaps in the photo (middle names, double surnames) |
 
 **Next / ideas (not started):**
 - FINN import with image checkboxes. Blocked on official FINN API access or an ad-system feed.
