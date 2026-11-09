@@ -55,7 +55,8 @@ git grep --cached -nE "ca4ae1c6-?dcbb"   # must print nothing (exit code 1 = cle
 Environment variables (see `.env.example` and `docker-compose.yml`): `POSTGRES_PASSWORD`,
 `APP_PORT=8080`, `MAX_UPLOAD_MB=30`, `VEGVESEN_API_KEY`, `VEGVESEN_API_URL`,
 `VEGVESEN_AUTH_HEADER=SVV-Authorization`, `VEGVESEN_AUTH_SCHEME=Apikey`,
-`VEGVESEN_SYNC_DAYS=7`, `TRASH_DAYS=30`, `RETENTION_YEARS=5`.
+`VEGVESEN_SYNC_DAYS=7`, `TRASH_DAYS=30`, `RETENTION_YEARS=5`, `PRIVACY_COMPANY=Moss AutoCenter`,
+`PRIVACY_CONTACT=` (shown to test drive customers).
 
 ## Build
 
@@ -93,7 +94,11 @@ Python and Node may both be missing on the dev PC (Python was gone as of 0.9.4).
 syntax-checked locally because Node isn't installed. Re-read edited JS carefully,
 especially calls to `append` / `replaceChildren` (see pitfalls).
 
-**2. Live checks after the user redeploys:**
+**2. Live checks after the user redeploys.** From 0.11.0 every `/api` route except
+`/api/health`, `/api/version` and `/api/auth/*` needs a login cookie. For authenticated checks,
+log in with a test account the user has given you (`POST /api/auth/login`, keep the cookie
+via `curl.exe -c/-b`), or ask the user to test in the browser. Never ask for a real staff
+member's PIN.
 
 ```powershell
 Invoke-RestMethod http://192.168.10.45:8080/api/version      # {version, build_time}
@@ -242,6 +247,34 @@ warning offers "Use this VIN".
   notes. Licence photos are served with `Cache-Control: no-store`. `purge_vehicle` also
   removes a car's test drives and licence files.
 
+**Login & GDPR (0.11.0)** (`auth.py`, `routers/session.py`, `views/login.js`, migration 010):
+- **Login:** a personal **PIN** (4–8 digits) per staff member, hashed with scrypt.
+  - 5 wrong attempts lock the account for 15 min.
+  - A login creates a session: a random token in the HttpOnly cookie `carbonara_session`,
+    lasting 30 days. The DB only keeps its SHA-256.
+- **Route protection:** every router except `session` is included with
+  `dependencies=[Depends(require_staff)]`. Admin-only routes (staff create/patch/PIN) add
+  `require_admin`.
+- **First start:** while no active staff member has a PIN, the login screen runs **setup**,
+  and the first person becomes admin. Admins then set PINs in Settings. Resetting a PIN also
+  unlocks the account and logs out that person's devices.
+- **PIN hashes never leave the server:** staff queries use `STAFF_PUBLIC`; never
+  `SELECT * FROM staff` in a response.
+- Staff pickers default to the logged-in user (`setInspectorId(me.id)` in `boot()`).
+- **HTTPS is NOT set up** (the user chose to skip it for now), so the cookie has
+  `secure=False`. When HTTPS comes, set `secure=True`.
+- **Privacy for test drive customers (art. 13):**
+  - A Norwegian notice (`privacyDialog` in `testdrive.js`, printable) shows `PRIVACY_COMPANY`
+    and `PRIVACY_CONTACT` from the env.
+  - Starting a drive requires `customer_informed`.
+- **Full licence photo is kept on purpose (user's decision, 2026-11-09).** It includes field
+  4d, the national identity number (fødselsnummer). The reason: identifying the driver
+  securely to the police, Statens vegvesen, toll companies and insurers for fines, damage or
+  theft (personopplysningsloven § 12). The notice tells the customer this. Do **not** add
+  masking unless the user asks.
+- **Access log:** `test_drive_access_log` records opening a licence photo in full (not
+  thumbnails) and "Delete now". It's shown via "Access log" on returned drives.
+
 **finn.no:** crawling finn.no is prohibited (robots.txt and terms). Staff paste the ad link or
 FINN code (option C). The validator extracts 6–12 digits, and the link is
 `https://www.finn.no/mobility/item/{code}`. The dealer's FINN org id is `1324692627`. A future
@@ -317,8 +350,11 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.11.0 | **Login** with personal PIN (first-time setup → admin; admins manage PINs); all API behind login; test drive privacy notice (NO) + "customer informed" checkbox; licence access log; `PRIVACY_COMPANY`/`PRIVACY_CONTACT` env |
 
 **Next / ideas (not started):**
+- HTTPS (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the cookie.
+- Encrypted, expiring backups of the DB and `data/photos`.
 - FINN import with image checkboxes. Blocked on official FINN API access or an ad-system feed.
 - Automated tests: pytest for `vinlib` (VIN rules, plate parsing, an OCR photo set) and `common.service_due`.
 - Part 2 of the lifecycle (after storage: preparation and sale) has not been defined yet.

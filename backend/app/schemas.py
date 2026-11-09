@@ -31,6 +31,11 @@ class StaffIn(_Clean):
 class StaffPatch(_Clean):
     name: Optional[str] = Field(None, min_length=1, max_length=100)
     active: Optional[bool] = None
+    is_admin: Optional[bool] = None
+
+
+class PinSetIn(BaseModel):
+    pin: str = Field(max_length=20)
 
 
 class LocationIn(_Clean):

@@ -21,6 +21,10 @@ async function request(method, path, body) {
   } catch {
     throw new ApiError(0, 'Cannot reach the server. Check the network connection.');
   }
+  if (res.status === 401 && !path.startsWith('/auth/')) {
+    // Session expired or logged out elsewhere: show the login screen.
+    window.dispatchEvent(new CustomEvent('carbonara:logged-out'));
+  }
   if (!res.ok) {
     let msg = res.statusText || `Error ${res.status}`;
     try {
@@ -32,6 +36,9 @@ async function request(method, path, body) {
   }
   return res.status === 204 ? null : res.json();
 }
+
+/** The logged-in staff member ({id, name, is_admin, …}); set by app.js. */
+export const session = { me: null };
 
 export const api = {
   get: (p) => request('GET', p),

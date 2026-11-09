@@ -3,14 +3,15 @@ import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import pool
 from .migrate import run_migrations
-from .routers import admin, inspections, testdrives, vehicles, vin
+from .auth import require_staff
+from .routers import admin, inspections, session, testdrives, vehicles, vin
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -26,8 +27,11 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Carbonara", version=settings.version, lifespan=lifespan)
 
+# Everything under /api needs a logged-in staff member, except login itself
+# and health/version (used for monitoring and the footer).
+app.include_router(session.router, prefix="/api")
 for module in (admin, vin, inspections, vehicles, testdrives):
-    app.include_router(module.router, prefix="/api")
+    app.include_router(module.router, prefix="/api", dependencies=[Depends(require_staff)])
 
 
 @app.get("/api/health", tags=["meta"])

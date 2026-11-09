@@ -47,5 +47,9 @@ class Settings:
     trash_days = int(os.environ.get("TRASH_DAYS", "30"))
     retention_years = int(os.environ.get("RETENTION_YEARS", "5"))
 
+    # Shown on the privacy notice test drive customers get (GDPR art. 13).
+    privacy_company = os.environ.get("PRIVACY_COMPANY", "Moss AutoCenter").strip()
+    privacy_contact = os.environ.get("PRIVACY_CONTACT", "").strip()  # e.g. "post@… / 69 xx xx xx"
+
 
 settings = Settings()

@@ -1,4 +1,5 @@
-import { fmtDate, h, startClock } from './ui.js';
+import { api, fmtDate, h, openDialog, session, setInspectorId, showError, startClock, toast } from './ui.js';
+import { changePinForm, loginView } from './views/login.js';
 import { dashboardView } from './views/dashboard.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
@@ -52,8 +53,67 @@ async function render() {
   }
 }
 
-window.addEventListener('hashchange', render);
-render();
+// ---------------------------------------------------------------- login
+
+const userMenu = document.getElementById('user-menu');
+
+function renderUser() {
+  const me = session.me;
+  if (!me) { userMenu.replaceChildren(); return; }
+  userMenu.replaceChildren(h('button', {
+    class: 'user-btn', type: 'button', title: 'Account',
+    onClick: () => {
+      const { close } = openDialog(me.name, h('div', {},
+        h('p', { class: 'muted' }, me.is_admin ? 'Administrator' : 'Staff'),
+        h('div', { class: 'actions spread' },
+          h('button', {
+            class: 'btn', type: 'button',
+            onClick: () => {
+              close();
+              const d = openDialog('Change PIN', changePinForm(() => { d.close(); toast('PIN changed', 'success'); }));
+            },
+          }, 'Change PIN'),
+          h('button', {
+            class: 'btn danger', type: 'button',
+            onClick: async () => {
+              close();
+              try { await api.post('/auth/logout'); } catch { /* already logged out */ }
+              await boot();
+            },
+          }, 'Log out'))));
+    },
+  }, '👤 ', me.name));
+}
+
+let booting = null;
+/** Check the session; show the login screen or the app. */
+function boot() {
+  booting ??= (async () => {
+    try {
+      const state = await api.get('/auth/state');
+      session.me = state.me;
+      renderUser();
+      document.body.classList.toggle('logged-out', !state.me);
+      if (!state.me) {
+        loginView(root, state, () => { booting = null; return boot(); });
+        return;
+      }
+      setInspectorId(state.me.id); // staff pickers default to whoever is logged in
+      await render();
+    } catch (e) {
+      showError(e);
+      root.replaceChildren(h('div', { class: 'card notice warn' }, 'Cannot reach the server. ',
+        h('button', { class: 'btn', type: 'button', onClick: () => { booting = null; boot(); } }, 'Try again')));
+    } finally {
+      booting = null;
+    }
+  })();
+  return booting;
+}
+
+window.addEventListener('carbonara:logged-out', () => { if (session.me) { session.me = null; boot(); } });
+window.addEventListener('hashchange', () => { if (session.me) render(); });
+boot();
 startClock(document.getElementById('clock'));
 
 // Show which version/build is running, so it is easy to check after an update.

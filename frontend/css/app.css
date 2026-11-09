@@ -417,3 +417,23 @@ dialog::backdrop { background: rgb(15 23 42 / .6); }
 .td-banner { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
 button.list-card { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
 button.list-card:disabled { opacity: .55; cursor: not-allowed; }
+/* ---------------------------------------------------------------- login */
+body.logged-out .topbar nav, body.logged-out .user-menu { display: none; }
+.login-card { max-width: 420px; margin: 2rem auto; }
+.login-card h1 { margin-top: 0; }
+.login-card input[type=password] { font-size: 1.4rem; letter-spacing: .3em; }
+.user-menu { margin-left: .5rem; }
+.user-btn {
+  background: rgb(255 255 255 / .1); color: #fff; border: 0; border-radius: 8px;
+  padding: .4rem .7rem; font: inherit; cursor: pointer; white-space: nowrap; max-width: 12rem;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.user-btn:hover { background: rgb(255 255 255 / .2); }
+@media (max-width: 640px) { .user-btn { max-width: 6.5rem; } }
+.privacy-text h3 { margin: 1rem 0 .3rem; font-size: 1rem; }
+.privacy-text p, .privacy-text li { font-size: .95rem; }
+@media print {
+  body > *:not(dialog) { display: none !important; }
+  dialog { position: static; border: 0; box-shadow: none; max-width: none; }
+  dialog .dialog-head button, dialog .no-print { display: none; }
+}

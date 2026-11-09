@@ -7,7 +7,7 @@ import logging
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from psycopg.errors import UniqueViolation
 
@@ -28,7 +28,7 @@ DRIVE_SELECT = """
     SELECT t.id, t.vehicle_id, t.status, t.started_at, t.odometer_out, t.removed_items, t.added_items,
            t.items_note, t.returned_at, t.odometer_in, t.items_checked, t.return_note,
            t.customer_name, t.customer_phone, (t.license_file_key IS NOT NULL) AS has_license,
-           t.customer_trashed_at, t.customer_purged_at,
+           t.customer_trashed_at, t.customer_purged_at, t.customer_informed,
            t.customer_trashed_at + make_interval(days => %(trash_days)s) AS purge_at,
            so.name AS started_by_name, sr.name AS returned_by_name,
            v.vin, v.make, v.model, v.model_year, v.color, v.registration_number, v.status AS vehicle_status
@@ -92,7 +92,8 @@ def list_test_drives(conn=Depends(get_conn)):
                           params).fetchall()
     trash = conn.execute(DRIVE_SELECT + """ WHERE t.status = 'returned' AND t.customer_purged_at IS NULL
                                             ORDER BY t.returned_at DESC""", params).fetchall()
-    return {"active": active, "trash": trash, "trash_days": settings.trash_days}
+    return {"active": active, "trash": trash, "trash_days": settings.trash_days,
+            "privacy": {"company": settings.privacy_company, "contact": settings.privacy_contact or None}}
 
 
 @router.post("/test-drives/read-license")
@@ -127,8 +128,12 @@ def start_test_drive(
     removed_items: Optional[str] = Form(None),
     added_items: Optional[str] = Form(None),
     items_note: Optional[str] = Form(None),
+    customer_informed: bool = Form(False),
     conn=Depends(get_conn),
 ):
+    # GDPR art. 13: the customer must be told what we store, why and for how long.
+    if not customer_informed:
+        raise bad_request("Confirm that the customer has been given the privacy information")
     name = (customer_name or "").strip()
     if not 2 <= len(name) <= 120:
         raise bad_request("Customer name is required")
@@ -150,7 +155,7 @@ def start_test_drive(
             "removed_items": removed, "added_items": added, "items_note": note,
             "customer_name": name, "customer_phone": phone,
             "license_file_key": meta["file_key"], "license_ext": meta["original_ext"],
-            "license_mime": meta["mime_type"],
+            "license_mime": meta["mime_type"], "customer_informed": True,
         })
     except UniqueViolation:
         photostore.remove(meta)
@@ -165,8 +170,25 @@ def start_test_drive(
     return _drive(conn, row["id"])
 
 
+def _log_access(conn, request: Request, drive_id: int, action: str) -> None:
+    staff = getattr(request.state, "staff", None)
+    conn.execute("INSERT INTO test_drive_access_log (test_drive_id, staff_id, action) VALUES (%s, %s, %s)",
+                 (drive_id, staff["id"] if staff else None, action))
+
+
+@router.get("/test-drives/{drive_id}/access-log")
+def access_log(drive_id: int, conn=Depends(get_conn)):
+    """Who opened the licence photo / deleted the customer details."""
+    return conn.execute(
+        """SELECT l.action, l.at, s.name AS staff_name FROM test_drive_access_log l
+             LEFT JOIN staff s ON s.id = l.staff_id
+            WHERE l.test_drive_id = %s ORDER BY l.at DESC LIMIT 100""",
+        (drive_id,),
+    ).fetchall()
+
+
 @router.get("/test-drives/{drive_id}/license/{variant}")
-def get_license(drive_id: int, variant: str, conn=Depends(get_conn)):
+def get_license(drive_id: int, variant: str, request: Request, conn=Depends(get_conn)):
     if variant not in photostore.VARIANTS:
         raise not_found("Photo variant")
     row = conn.execute("SELECT license_file_key AS file_key, license_ext AS original_ext, license_mime "
@@ -177,6 +199,8 @@ def get_license(drive_id: int, variant: str, conn=Depends(get_conn)):
     if not path.is_file():
         raise not_found("Licence photo file")
     media = row["license_mime"] if variant == "original" else "image/jpeg"
+    if variant != "thumb":  # opened in full (thumbnails load with every list view)
+        _log_access(conn, request, drive_id, "license_viewed")
     # Personal data: never keep it in the browser cache.
     return FileResponse(path, media_type=media, headers={"Cache-Control": "no-store"})
 
@@ -210,7 +234,7 @@ def return_test_drive(drive_id: int, body: TestDriveReturnIn, conn=Depends(get_c
 
 
 @router.delete("/test-drives/{drive_id}/customer", status_code=204)
-def delete_customer_now(drive_id: int, conn=Depends(get_conn)):
+def delete_customer_now(drive_id: int, request: Request, conn=Depends(get_conn)):
     """Wipe the customer details now instead of waiting for the trash period."""
     drive = conn.execute("SELECT status FROM test_drives WHERE id = %s", (drive_id,)).fetchone()
     if not drive:
@@ -218,6 +242,7 @@ def delete_customer_now(drive_id: int, conn=Depends(get_conn)):
     if drive["status"] != "returned":
         raise conflict("Return the car before deleting the customer details")
     photo = purge_test_drive_customer(conn, drive_id)
+    _log_access(conn, request, drive_id, "customer_deleted")
     conn.commit()
     if photo:
         photostore.remove(photo)

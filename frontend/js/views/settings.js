@@ -1,4 +1,4 @@
-import { api, busy, fmtDate, h, openDialog, showError, toast } from '../ui.js';
+import { api, busy, fmtDate, h, openDialog, session, showError, toast } from '../ui.js';
 
 export async function settingsView(el) {
   const staffBox = h('div');
@@ -48,24 +48,62 @@ export async function settingsView(el) {
 
   async function renderStaff() {
     const staff = await api.get('/staff?include_inactive=true');
+    const me = session.me;
+    const admin = !!me?.is_admin;
     const name = h('input', { type: 'text', placeholder: 'Name', required: true, maxlength: 100 });
     const addBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Add');
     const form = h('form', { class: 'inline-form' }, name, addBtn);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
-      busy(addBtn, async () => { await api.post('/staff', { name: name.value }); await renderStaff(); });
+      busy(addBtn, async () => {
+        const s = await api.post('/staff', { name: name.value });
+        await renderStaff();
+        pinDialog(s); // a new person needs a PIN to log in
+      });
     });
+    const patch = async (s, body) => {
+      try { await api.patch(`/staff/${s.id}`, body); await renderStaff(); } catch (e) { showError(e); }
+    };
+    const actions = (s) => (!admin ? null : h('span', { class: 'row-actions' },
+      h('button', { class: 'link', type: 'button', onClick: () => pinDialog(s) }, s.has_pin ? 'Reset PIN' : 'Set PIN'),
+      s.id === me.id ? null : h('button', { class: 'link', type: 'button', onClick: () => patch(s, { is_admin: !s.is_admin }) },
+        s.is_admin ? 'Remove admin' : 'Make admin'),
+      s.id === me.id ? null : h('button', { class: 'link', type: 'button', onClick: () => patch(s, { active: !s.active }) },
+        s.active ? 'Deactivate' : 'Activate')));
+
     staffBox.replaceChildren(h('section', { class: 'card' },
       h('h2', {}, 'Staff / inspectors'),
+      h('p', { class: 'muted small' }, admin
+        ? 'Everyone logs in with a personal PIN. Give new staff a PIN here; reset it if someone forgets theirs (that also unlocks the account and logs out their devices).'
+        : 'Only an administrator can add staff or change PINs.'),
       h('ul', { class: 'plain rows' }, staff.map((s) => h('li', { class: s.active ? '' : 'inactive' },
-        h('span', {}, s.name, s.active ? '' : ' (inactive)'),
-        h('button', {
-          class: 'link', type: 'button',
-          onClick: async () => {
-            try { await api.patch(`/staff/${s.id}`, { active: !s.active }); await renderStaff(); } catch (e) { showError(e); }
-          },
-        }, s.active ? 'Deactivate' : 'Activate')))),
-      form));
+        h('span', {}, s.name, s.id === me?.id ? ' (you)' : '', s.active ? '' : ' (inactive)', ' ',
+          s.is_admin ? h('span', { class: 'badge' }, 'Admin') : null, ' ',
+          s.active && !s.has_pin ? h('span', { class: 'badge warn' }, 'No PIN — can’t log in') : null,
+          s.last_login_at ? h('span', { class: 'muted small block' }, `Last login ${fmtDate(s.last_login_at)}`) : null),
+        actions(s)))),
+      admin ? form : null));
+
+    function pinDialog(s) {
+      const pin = h('input', { type: 'password', id: 'set-pin', inputmode: 'numeric', pattern: '[0-9]*', minlength: 4, maxlength: 8, required: true, autocomplete: 'new-password' });
+      const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save PIN');
+      const f = h('form', {},
+        h('p', {}, `New PIN for ${s.name}. Tell them the PIN in person; they can change it themselves afterwards (their name at the top → Change PIN).`),
+        h('div', { class: 'field' }, h('label', { for: 'set-pin' }, 'PIN (4–8 digits)'), pin),
+        h('div', { class: 'actions' }, save));
+      f.addEventListener('submit', (e) => {
+        e.preventDefault();
+        if (!/^\d{4,8}$/.test(pin.value)) { showError(new Error('The PIN must be 4–8 digits')); return; }
+        busy(save, async () => {
+          await api.post(`/staff/${s.id}/pin`, { pin: pin.value });
+          close();
+          toast(`PIN saved for ${s.name}`, 'success');
+          await renderStaff();
+        });
+      });
+      const { close } = openDialog(s.has_pin ? 'Reset PIN' : 'Set PIN', f);
+      pin.focus();
+    }
   }
 
   async function renderLocations() {

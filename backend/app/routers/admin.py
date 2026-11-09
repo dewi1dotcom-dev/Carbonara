@@ -3,31 +3,57 @@
 from fastapi import APIRouter, Depends
 from psycopg import errors
 
+from ..auth import PIN_MAX, PIN_MIN, STAFF_PUBLIC, hash_pin, require_admin, valid_pin
 from ..common import bad_request, conflict, insert_row, not_found, patch_fields, update_row
 from ..db import get_conn
-from ..schemas import LocationIn, LocationPatch, StaffIn, StaffPatch
+from ..schemas import LocationIn, LocationPatch, PinSetIn, StaffIn, StaffPatch
 
 router = APIRouter(tags=["admin"])
 
 
+def _public_staff(conn, staff_id: int):
+    return conn.execute(f"SELECT {STAFF_PUBLIC} FROM staff WHERE id = %s", (staff_id,)).fetchone()
+
+
 @router.get("/staff")
 def list_staff(include_inactive: bool = False, conn=Depends(get_conn)):
+    # Never SELECT *: the PIN hash must not leave the server.
     return conn.execute(
-        "SELECT * FROM staff WHERE %s OR active ORDER BY active DESC, name", (include_inactive,)
+        f"SELECT {STAFF_PUBLIC} FROM staff WHERE %s OR active ORDER BY active DESC, name", (include_inactive,)
     ).fetchall()
 
 
 @router.post("/staff", status_code=201)
-def create_staff(body: StaffIn, conn=Depends(get_conn)):
-    return insert_row(conn, "staff", {"name": body.name})
+def create_staff(body: StaffIn, conn=Depends(get_conn), _admin=Depends(require_admin)):
+    row = insert_row(conn, "staff", {"name": body.name})
+    return _public_staff(conn, row["id"])
 
 
 @router.patch("/staff/{staff_id}")
-def patch_staff(staff_id: int, body: StaffPatch, conn=Depends(get_conn)):
-    row = update_row(conn, "staff", staff_id, patch_fields(body, ("name", "active")))
+def patch_staff(staff_id: int, body: StaffPatch, conn=Depends(get_conn), admin=Depends(require_admin)):
+    fields = patch_fields(body, ("name", "active", "is_admin"))
+    if staff_id == admin["id"] and (fields.get("active") is False or fields.get("is_admin") is False):
+        raise bad_request("You can't deactivate yourself or remove your own administrator rights")
+    if not update_row(conn, "staff", staff_id, fields):
+        raise not_found("Staff member")
+    if fields.get("active") is False:
+        conn.execute("DELETE FROM sessions WHERE staff_id = %s", (staff_id,))  # logged out everywhere
+    return _public_staff(conn, staff_id)
+
+
+@router.post("/staff/{staff_id}/pin")
+def set_staff_pin(staff_id: int, body: PinSetIn, conn=Depends(get_conn), _admin=Depends(require_admin)):
+    """Give a staff member a PIN, or reset a forgotten one (also unlocks the account)."""
+    if not valid_pin(body.pin):
+        raise bad_request(f"The PIN must be {PIN_MIN}–{PIN_MAX} digits")
+    row = conn.execute(
+        "UPDATE staff SET pin_hash = %s, pin_failures = 0, pin_locked_until = NULL WHERE id = %s RETURNING id",
+        (hash_pin(body.pin), staff_id),
+    ).fetchone()
     if not row:
         raise not_found("Staff member")
-    return row
+    conn.execute("DELETE FROM sessions WHERE staff_id = %s", (staff_id,))  # old devices must log in again
+    return _public_staff(conn, staff_id)
 
 
 LOCATION_SELECT = """
