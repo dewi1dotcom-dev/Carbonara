@@ -617,6 +617,7 @@ def recognize_all(data: bytes, limit: int = 5) -> dict:
             }
 
     for text in _barcodes(img):
+        seen_text.append(f"[barcode] {text[:300]}")  # e.g. the QR on transport sheets: what else it holds
         for vin, exact in _candidates_in_text(text, fix_ocr=False):
             add(vin, "barcode", exact)
 

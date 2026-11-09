@@ -171,6 +171,12 @@ label-line strips (recognition-only, using long lines found as rulers) → zoom 
 - A single high-confidence VIN is auto-filled at arrival.
 - Engines share a re-entrant lock (RLock), because one engine is built from inside another.
 
+**Transport sheets (factory-new cars):** Norsk Biltransport puts a delivery sheet in each new
+car. It has a big printed VIN, model ("MGS5"), dealer and a **QR code**. zbar decodes the QR
+first (VIN, source `barcode`, high confidence, ~0.4 s), and the arrival screen auto-fills it.
+From 0.10.4 the raw barcode text is included in `text` (`[barcode] …`) to see what else the
+QR holds.
+
 **Statens vegvesen API:** `GET {VEGVESEN_API_URL}?understellsnummer=<VIN>` or
 `?kjennemerke=<REGNR>` with header `SVV-Authorization: Apikey <key>`.
 - Prefer `kodeNavn` over `kodeBeskrivelse` (colour etc.).
@@ -310,6 +316,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.1 | Licence names: spaces the OCR dropped are restored from the gaps in the photo (middle names, double surnames) |
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
+| 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
 
 **Next / ideas (not started):**
 - FINN import with image checkboxes. Blocked on official FINN API access or an ad-system feed.
