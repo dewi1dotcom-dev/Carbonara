@@ -539,23 +539,41 @@ const trimmed = (map) => Object.fromEntries(Object.entries(map).map(([k, v]) => 
 const NO_T = trimmed(NO);
 const EN_T = trimmed(EN);
 const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+// Most specific first: the pattern with the most fixed text wins, so
+// "started {} by {}" is tried before "started {}".
 const COMPILED = NO_PATTERNS.map(([from, to]) => {
   const parts = from.trim().split(/(\{\}|\{n\})/);
   const re = parts.map((p) => (p === '{}' ? '([\\s\\S]+?)' : p === '{n}' ? '(-?\\d+(?:[.,]\\d+)?)' : escapeRe(p))).join('');
-  return [new RegExp(`^${re}$`), to.trim()];
-});
+  const fixed = parts.filter((p) => p !== '{}' && p !== '{n}').join('').length;
+  return [new RegExp(`^${re}$`), to.trim(), fixed];
+}).sort((a, b) => b[2] - a[2]);
 
-function translateCore(core) {
-  if (!/[A-Za-zÆØÅæøå]{2}/.test(core)) return core; // numbers, dates, symbols
+// Icons/arrows before or after a text ("📝 PDI orders…", "Manage spots →").
+const EDGES = /^([^\p{L}\p{N}"'«(]+)?([\s\S]*?)([\s→↗…:]+)?$/u;
+
+function lookup(core) {
   if (lang === 'no') {
     if (Object.prototype.hasOwnProperty.call(NO_T, core)) return NO_T[core];
     for (const [re, to] of COMPILED) {
       const m = core.match(re);
       if (m) return to.replace(/\{(\d+)(t?)\}/g, (_, i, t) => (t ? translateCore(m[i]) : m[i]));
     }
-    return core;
+    return null;
   }
-  return Object.prototype.hasOwnProperty.call(EN_T, core) ? EN_T[core] : core;
+  return Object.prototype.hasOwnProperty.call(EN_T, core) ? EN_T[core] : null;
+}
+
+function translateCore(core) {
+  if (!/[A-Za-zÆØÅæøå]{2}/.test(core)) return core; // numbers, dates, symbols
+  const direct = lookup(core);
+  if (direct != null) return direct;
+  // Try again without leading icons / trailing arrows, and put them back.
+  const m = core.match(EDGES);
+  if (m && (m[1] || m[3]) && m[2]) {
+    const inner = lookup(m[2]);
+    if (inner != null) return (m[1] || '') + inner + (m[3] || '');
+  }
+  return core;
 }
 
 /** Translate one text (keeps leading/trailing spaces). */

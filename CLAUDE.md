@@ -409,6 +409,10 @@ system (option B).
   MutationObserver), and `confirm`/`prompt`/`alert` are wrapped.
   - `NO` holds exact texts. `NO_PATTERNS` holds texts with values: `{}` = any text,
     `{n}` = a number, and `{1t}` in the target also translates that part.
+  - Patterns are tried **most specific first** (most fixed text), so "started {} by {}"
+    wins over "started {}".
+  - Leading icons and trailing arrows ("📝 …", "… →") are stripped for the lookup and put
+    back, so dictionary keys are written without them.
   - Server messages (English) are translated the same way when they reach the page.
   - `EN` translates the few Norwegian texts Carbonara uses itself (storage checklist labels,
     battery results, winter-tyre options) when English is chosen. Use `tr()` when such a
@@ -510,6 +514,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.14.1 | Translator: headings with icons and "by …" texts now translated (most specific pattern first) |
 | 0.14.0 | **English / Norwegian** per user (translator + dictionary; documents stay Norwegian); "super-admin" renamed "System admin"; Sprutlapper → Skvettlapper, PDI item → Nybilklargjøring |
 | 0.13.3 | All date/time inputs are Carbonara's own dd.mm.yyyy / 24 h fields (no more browser mm/dd/yyyy, AM/PM); km in Norwegian number format |
 | 0.13.2 | "Enter PDI date" available before the order is sent |
