@@ -1,13 +1,18 @@
 """Reference data: staff and storage locations (spots and their sub-zones)."""
 
-from fastapi import APIRouter, Depends, HTTPException
+import logging
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg import errors
 
 from ..auth import PIN_MAX, PIN_MIN, STAFF_PUBLIC, hash_pin, require_admin, valid_pin
-from ..common import bad_request, conflict, insert_row, not_found, patch_fields, update_row
+from ..common import (bad_request, conflict, insert_row, log_event, not_found, patch_fields, place_in_location,
+                      update_row)
 from ..db import get_conn
 from ..schemas import LocationIn, LocationPatch, PinSetIn, StaffIn, StaffPatch
 
+log = logging.getLogger("carbonara.admin")
 router = APIRouter(tags=["admin"])
 
 
@@ -98,7 +103,7 @@ def list_locations(include_inactive: bool = False, available_only: bool = False,
     sub-zones, that have room left."""
     return conn.execute(
         "SELECT * FROM (" + LOCATION_SELECT + """) x
-            WHERE (%(inactive)s OR active)
+            WHERE NOT deleted AND (%(inactive)s OR active)
               AND (NOT %(available)s
                    OR (child_count = 0 AND (capacity IS NULL OR vehicle_count < capacity)))
             ORDER BY zone NULLS LAST, code""",
@@ -110,7 +115,7 @@ def list_locations(include_inactive: bool = False, available_only: bool = False,
 def get_location(location_id: int, conn=Depends(get_conn)):
     """One spot, its sub-zones, and every car in it or its sub-zones (newest first)."""
     location = conn.execute(
-        "SELECT * FROM (" + LOCATION_SELECT + ") x WHERE id = %s", (location_id,)
+        "SELECT * FROM (" + LOCATION_SELECT + ") x WHERE id = %s AND NOT deleted", (location_id,)
     ).fetchone()
     if not location:
         raise not_found("Storage location")
@@ -183,3 +188,46 @@ def patch_location(location_id: int, body: LocationPatch, conn=Depends(get_conn)
         # Sub-zones go with their spot.
         conn.execute("UPDATE storage_locations SET active = false WHERE parent_id = %s", (location_id,))
     return row
+
+
+@router.delete("/storage-locations/{location_id}")
+def delete_location(location_id: int, request: Request, move_to: Optional[int] = None,
+                    conn=Depends(get_conn), _admin=Depends(require_admin)):
+    """Delete a spot (with its sub-zones). Cars still in it must go somewhere:
+    `move_to` = the spot they are all moved to. Without it, a spot with cars
+    is refused (409) and the page asks where to move them."""
+    spot = conn.execute(
+        "SELECT * FROM storage_locations WHERE id = %s AND deleted_at IS NULL FOR UPDATE", (location_id,)
+    ).fetchone()
+    if not spot:
+        raise not_found("Storage location")
+    ids = [location_id] + [r["id"] for r in conn.execute(
+        "SELECT id FROM storage_locations WHERE parent_id = %s AND deleted_at IS NULL FOR UPDATE", (location_id,))]
+    name = conn.execute("SELECT code FROM storage_spots WHERE id = %s", (location_id,)).fetchone()["code"]
+    cars = conn.execute(
+        """SELECT a.vehicle_id, s.code FROM storage_assignments a JOIN storage_spots s ON s.id = a.location_id
+            WHERE a.location_id = ANY(%s) AND a.removed_at IS NULL ORDER BY a.placed_at""",
+        (ids,),
+    ).fetchall()
+    staff_id = request.state.staff["id"]
+
+    moved_to = None
+    if cars:
+        if move_to is None:
+            raise conflict(f"{name} has {len(cars)} {'car' if len(cars) == 1 else 'cars'}; choose a spot to move them to")
+        if move_to in ids:
+            raise bad_request("Choose a spot outside the one you are deleting")
+        for car in cars:  # checks capacity, sub-zones and active for each car
+            target = place_in_location(conn, car["vehicle_id"], move_to, staff_id)
+            log_event(conn, car["vehicle_id"], "moved", staff_id=staff_id,
+                      data={"from": car["code"], "to": target["code"], "note": f"Spot {name} deleted"})
+        moved_to = target["code"]
+
+    used = conn.execute("SELECT 1 FROM storage_assignments WHERE location_id = ANY(%s) LIMIT 1", (ids,)).fetchone()
+    if used:  # keep the rows for history, hidden everywhere
+        conn.execute("UPDATE storage_locations SET deleted_at = now(), active = false WHERE id = ANY(%s)", (ids,))
+    else:
+        conn.execute("DELETE FROM storage_locations WHERE parent_id = %s", (location_id,))
+        conn.execute("DELETE FROM storage_locations WHERE id = %s", (location_id,))
+    log.info("storage spot %s deleted by staff %s (%d cars moved)", name, staff_id, len(cars))
+    return {"deleted": name, "moved": len(cars), "moved_to": moved_to}

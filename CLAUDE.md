@@ -159,7 +159,8 @@ Migrations: `001_initial`, `002_vegvesen_registry`, `003_registry_confirm` (kept
 vin_source 'registry'), `004_spot_capacity` (multi-car spots), `005_sub_zones` (parent_id +
 `storage_spots` view), `006_service_and_condition` (condition, last_service_date/km, reg.
 numbers normalized), `007_soft_delete` (deleted_at/by/reason), `008_finn_link` (finn_code),
-`009_test_drives` (test_drives table).
+`009_test_drives` (test_drives table), `010_login_and_privacy`, `011_pdi_orders`,
+`012_system_settings`, `013_delete_spots`.
 **New schema changes = a new numbered file. Never edit an applied migration.**
 
 Frontend routes: `#/` dashboard, `#/intake`, `#/inspections/:id`, `#/vehicles`,
@@ -211,6 +212,16 @@ before** the deadline. Service: green / amber (± 31 days) / red.
 - Used car without history → next registration anniversary.
 - At arrival, choosing *Used* reveals the last service date + km fields immediately
   (`serviceSlot` redraw). *New* needs no service history.
+
+**Storage spots: rename & delete (0.12.1, migration 013):**
+- **Rename:** any staff (`PATCH code`).
+- **Delete:** admins only, `DELETE /storage-locations/{id}?move_to=`. A spot with cars (its
+  own or in its sub-zones) needs `move_to`. Each car is moved with `place_in_location`
+  (capacity is checked) and logged as `moved` with the note "Spot X deleted".
+- **Never-used spots** are deleted for good. Spots with assignment history get `deleted_at`
+  (and become inactive), so history keeps its reference.
+- `storage_spots.deleted` hides them everywhere, and the unique code index ignores deleted
+  spots, so their codes can be reused.
 
 **Storage:** spots have a `capacity` (several cars per spot) and optional **sub-zones** (`parent_id`).
 `place_in_location` locks the spot and checks capacity and sub-zone rules. "Off-site" means not
@@ -416,6 +427,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.12.1 | Storage spots can be renamed and deleted (cars moved to another spot first) |
 | 0.12.0 | **PDI orders** to RBV (items, tyres, editable lists, e-mail via SMTP or e-mail app, manual booking date); **Today board** as start page; Arrivals moved to `#/arrivals`; **System page** (super-admin) to change server settings incl. SVV key and SMTP; no built-in e-mail addresses |
 | 0.11.0 | **Login** with personal PIN (first-time setup → admin; admins manage PINs); all API behind login; test drive privacy notice (NO) + "customer informed" checkbox; licence access log; `PRIVACY_COMPANY`/`PRIVACY_CONTACT` env |
 

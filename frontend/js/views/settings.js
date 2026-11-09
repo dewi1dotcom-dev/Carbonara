@@ -1,4 +1,4 @@
-import { api, busy, fmtDate, h, openDialog, session, showError, toast } from '../ui.js';
+import { api, busy, fmtDate, h, openDialog, session, showError, spotLabel, toast } from '../ui.js';
 
 export async function settingsView(el) {
   const staffBox = h('div');
@@ -186,6 +186,7 @@ export async function settingsView(el) {
 
   async function renderLocations() {
     const locs = await api.get('/storage-locations?include_inactive=true');
+    const admin = !!session.me?.is_admin; // deleting spots is admin-only
 
     const code = h('input', { type: 'text', placeholder: 'Code, e.g. A-12', required: true, maxlength: 30 });
     const zone = h('input', { type: 'text', placeholder: 'Zone, e.g. Yard A', maxlength: 60 });
@@ -287,6 +288,49 @@ export async function settingsView(el) {
     };
     const carsLink = (l, n) => h('a', { href: `#/storage/${l.id}` }, n ? `${n} ${n === 1 ? 'car' : 'cars'} →` : 'empty →');
 
+    const rename = async (l) => {
+      const next = prompt(`New code for ${l.code}`, l.own_code);
+      if (next == null || !next.trim() || next.trim().toUpperCase() === l.own_code) return;
+      try {
+        await api.patch(`/storage-locations/${l.id}`, { code: next.trim() });
+        toast(`${l.code} renamed to ${next.trim().toUpperCase()}`, 'success');
+        await renderLocations();
+      } catch (e) { showError(e); }
+    };
+
+    // Delete a spot; cars still in it (or its sub-zones) are moved to another spot first.
+    const remove = async (l) => {
+      const n = l.parent_id ? l.vehicle_count : l.total_count;
+      const what = `${l.code}${!l.parent_id && l.child_count ? ` and its ${l.child_count} sub-zone${l.child_count === 1 ? '' : 's'}` : ''}`;
+      if (!n) {
+        if (!confirm(`Delete ${what}?`)) return;
+        try { await api.del(`/storage-locations/${l.id}`); toast(`${l.code} deleted`, 'success'); await renderLocations(); } catch (e) { showError(e); }
+        return;
+      }
+      let spots;
+      try { spots = await api.get('/storage-locations?available_only=true'); } catch (e) { showError(e); return; }
+      const targets = spots.filter((s) => s.id !== l.id && s.parent_id !== l.id
+        && (s.capacity == null || s.capacity - s.vehicle_count >= n));
+      const sel = h('select', { id: 'move-to', required: true }, h('option', { value: '' }, 'Choose a spot…'),
+        targets.map((s) => h('option', { value: s.id }, spotLabel(s))));
+      const ok = h('button', { class: 'btn danger', type: 'submit' }, `Move ${n} ${n === 1 ? 'car' : 'cars'} and delete`);
+      const form = h('form', {},
+        h('p', {}, `${what} has ${n} ${n === 1 ? 'car' : 'cars'}. Move ${n === 1 ? 'it' : 'all of them'} to:`),
+        targets.length ? sel : h('p', { class: 'notice warn' }, `No spot has room for ${n} cars. Add a spot or raise a capacity first, or move the cars one by one.`),
+        h('p', { class: 'muted small' }, 'Each move is written to the car’s history.'),
+        h('div', { class: 'actions' }, h('a', { class: 'btn', href: `#/storage/${l.id}` }, 'See the cars'), targets.length ? ok : null));
+      form.addEventListener('submit', (e) => {
+        e.preventDefault();
+        busy(ok, async () => {
+          const r = await api.del(`/storage-locations/${l.id}?move_to=${sel.value}`);
+          close();
+          toast(`${r.moved} ${r.moved === 1 ? 'car' : 'cars'} moved to ${r.moved_to}; ${r.deleted} deleted`, 'success');
+          await renderLocations();
+        });
+      });
+      const { close } = openDialog(`Delete ${l.code}`, form);
+    };
+
     // Each top-level spot followed by its sub-zones.
     const tops = locs.filter((l) => !l.parent_id);
     const rows = tops.flatMap((p) => {
@@ -302,7 +346,9 @@ export async function settingsView(el) {
           h('td', {}, carsLink(p, p.total_count)),
           h('td', { class: 'row-actions' },
             p.active ? h('button', { class: 'link', type: 'button', onClick: () => subZoneDialog(p) }, '+ Sub-zone') : null,
-            h('button', { class: 'link', type: 'button', onClick: () => toggleActive(p) }, p.active ? 'Deactivate' : 'Activate'))),
+            h('button', { class: 'link', type: 'button', onClick: () => rename(p) }, 'Rename'),
+            h('button', { class: 'link', type: 'button', onClick: () => toggleActive(p) }, p.active ? 'Deactivate' : 'Activate'),
+            admin ? h('button', { class: 'link danger', type: 'button', onClick: () => remove(p) }, 'Delete') : null)),
         ...kids.map((c) => h('tr', { class: `sub-row${c.active ? '' : ' inactive'}` },
           h('td', { class: 'mono' }, `↳ ${c.own_code}`),
           h('td', {}, ''),
@@ -310,7 +356,9 @@ export async function settingsView(el) {
           h('td', {}, capacityInput(c)),
           h('td', {}, carsLink(c, c.vehicle_count)),
           h('td', { class: 'row-actions' },
-            p.active ? h('button', { class: 'link', type: 'button', onClick: () => toggleActive(c) }, c.active ? 'Deactivate' : 'Activate') : null))),
+            h('button', { class: 'link', type: 'button', onClick: () => rename(c) }, 'Rename'),
+            p.active ? h('button', { class: 'link', type: 'button', onClick: () => toggleActive(c) }, c.active ? 'Deactivate' : 'Activate') : null,
+            admin ? h('button', { class: 'link danger', type: 'button', onClick: () => remove(c) }, 'Delete') : null))),
       ];
     });
 
