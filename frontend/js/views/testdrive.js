@@ -33,7 +33,7 @@ function viewLicense(drive) {
 export function privacyDialog(privacy, trashDays) {
   const contact = privacy?.contact
     ? h('strong', {}, privacy.contact)
-    : h('strong', { class: 'td-items' }, '[kontaktinfo mangler – sett PRIVACY_CONTACT på serveren]');
+    : h('strong', { class: 'td-items' }, '[kontaktinfo mangler – legges inn under System → Privacy notice]');
   const company = privacy?.company || 'Forhandleren';
   const body = h('div', { class: 'privacy-text' },
     h('p', {}, h('strong', {}, company), ' er behandlingsansvarlig for opplysningene vi registrerer når du prøvekjører en bil.'),
@@ -81,7 +81,7 @@ export async function testDriveView(el, [preselectId]) {
       h('button', { class: 'link small', type: 'button', onClick: () => privacyDialog(data.privacy, data.trash_days) },
         '🔒 Privacy notice for customers')),
     data.privacy?.contact ? null : h('div', { class: 'card notice warn' },
-      'The customer privacy notice has no contact details yet. Set PRIVACY_CONTACT (e-mail/phone) in the server’s .env or the Portainer stack and redeploy.'),
+      'The customer privacy notice has no contact details yet. A super-admin can add them on the System page → Privacy notice.'),
     startCard(staff, data, rerender, preselect),
     h('section', { class: 'card' },
       h('h2', {}, `Out on test drive now (${data.active.length})`),

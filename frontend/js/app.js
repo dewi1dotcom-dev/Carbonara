@@ -1,15 +1,18 @@
 import { api, fmtDate, h, openDialog, session, setInspectorId, showError, startClock, toast } from './ui.js';
 import { changePinForm, loginView } from './views/login.js';
-import { dashboardView } from './views/dashboard.js';
+import { arrivalsView } from './views/dashboard.js';
+import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
 import { settingsView } from './views/settings.js';
 import { storageSpotView, storageView } from './views/storage.js';
+import { systemView } from './views/system.js';
 import { testDriveView } from './views/testdrive.js';
 import { deletedView, vehiclesView, vehicleView } from './views/vehicles.js';
 
 const routes = [
-  [/^#?\/?$/, dashboardView, 'arrivals'],
+  [/^#?\/?$/, todayView, 'today'],
+  [/^#\/arrivals$/, arrivalsView, 'arrivals'],
   [/^#\/intake$/, intakeView, 'arrivals'],
   [/^#\/inspections\/(\d+)$/, inspectionView, 'arrivals'],
   [/^#\/vehicles$/, vehiclesView, 'vehicles'],
@@ -19,6 +22,7 @@ const routes = [
   [/^#\/storage\/(\d+|off-site)$/, storageSpotView, 'storage'],
   [/^#\/test-drive(?:\/new\/(\d+))?$/, testDriveView, 'testdrive'],
   [/^#\/settings$/, settingsView, 'settings'],
+  [/^#\/system$/, systemView, 'system'],
 ];
 
 const root = document.getElementById('app');
@@ -37,7 +41,7 @@ async function render() {
     a.classList.toggle('active', match && a.dataset.nav === match[2]));
 
   if (!match) {
-    container.replaceChildren(h('h1', {}, 'Not found'), h('a', { href: '#/' }, 'Back to arrivals'));
+    container.replaceChildren(h('h1', {}, 'Not found'), h('a', { href: '#/' }, 'Back to Today'));
     return;
   }
   const [m, view] = match;
@@ -49,7 +53,7 @@ async function render() {
     console.error(err);
     container.replaceChildren(
       h('div', { class: 'card notice warn' }, h('strong', {}, 'Could not load this page. '), err.message ?? String(err)),
-      h('a', { href: '#/' }, 'Back to arrivals'));
+      h('a', { href: '#/' }, 'Back to Today'));
   }
 }
 
@@ -59,6 +63,7 @@ const userMenu = document.getElementById('user-menu');
 
 function renderUser() {
   const me = session.me;
+  document.getElementById('nav-system').hidden = !me?.is_superadmin;
   if (!me) { userMenu.replaceChildren(); return; }
   userMenu.replaceChildren(h('button', {
     class: 'user-btn', type: 'button', title: 'Account',

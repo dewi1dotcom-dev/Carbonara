@@ -1,4 +1,5 @@
 import { PANEL_LABELS } from '../diagram.js';
+import { pdiCard } from './pdi.js';
 import {
   api, append, badge, busy, CONDITION, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   regStatus, showError, spotLabel, STATUS,
@@ -72,6 +73,11 @@ const EVENT_LABELS = {
   restored: 'Restored from Recently deleted',
   test_drive_out: 'Out on test drive',
   test_drive_returned: 'Back from test drive',
+  pdi_order_sent: 'PDI order sent',
+  pdi_booked: 'PDI booked',
+  pdi_booking_cleared: 'PDI date removed',
+  pdi_done: 'PDI done',
+  pdi_cancelled: 'PDI order cancelled',
 };
 
 const FIELD_LABELS = {
@@ -88,6 +94,12 @@ function eventDetail(e) {
   const d = e.data || {};
   switch (e.event_type) {
     case 'placed_in_storage': return `Spot ${d.location_code}`;
+    case 'pdi_order_sent':
+      return [`To ${d.to}`, d.via === 'mail_app' ? 'from e-mail app' : null, d.resent ? 'sent again' : null].filter(Boolean).join(' · ');
+    case 'pdi_booked': {
+      const [day, time] = String(d.pdi_at || '').split(' ');
+      return day ? `${fmtDate(day, false)} ${time || ''}`.trim() : '';
+    }
     case 'test_drive_out':
       return [d.removed?.length && `Taken out: ${d.removed.join(', ')}`, d.added?.length && `Put in: ${d.added.join(', ')}`,
         d.odometer_out != null && fmtKm(d.odometer_out), d.note].filter(Boolean).join(' · ');
@@ -633,7 +645,8 @@ function testDriveBanner(v) {
 }
 
 export async function vehicleView(el, [id]) {
-  const v = await api.get(`/vehicles/${id}`);
+  const [v, pdiData, pdiOpts] = await Promise.all([
+    api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options')]);
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -657,6 +670,7 @@ export async function vehicleView(el, [id]) {
     testDriveBanner(v),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
+    pdiCard(v, pdiData, pdiOpts, rerender),
     registryCard(v, rerender),
     h('section', { class: 'card' },
       h('h2', {}, `Known damage (${v.open_damages.length})`),

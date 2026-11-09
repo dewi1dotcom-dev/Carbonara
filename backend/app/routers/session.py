@@ -100,7 +100,8 @@ def setup(body: SetupIn, request: Request, response: Response, conn=Depends(get_
         staff_id = conn.execute("INSERT INTO staff (name) VALUES (%s) RETURNING id", (body.name.strip(),)).fetchone()["id"]
     else:
         raise HTTPException(422, "Choose your name, or type it in")
-    conn.execute("UPDATE staff SET pin_hash = %s, is_admin = true, last_login_at = now() WHERE id = %s",
+    conn.execute("UPDATE staff SET pin_hash = %s, is_admin = true, is_superadmin = true, last_login_at = now() "
+                 "WHERE id = %s",
                  (auth.hash_pin(body.pin), staff_id))
     _set_cookie(response, auth.new_session(conn, staff_id, request.headers.get("user-agent")))
     log.info("first-time setup: staff %s is administrator", staff_id)

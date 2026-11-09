@@ -13,6 +13,9 @@ formats are Norwegian.
 
 ## Working with the user
 
+- The user's own Carbonara account is **Supern** (super-admin). "Andy" is a different person
+  (a regular admin).
+
 - **Commit and push only when the user says so** ("commit and push"). Never commit on your own.
 - Every change bumps `VERSION` (patch for fixes and small features, minor for larger ones).
   The footer shows version + build time, and the user checks it after redeploying.
@@ -56,7 +59,8 @@ Environment variables (see `.env.example` and `docker-compose.yml`): `POSTGRES_P
 `APP_PORT=8080`, `MAX_UPLOAD_MB=30`, `VEGVESEN_API_KEY`, `VEGVESEN_API_URL`,
 `VEGVESEN_AUTH_HEADER=SVV-Authorization`, `VEGVESEN_AUTH_SCHEME=Apikey`,
 `VEGVESEN_SYNC_DAYS=7`, `TRASH_DAYS=30`, `RETENTION_YEARS=5`, `PRIVACY_COMPANY=Moss AutoCenter`,
-`PRIVACY_CONTACT=` (shown to test drive customers).
+`PRIVACY_CONTACT=` (shown to test drive customers), `SMTP_HOST/PORT/USER/PASSWORD/FROM/SECURITY`
+(outgoing e-mail; empty host = use the staff's own e-mail app).
 
 ## Build
 
@@ -99,6 +103,10 @@ especially calls to `append` / `replaceChildren` (see pitfalls).
 log in with a test account the user has given you (`POST /api/auth/login`, keep the cookie
 via `curl.exe -c/-b`), or ask the user to test in the browser. Never ask for a real staff
 member's PIN.
+- The user created a staff account **"Claude"** (staff id 5, admin) for these checks. The PIN
+  was given in chat; never write it into the repo. If it doesn't work, ask the user.
+- Use a cookie jar in the scratchpad. After testing a wrong PIN, log in correctly once to
+  reset the failure counter.
 
 ```powershell
 Invoke-RestMethod http://192.168.10.45:8080/api/version      # {version, build_time}
@@ -136,11 +144,15 @@ backend/
                         plate parsing, recognize_all
   app/photostore.py     original + 1600px + 400px JPEG
   app/sync_worker.py    registry re-sync loop + housekeeping() once every 24 h
-  app/routers/          vehicles.py, inspections.py, vin.py, admin.py, testdrives.py
+  app/mailer.py         SMTP sending (PDI orders)
+  app/auth.py           PIN login, sessions, require_staff / require_admin
+  app/routers/          vehicles.py, inspections.py, vin.py, admin.py, testdrives.py, session.py (login),
+                        pdi.py, dashboard.py, system.py (super-admin settings)
   migrations/           001…008 (see below)
 frontend/               no build step; plain ES modules
   index.html, css/app.css, js/app.js (hash router), js/ui.js (helpers), js/diagram.js
-  js/views/             dashboard, intake, inspection, vehicles, storage, testdrive, settings
+  js/views/             today (start page), dashboard (= arrivals list), intake, inspection, vehicles,
+                        pdi (card on vehicle page), storage, testdrive, login, settings
 ```
 
 Migrations: `001_initial`, `002_vegvesen_registry`, `003_registry_confirm` (kept_values,
@@ -275,6 +287,60 @@ warning offers "Use this VIN".
 - **Access log:** `test_drive_access_log` records opening a licence photo in full (not
   thumbnails) and "Delete now". It's shown via "Access log" on returned drives.
 
+**PDI orders (0.12.0)** (`routers/pdi.py`, `views/pdi.js`, `mailer.py`, migration 011):
+- New cars get a PDI (Pre Delivery Inspection) at **RBV – Rygge Bilverksted**, a separate firm
+  in the same building. The salesperson registers what the customer ordered on the car's
+  **PDI order** card:
+  - items from the list, some with a choice (floor mats: Gummi/Tekstil)
+  - "Other" free text
+  - winter tyres: none / in stock / ordered by sales (+ expected date) / RBV orders (+ tyre
+    company)
+- **Status:** draft → sent → booked (`pdi_at`) → done, or cancelled. There is one open order
+  per car. Editing after sending shows "changed since sent".
+- **E-mail to RBV:** plain text in Norwegian (`compose()`), with car info and the order.
+  - Sent by SMTP if `SMTP_*` is set (it isn't yet).
+  - Otherwise via **"Open in e-mail app"** (mailto) plus a "did you send it?" confirmation;
+    `sent_via = mail_app`.
+- **Recipients, items and tyre companies** are editable lists in Settings (`pdi_lists`;
+  admins edit). **No e-mail addresses are built into code or migrations** (the user's rule).
+  RBV's address and the user's test address are added in Settings. During testing the
+  test address is the default; switch to RBV when going live.
+- **RBV's reply** (date/time) is entered **manually** by staff ("Enter PDI date"). RBV can't
+  reach the server (local network; the user is unsure whether the companies' networks are
+  connected). Automatic reply reading (IMAP) or a booking link are possible later.
+- **Reminders are on the dashboard only** (the user's choice): "PDI tomorrow – make the car
+  ready".
+
+**System page & super-admin (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`,
+`views/system.js`, migration 012):
+- **What can be changed:** server settings, edited at `#/system` (super-admins only; the nav
+  link is hidden for others). This covers the SVV API key/URL/sync days, SMTP, the privacy
+  notice company/contact, and retention days/years.
+- **Where a value comes from:** `settings.<name>` = the value saved in `app_settings` (DB),
+  else the env var `NAME`, else the default.
+  - Cached for 20 s per process, so the worker picks changes up too.
+  - Always read settings at call time; never copy them into module constants.
+- **To add a setting:** add one `Setting(...)` line to `SETTINGS`, then use `settings.<name>`.
+- **Secrets** (`secret=True`) are write-only: the API only returns the last 4 characters. The
+  log records who changed which key, never the value.
+- **Super-admin:**
+  - `staff.is_superadmin`. The person doing first-time setup becomes super-admin. Migration
+    012 made **Supern** (the user's own account) super-admin, with a fallback to the
+    lowest-id admin. **Andy is a regular admin.**
+  - Only super-admins can grant or remove super-admin, or change another super-admin. A
+    super-admin is always an admin.
+- **The SVV key can now live in the DB** (entered on the System page) instead of the env.
+  It still must never be committed to git.
+
+**Today board (0.12.0)** (`routers/dashboard.py`, `views/today.js`): the start page `#/`.
+- Today/tomorrow: PDI tomorrow (warn), PDI today, PDI date passed, out on test drive,
+  arrivals in progress.
+- Needs attention: PDI orders waiting for reply, unsent drafts, EU-kontroll ≤ 60 days,
+  service ≤ 31 days, SVV differences.
+- Then upcoming PDIs and number tiles.
+- The old arrivals start page moved to `#/arrivals` (`arrivalsView` in `dashboard.js`).
+- One `/api/dashboard` call. Attention lists only cover cars that aren't off site.
+
 **finn.no:** crawling finn.no is prohibited (robots.txt and terms). Staff paste the ad link or
 FINN code (option C). The validator extracts 6–12 digits, and the link is
 `https://www.finn.no/mobility/item/{code}`. The dealer's FINN org id is `1324692627`. A future
@@ -350,6 +416,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.12.0 | **PDI orders** to RBV (items, tyres, editable lists, e-mail via SMTP or e-mail app, manual booking date); **Today board** as start page; Arrivals moved to `#/arrivals`; **System page** (super-admin) to change server settings incl. SVV key and SMTP; no built-in e-mail addresses |
 | 0.11.0 | **Login** with personal PIN (first-time setup → admin; admins manage PINs); all API behind login; test drive privacy notice (NO) + "customer informed" checkbox; licence access log; `PRIVACY_COMPANY`/`PRIVACY_CONTACT` env |
 
 **Next / ideas (not started):**

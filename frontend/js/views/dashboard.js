@@ -12,7 +12,7 @@ function inspectionCard(i) {
     h('div', { class: 'list-meta' }, meta.filter(Boolean).join(' · ')));
 }
 
-export async function dashboardView(el) {
+export async function arrivalsView(el) {
   const [open, done] = await Promise.all([
     api.get('/inspections?status=in_progress'),
     api.get('/inspections?status=completed&limit=10'),

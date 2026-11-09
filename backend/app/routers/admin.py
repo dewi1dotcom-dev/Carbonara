@@ -1,6 +1,6 @@
 """Reference data: staff and storage locations (spots and their sub-zones)."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from psycopg import errors
 
 from ..auth import PIN_MAX, PIN_MIN, STAFF_PUBLIC, hash_pin, require_admin, valid_pin
@@ -31,9 +31,20 @@ def create_staff(body: StaffIn, conn=Depends(get_conn), _admin=Depends(require_a
 
 @router.patch("/staff/{staff_id}")
 def patch_staff(staff_id: int, body: StaffPatch, conn=Depends(get_conn), admin=Depends(require_admin)):
-    fields = patch_fields(body, ("name", "active", "is_admin"))
-    if staff_id == admin["id"] and (fields.get("active") is False or fields.get("is_admin") is False):
-        raise bad_request("You can't deactivate yourself or remove your own administrator rights")
+    fields = patch_fields(body, ("name", "active", "is_admin", "is_superadmin"))
+    if "is_superadmin" in fields and not admin["is_superadmin"]:
+        raise HTTPException(403, "Only a super-admin can give or remove super-admin")
+    target = conn.execute("SELECT is_superadmin FROM staff WHERE id = %s", (staff_id,)).fetchone()
+    if target and target["is_superadmin"] and not admin["is_superadmin"] and (
+            fields.get("is_admin") is False or fields.get("active") is False):
+        raise HTTPException(403, "Only a super-admin can change another super-admin")
+    if fields.get("is_superadmin"):
+        fields["is_admin"] = True  # a super-admin is always an admin too
+    if staff_id == admin["id"] and (fields.get("active") is False or fields.get("is_admin") is False
+                                    or fields.get("is_superadmin") is False):
+        raise bad_request("You can't deactivate yourself or remove your own rights")
+    if fields.get("is_admin") is False:
+        fields["is_superadmin"] = False
     if not update_row(conn, "staff", staff_id, fields):
         raise not_found("Staff member")
     if fields.get("active") is False:

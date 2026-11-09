@@ -5,8 +5,80 @@ export async function settingsView(el) {
   const locBox = h('div');
   const registryBox = h('div');
   const retentionBox = h('div');
-  el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), staffBox, locBox, registryBox, retentionBox);
-  await Promise.all([renderStaff(), renderLocations(), renderRegistry(), renderRetention()]);
+  const pdiBox = h('div');
+  el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), staffBox, locBox, pdiBox, registryBox, retentionBox);
+  await Promise.all([renderStaff(), renderLocations(), renderPdiLists(), renderRegistry(), renderRetention()]);
+
+  // PDI order lists: items the customer can order, tyre companies, e-mail recipients.
+  async function renderPdiLists() {
+    const rows = await api.get('/pdi/lists');
+    const admin = !!session.me?.is_admin;
+    const patch = async (r, body) => {
+      try { await api.patch(`/pdi/lists/${r.id}`, body); await renderPdiLists(); } catch (e) { showError(e); }
+    };
+    const section = (kind, title, help, describe, addForm) => {
+      const list = rows.filter((r) => r.kind === kind);
+      return h('div', {},
+        h('h3', {}, title),
+        h('p', { class: 'muted small' }, help),
+        h('ul', { class: 'plain rows list-edit' }, list.map((r) => h('li', { class: r.active ? '' : 'inactive' },
+          h('span', {}, describe(r), r.active ? '' : ' (removed)'),
+          admin ? h('span', { class: 'row-actions' },
+            kind === 'recipient' && r.active && !r.is_default
+              ? h('button', { class: 'link', type: 'button', onClick: () => patch(r, { is_default: true }) }, 'Make default') : null,
+            h('button', {
+              class: 'link', type: 'button',
+              onClick: () => {
+                const label = prompt('Name', r.label);
+                if (label == null || !label.trim()) return;
+                const body = { label };
+                if (kind === 'recipient') {
+                  const email = prompt('E-mail address', r.email);
+                  if (email == null) return;
+                  body.email = email;
+                }
+                if (kind === 'item') {
+                  const choices = prompt('Choices, separated by commas (empty = none)', (r.choices || []).join(', '));
+                  if (choices == null) return;
+                  body.choices = choices.split(',').map((c) => c.trim()).filter(Boolean);
+                }
+                patch(r, body);
+              },
+            }, 'Edit'),
+            h('button', { class: 'link', type: 'button', onClick: () => patch(r, { active: !r.active }) }, r.active ? 'Remove' : 'Restore'))
+            : null))),
+        admin ? addForm : null);
+    };
+    const addForm = (kind, inputs, toBody) => {
+      const btn = h('button', { class: 'btn primary', type: 'submit' }, 'Add');
+      const f = h('form', { class: 'inline-form wrap' }, ...inputs, btn);
+      f.addEventListener('submit', (e) => {
+        e.preventDefault();
+        busy(btn, async () => { await api.post('/pdi/lists', { kind, ...toBody() }); await renderPdiLists(); });
+      });
+      return f;
+    };
+    const itemName = h('input', { type: 'text', placeholder: 'Item, e.g. Takboks', required: true, maxlength: 80 });
+    const itemChoices = h('input', { type: 'text', placeholder: 'Choices (optional), e.g. Gummi, Tekstil', maxlength: 200 });
+    const tyreName = h('input', { type: 'text', placeholder: 'Tyre company', required: true, maxlength: 80 });
+    const recName = h('input', { type: 'text', placeholder: 'Name, e.g. RBV', required: true, maxlength: 80 });
+    const recEmail = h('input', { type: 'email', placeholder: 'E-mail address', required: true, maxlength: 200 });
+
+    pdiBox.replaceChildren(h('section', { class: 'card' },
+      h('h2', {}, 'PDI order lists'),
+      admin ? null : h('p', { class: 'muted small' }, 'Only an administrator can change these lists.'),
+      section('item', 'Items the customer can order',
+        'Shown as tick boxes on the PDI order. Names go to the workshop as written (Norwegian is fine).',
+        (r) => [r.label, r.choices?.length ? h('span', { class: 'muted small' }, ` (${r.choices.join(' / ')})`) : null],
+        addForm('item', [itemName, itemChoices], () => ({
+          label: itemName.value, choices: itemChoices.value.split(',').map((c) => c.trim()).filter(Boolean),
+        }))),
+      section('tyre_company', 'Tyre companies', 'Who the workshop orders winter tyres from.',
+        (r) => r.label, addForm('tyre_company', [tyreName], () => ({ label: tyreName.value }))),
+      section('recipient', 'E-mail recipients', 'Who PDI orders can be sent to. The default is preselected when sending.',
+        (r) => [r.label, h('span', { class: 'muted small' }, ` – ${r.email}`), r.is_default ? h('span', { class: 'badge' }, ' Default') : null],
+        addForm('recipient', [recName, recEmail], () => ({ label: recName.value, email: recEmail.value })))));
+  }
 
   async function renderRetention() {
     const r = await api.get('/retention');
@@ -21,8 +93,9 @@ export async function settingsView(el) {
           : 'Automatic deletion of old cars is turned off.'),
         h('li', {}, `In Recently deleted now: ${r.in_trash}`
           + (r.retention_years > 0 ? ` · Due for automatic deletion within 30 days: ${r.due_within_30_days}` : ''))),
-      h('p', { class: 'muted small' },
-        'Change the periods with TRASH_DAYS and RETENTION_YEARS in the server’s .env file (RETENTION_YEARS=0 turns automatic deletion off).')));
+      h('p', { class: 'muted small' }, session.me?.is_superadmin
+        ? ['Change the periods on the ', h('a', { href: '#/system' }, 'System'), ' page → Data retention.']
+        : 'A super-admin can change the periods on the System page.')));
   }
 
   async function renderRegistry() {
@@ -33,12 +106,10 @@ export async function settingsView(el) {
         ? h('p', {},
           `API key configured${s.key_hint ? ` (ending in …${s.key_hint})` : ''}. `,
           `Registered vehicles are re-synced every ${s.sync_days} days.`)
-        : h('div', { class: 'notice warn' },
-          'No API key configured. Set VEGVESEN_API_KEY in the server’s .env file (or the Portainer stack’s ',
-          'environment variables) and redeploy.'),
-      h('p', { class: 'muted small' },
-        'To replace the key: change VEGVESEN_API_KEY on the server and redeploy (docker compose up -d, or ',
-        '“Update the stack” in Portainer). No rebuild or code change needed.'),
+        : h('div', { class: 'notice warn' }, 'No API key configured yet.'),
+      h('p', { class: 'muted small' }, session.me?.is_superadmin
+        ? ['To add or replace the key: ', h('a', { href: '#/system' }, 'System'), ' → Statens vegvesen → API key.']
+        : 'A super-admin can add or replace the key on the System page.'),
       h('dl', { class: 'kv' },
         [['Synced OK', s.ok], ['Waiting', s.pending], ['Not found in registry', s.not_found], ['Errors', s.error],
           ['Due for sync now', s.due]].map(([k, val]) => [h('dt', {}, k), h('dd', {}, String(val))])),
@@ -68,6 +139,13 @@ export async function settingsView(el) {
       h('button', { class: 'link', type: 'button', onClick: () => pinDialog(s) }, s.has_pin ? 'Reset PIN' : 'Set PIN'),
       s.id === me.id ? null : h('button', { class: 'link', type: 'button', onClick: () => patch(s, { is_admin: !s.is_admin }) },
         s.is_admin ? 'Remove admin' : 'Make admin'),
+      s.id === me.id || !me.is_superadmin ? null : h('button', {
+        class: 'link', type: 'button',
+        onClick: () => {
+          if (!s.is_superadmin && !confirm(`Make ${s.name} super-admin? They can change all system settings (API key, e-mail server…).`)) return;
+          patch(s, { is_superadmin: !s.is_superadmin });
+        },
+      }, s.is_superadmin ? 'Remove super-admin' : 'Make super-admin'),
       s.id === me.id ? null : h('button', { class: 'link', type: 'button', onClick: () => patch(s, { active: !s.active }) },
         s.active ? 'Deactivate' : 'Activate')));
 
@@ -78,7 +156,7 @@ export async function settingsView(el) {
         : 'Only an administrator can add staff or change PINs.'),
       h('ul', { class: 'plain rows' }, staff.map((s) => h('li', { class: s.active ? '' : 'inactive' },
         h('span', {}, s.name, s.id === me?.id ? ' (you)' : '', s.active ? '' : ' (inactive)', ' ',
-          s.is_admin ? h('span', { class: 'badge' }, 'Admin') : null, ' ',
+          s.is_superadmin ? h('span', { class: 'badge good' }, 'Super-admin') : s.is_admin ? h('span', { class: 'badge' }, 'Admin') : null, ' ',
           s.active && !s.has_pin ? h('span', { class: 'badge warn' }, 'No PIN — can’t log in') : null,
           s.last_login_at ? h('span', { class: 'muted small block' }, `Last login ${fmtDate(s.last_login_at)}`) : null),
         actions(s)))),

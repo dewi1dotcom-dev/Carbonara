@@ -1,4 +1,8 @@
+import logging
 import os
+import threading
+import time
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -11,12 +15,91 @@ def _read_text(path: Path, default: str) -> str:
         return default
 
 
+log = logging.getLogger("carbonara.config")
+
+
+# --------------------------------------------------------------------------- #
+# Settings that a super-admin can change on the System page. Each one is read
+# from (1) the value saved in the database (app_settings), else (2) the server
+# environment (.env / Portainer stack), else (3) the default here.
+# To add a setting later: add one Setting(...) line and use settings.<name>.
+# --------------------------------------------------------------------------- #
+
+@dataclass(frozen=True)
+class Setting:
+    name: str            # attribute: settings.<name>; env var is NAME upper-cased
+    label: str
+    group: str
+    type: type = str     # str | int | float
+    default: object = ""
+    secret: bool = False  # never sent to the browser (only the last 4 characters)
+    help: str = ""
+    choices: tuple = ()
+    min: float | None = None
+    max: float | None = None
+
+    @property
+    def env(self) -> str:
+        return self.name.upper()
+
+
+SETTINGS: tuple[Setting, ...] = (
+    # Statens vegvesen – "Enkeltoppslag kjøretøydata"
+    Setting("vegvesen_api_key", "API key", "Statens vegvesen", secret=True,
+            help="Key for 'API for tekniske kjøretøyopplysninger' (apply at vegvesen.no)."),
+    Setting("vegvesen_sync_days", "Re-sync registered cars every (days)", "Statens vegvesen", int, 7, min=1, max=365),
+    Setting("vegvesen_api_url", "API address", "Statens vegvesen",
+            default="https://akfell-datautlevering.atlas.vegvesen.no/enkeltoppslag/kjoretoydata",
+            help="Only change if Statens vegvesen changes their API."),
+    Setting("vegvesen_auth_header", "Auth header name", "Statens vegvesen", default="SVV-Authorization"),
+    Setting("vegvesen_auth_scheme", "Auth scheme", "Statens vegvesen", default="Apikey"),
+    Setting("vegvesen_call_interval_s", "Pause between API calls (seconds)", "Statens vegvesen", float, 1.5, min=0, max=60),
+    # Outgoing e-mail
+    Setting("smtp_host", "Mail server (SMTP host)", "E-mail",
+            help="Empty = not set up; staff send from their own e-mail app. Gmail: smtp.gmail.com"),
+    Setting("smtp_port", "Port", "E-mail", int, 587, min=1, max=65535),
+    Setting("smtp_security", "Security", "E-mail", default="starttls", choices=("starttls", "ssl", "none"),
+            help="starttls for port 587, ssl for port 465."),
+    Setting("smtp_user", "Username", "E-mail"),
+    Setting("smtp_password", "Password", "E-mail", secret=True, help="Gmail: an app password, not the normal password."),
+    Setting("smtp_from", "Sender", "E-mail", help='e.g. Moss AutoCenter <post@example.no>'),
+    # Privacy notice (test drives)
+    Setting("privacy_company", "Company name", "Privacy notice", default="Moss AutoCenter"),
+    Setting("privacy_contact", "Contact for customers", "Privacy notice",
+            help="E-mail and/or phone shown to test drive customers."),
+    # Data retention
+    Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
+            help="Recently deleted cars and returned test drive customers."),
+    Setting("retention_years", "Delete inactive off-site cars after (years)", "Data retention", int, 5, min=0, max=100,
+            help="0 = never."),
+)
+BY_NAME = {s.name: s for s in SETTINGS}
+CACHE_SECONDS = 20
+
+
+def convert(s: Setting, raw):
+    """Text -> the setting's type; raises ValueError with a readable message."""
+    if s.type is str:
+        value = str(raw).strip()
+        if s.choices and value not in s.choices:
+            raise ValueError(f"{s.label}: choose one of {', '.join(s.choices)}")
+        return value
+    try:
+        value = s.type(str(raw).strip().replace(",", "."))
+    except ValueError:
+        raise ValueError(f"{s.label}: not a number")
+    if (s.min is not None and value < s.min) or (s.max is not None and value > s.max):
+        raise ValueError(f"{s.label}: must be between {s.min:g} and {s.max:g}")
+    return value
+
+
 class Settings:
     # Bump VERSION (repo root) for each release; BUILD_TIME is stamped by the
     # Dockerfile so two builds of the same version can be told apart.
     version = _read_text(ROOT / "VERSION", "dev")
     build_time = _read_text(ROOT / "BUILD_TIME", "")
 
+    # Fixed at start (environment only).
     database_url = os.environ.get(
         "DATABASE_URL", "postgresql://carbonara:carbonara@localhost:5432/carbonara"
     )
@@ -25,31 +108,47 @@ class Settings:
     migrations_dir = Path(__file__).resolve().parents[1] / "migrations"
     max_upload_bytes = int(os.environ.get("MAX_UPLOAD_MB", "30")) * 1024 * 1024
 
-    # Statens vegvesen – "Enkeltoppslag kjøretøydata". Used only for vehicles
-    # that sales has marked as registered. URL/header are configurable in case
-    # Vegvesen changes them.
-    vegvesen_api_key = os.environ.get("VEGVESEN_API_KEY", "").strip()
-    vegvesen_api_url = os.environ.get(
-        "VEGVESEN_API_URL",
-        "https://akfell-datautlevering.atlas.vegvesen.no/enkeltoppslag/kjoretoydata",
-    )
-    vegvesen_auth_header = os.environ.get("VEGVESEN_AUTH_HEADER", "SVV-Authorization")
-    vegvesen_auth_scheme = os.environ.get("VEGVESEN_AUTH_SCHEME", "Apikey")
-    # How often registered vehicles are re-synced (EU-kontroll dates, plates, status).
-    vegvesen_sync_days = int(os.environ.get("VEGVESEN_SYNC_DAYS", "7"))
-    # Pause between API calls in the background worker (be nice to the quota).
-    vegvesen_call_interval_s = float(os.environ.get("VEGVESEN_CALL_INTERVAL_S", "1.5"))
+    def __init__(self):
+        self._db: dict[str, str] = {}
+        self._loaded = 0.0
+        self._lock = threading.Lock()
 
-    # Data retention. Deleted cars stay in "Recently deleted" for trash_days
-    # before they (and their photos) are removed for good. Cars that are no
-    # longer here (off site) and have had no activity for retention_years are
-    # deleted automatically (via Recently deleted). 0 turns that off.
-    trash_days = int(os.environ.get("TRASH_DAYS", "30"))
-    retention_years = int(os.environ.get("RETENTION_YEARS", "5"))
+    def _saved(self) -> dict[str, str]:
+        """Values saved on the System page, cached for CACHE_SECONDS (API and worker)."""
+        if time.monotonic() - self._loaded > CACHE_SECONDS:
+            with self._lock:
+                if time.monotonic() - self._loaded > CACHE_SECONDS:
+                    try:
+                        import psycopg
 
-    # Shown on the privacy notice test drive customers get (GDPR art. 13).
-    privacy_company = os.environ.get("PRIVACY_COMPANY", "Moss AutoCenter").strip()
-    privacy_contact = os.environ.get("PRIVACY_CONTACT", "").strip()  # e.g. "post@… / 69 xx xx xx"
+                        with psycopg.connect(self.database_url, connect_timeout=3) as conn:
+                            self._db = dict(conn.execute("SELECT key, value FROM app_settings").fetchall())
+                    except Exception as exc:  # table not there yet / DB down: keep what we had
+                        log.debug("app_settings not read: %s", exc)
+                    self._loaded = time.monotonic()
+        return self._db
+
+    def reload(self) -> None:
+        self._loaded = 0.0
+
+    def source(self, name: str) -> str:
+        s = BY_NAME[name]
+        if name in self._saved():
+            return "saved"
+        return "environment" if os.environ.get(s.env, "").strip() != "" else "default"
+
+    def __getattr__(self, name: str):
+        s = BY_NAME.get(name)
+        if s is None:
+            raise AttributeError(name)
+        saved = self._saved()
+        for raw in (saved.get(name), os.environ.get(s.env)):
+            if raw is not None and str(raw).strip() != "":
+                try:
+                    return convert(s, raw)
+                except ValueError:
+                    log.warning("ignoring invalid value for %s", s.env)
+        return s.default
 
 
 settings = Settings()

@@ -11,7 +11,7 @@ from .config import settings
 from .db import pool
 from .migrate import run_migrations
 from .auth import require_staff
-from .routers import admin, inspections, session, testdrives, vehicles, vin
+from .routers import admin, dashboard, inspections, pdi, session, system, testdrives, vehicles, vin
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -30,7 +30,7 @@ app = FastAPI(title="Carbonara", version=settings.version, lifespan=lifespan)
 # Everything under /api needs a logged-in staff member, except login itself
 # and health/version (used for monitoring and the footer).
 app.include_router(session.router, prefix="/api")
-for module in (admin, vin, inspections, vehicles, testdrives):
+for module in (admin, vin, inspections, vehicles, testdrives, pdi, dashboard, system):
     app.include_router(module.router, prefix="/api", dependencies=[Depends(require_staff)])
 
 
