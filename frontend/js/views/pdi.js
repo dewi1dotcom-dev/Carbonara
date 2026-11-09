@@ -1,6 +1,6 @@
 // PDI order card on the vehicle page: what the customer ordered, sent to the
 // workshop (RBV) by e-mail; the workshop's date/time is entered by staff.
-import { api, busy, fmtDate, h, openDialog, showError, toast } from '../ui.js';
+import { api, append, busy, fmtDate, h, openDialog, showError, toast } from '../ui.js';
 
 const STATUS_TEXT = { draft: 'Not sent', sent: 'Sent – waiting for date', booked: 'PDI booked', done: 'PDI done', cancelled: 'Cancelled' };
 const STATUS_CLS = { draft: 'warn', sent: 'warn', booked: 'good', done: 'good', cancelled: '' };
@@ -19,7 +19,7 @@ export function pdiCard(v, data, opts, rerender) {
   const o = data.current;
   const card = h('section', { class: 'card' }, h('h2', {}, 'PDI order'));
   if (!o) {
-    card.append(
+    append(card,
       h('p', { class: v.condition === 'new' ? '' : 'muted' }, v.condition === 'new'
         ? 'New car – no PDI order yet. Register what the customer ordered and send it to the workshop.'
         : 'No PDI order.'),
@@ -28,7 +28,7 @@ export function pdiCard(v, data, opts, rerender) {
           'Create PDI order')));
   } else {
     const lines = itemsList(o, opts);
-    card.append(
+    append(card, // skips the null parts (no note, not changed…)
       h('div', { class: 'pdi-status' },
         h('span', { class: `badge ${STATUS_CLS[o.status]}` }, STATUS_TEXT[o.status]),
         o.status === 'booked' ? h('strong', {}, fmtDate(o.pdi_at)) : null,

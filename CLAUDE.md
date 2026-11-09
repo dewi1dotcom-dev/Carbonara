@@ -390,7 +390,9 @@ ORM. Match the style of the surrounding code. Comments explain *why*, not what.
   (badges, `fmtDate`, `duplicateNotice`, `finnLink`, `spotLabel`…).
 - **Pitfall:** the native `append()` / `replaceChildren()` print arrays and `null` as text
   ("null[object HTMLElement]"). Use `el.replaceChildren(...list.filter(Boolean))` or the
-  `append()` helper from `ui.js`. This bug has shipped three times.
+  `append()` helper from `ui.js`. This bug has shipped **four** times (last: 0.12.1
+  System page). **Before handing over a new view, grep it for `.append(` and
+  `.replaceChildren(`, and check that no argument can be an array or null.**
 - `ul.rows li` is a flex row (label left, buttons right). Sentences mixing text and links
   inside it must be wrapped in one `<span>`, or they split into columns (0.10.3 fix).
 - A card that is built once must redraw its dependent parts when inputs change, using a slot
@@ -427,6 +429,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.12.2 | Fix: System page and PDI card printed "[object HTMLElement]" / "null" (native `append` again) |
 | 0.12.1 | Storage spots can be renamed and deleted (cars moved to another spot first) |
 | 0.12.0 | **PDI orders** to RBV (items, tyres, editable lists, e-mail via SMTP or e-mail app, manual booking date); **Today board** as start page; Arrivals moved to `#/arrivals`; **System page** (super-admin) to change server settings incl. SVV key and SMTP; no built-in e-mail addresses |
 | 0.11.0 | **Login** with personal PIN (first-time setup → admin; admins manage PINs); all API behind login; test drive privacy notice (NO) + "customer informed" checkbox; licence access log; `PRIVACY_COMPANY`/`PRIVACY_CONTACT` env |

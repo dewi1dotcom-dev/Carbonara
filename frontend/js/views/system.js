@@ -1,7 +1,7 @@
 // System settings (super-admins only): change server settings without
 // touching Portainer. A value saved here overrides the server environment;
 // "Reset" goes back to it. Secrets are write-only.
-import { api, busy, fmtDate, h, session, showError, toast } from '../ui.js';
+import { api, append, busy, fmtDate, h, session, showError, toast } from '../ui.js';
 
 const SOURCE = {
   saved: ['good', 'Set here'],
@@ -24,7 +24,7 @@ export async function systemView(el) {
     } catch (e) { showError(e); }
   };
 
-  el.append(
+  append(el, // append(): the DOM's own append() would print the array of sections as text
     h('div', { class: 'page-head' }, h('h1', {}, 'System')),
     h('p', { class: 'muted' },
       'Server settings. A value saved here takes effect within half a minute and overrides the server environment (.env / Portainer). ',
