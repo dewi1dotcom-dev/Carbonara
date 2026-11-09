@@ -1,5 +1,6 @@
 // Login with a personal PIN. On first start (nobody has a PIN yet) the same
 // screen sets up the first administrator.
+import { lang, setLang } from '../i18n.js';
 import { api, busy, h, setInspectorId, showError } from '../ui.js';
 
 const LAST_USER_KEY = 'carbonara.lastLogin';
@@ -38,7 +39,12 @@ export function loginView(el, state, onDone) {
     setup ? h('div', { class: 'field' }, h('label', { for: 'login-pin2' }, 'Repeat the PIN'), pin2) : null,
     !setup && !state.staff.length
       ? h('p', { class: 'notice warn' }, 'Nobody has a PIN yet. Ask an administrator.') : null,
-    h('div', { class: 'actions' }, submit));
+    h('div', { class: 'actions' }, submit),
+    // Before anyone is logged in, the language follows the device; switchable here.
+    h('p', { class: 'small muted lang-switch', translate: 'no' },
+      [['en', 'English'], ['no', 'Norsk']].map(([code, label]) => (code === lang
+        ? h('strong', {}, label)
+        : h('button', { class: 'link', type: 'button', onClick: () => { setLang(code); location.reload(); } }, label)))));
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();

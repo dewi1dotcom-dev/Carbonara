@@ -128,11 +128,11 @@ def compose(order: dict) -> tuple[str, str]:
     """The e-mail to the workshop (Norwegian)."""
     car = " ".join(str(p) for p in (order["make"], order["model"], order["model_year"]) if p) or "Bil"
     reg = order["registration_number"]
-    subject = f"PDI-bestilling – {car} – {order['vin']}" + (f" ({reg})" if reg else "")
+    subject = f"Bestilling av nybilklargjøring – {car} – {order['vin']}" + (f" ({reg})" if reg else "")
     lines = [
         "Hei,",
         "",
-        f"{settings.privacy_company} bestiller følgende for bilen under.",
+        f"{settings.privacy_company} bestiller nybilklargjøring med følgende for bilen under.",
         "",
         "BIL",
         f"  {car}",
@@ -162,7 +162,7 @@ def compose(order: dict) -> tuple[str, str]:
         lines += ["", "MERKNAD", *[f"  {line}" for line in order["note"].splitlines()]]
     lines += [
         "",
-        "Vennligst svar på denne e-posten med dato og klokkeslett for PDI.",
+        "Vennligst svar på denne e-posten med dato og klokkeslett for nybilklargjøringen.",
         "",
         "Med vennlig hilsen",
         order.get("sender_name") or settings.privacy_company,

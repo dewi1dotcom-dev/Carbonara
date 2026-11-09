@@ -1,0 +1,626 @@
+// Language: English or Norwegian (bokmål), chosen per user.
+//
+// The code is written in English. A translator walks every text node and the
+// placeholder/title/aria-label attributes as they appear in the page, and
+// replaces them with the Norwegian text from NO (exact match) or NO_PATTERNS
+// (texts with numbers/names in them). confirm()/prompt() go through it too.
+// A few texts Carbonara writes in Norwegian on purpose (storage checklist,
+// tyre options, battery results) are translated the other way, via EN, when
+// English is chosen.
+//
+// Not translated: anything inside translate="no" (Norwegian documents: PDI
+// e-mail preview, privacy notice, storage report), .mono (VINs, plates,
+// codes), input values, and data from Statens vegvesen / staff.
+//
+// Adding UI text: write it in English, then add the Norwegian to NO (or a
+// pattern to NO_PATTERNS if it contains a number or name). Check both languages.
+
+const KEY = 'carbonara.lang';
+
+export function detectLang() {
+  try {
+    const saved = localStorage.getItem(KEY);
+    if (saved === 'no' || saved === 'en') return saved;
+  } catch { /* private mode */ }
+  return /^(nb|nn|no)\b/i.test(navigator.language || '') ? 'no' : 'en';
+}
+
+export let lang = detectLang();
+
+export function setLang(l) {
+  lang = l === 'no' ? 'no' : 'en';
+  try { localStorage.setItem(KEY, lang); } catch { /* private mode */ }
+  document.documentElement.lang = lang === 'no' ? 'nb' : 'en';
+}
+
+/* eslint-disable quote-props */
+const NO = {
+  // ---- menu, general
+  'Today': 'I dag', 'Arrivals': 'Ankomster', 'Vehicles': 'Biler', 'Storage': 'Lager', 'Test drive': 'Prøvekjøring',
+  'Settings': 'Innstillinger', 'System': 'System', 'Account': 'Konto', 'Log in': 'Logg inn', 'Log out': 'Logg ut',
+  'Save': 'Lagre', 'Cancel': 'Avbryt', 'Close': 'Lukk', 'Delete': 'Slett', 'Edit': 'Rediger', 'Add': 'Legg til',
+  'Remove': 'Fjern', 'Rename': 'Gi nytt navn', 'Restore': 'Gjenopprett', 'Reset': 'Tilbakestill', 'Undo': 'Angre',
+  'Use': 'Bruk', 'Move': 'Flytt', 'Retake': 'Ta på nytt', 'Activate': 'Aktiver', 'Deactivate': 'Deaktiver',
+  'Optional': 'Valgfritt', 'Other': 'Annet', 'Other: ': 'Annet: ', 'Default': 'Standard', 'Empty': 'Tom', 'Full': 'Full', 'Copied': 'Kopiert',
+  'Date': 'Dato', 'Time': 'Klokkeslett', 'From': 'Fra', 'To': 'Til', 'Name': 'Navn', 'Code': 'Kode', 'Zone': 'Sone',
+  'Description': 'Beskrivelse', 'Capacity': 'Kapasitet', 'Location': 'Plassering', 'Note': 'Merknad', 'Notes': 'Merknader',
+  'Remarks': 'Anmerkninger', 'Field': 'Felt', 'History': 'Historikk', 'Errors': 'Feil', 'Waiting': 'Venter',
+  'Synced': 'Synkronisert', 'Inactive': 'Inaktiv', 'Valid': 'Gyldig', 'Calendar': 'Kalender', 'Open calendar': 'Åpne kalender',
+  'Loading…': 'Laster…', 'Not found': 'Ikke funnet', 'Back to Today': 'Tilbake til I dag', 'Try again': 'Prøv igjen',
+  'Could not load this page. ': 'Kunne ikke laste siden. ', 'Cannot reach the server. ': 'Får ikke kontakt med serveren. ',
+  'Cannot reach the server. Check the network connection.': 'Får ikke kontakt med serveren. Sjekk nettverkstilkoblingen.',
+  'Admin': 'Admin', 'Administrator': 'Administrator', 'System admin': 'Systemadministrator', 'Staff': 'Ansatt',
+  'Customer': 'Kunde', 'Car': 'Bil', 'Cars': 'Biler', 'Action': 'Tiltak', 'Extra': 'Ekstra', 'Type': 'Type',
+  'Unknown vehicle': 'Ukjent bil', 'unknown': 'ukjent', 'Vehicle': 'Kjøretøy', 'Deleted vehicle': 'Slettet bil',
+  '(inactive)': '(inaktiv)', '(removed)': '(fjernet)', '(you)': '(deg)', 'Not set': 'Ikke satt', 'No limit': 'Ingen grense',
+  'no limit': 'ingen grense', 'Not OK': 'Ikke OK', 'OK': 'OK', 'N/A': 'I/A', 'Today:': 'I dag:',
+  // ---- status / pills
+  'In storage': 'På lager', 'Off site': 'Ikke på lager', 'Arrival inspection': 'Mottakskontroll', 'In progress': 'Pågår',
+  'Completed': 'Fullført', 'Cancelled': 'Avbrutt', 'Registered': 'Registrert', 'Not registered': 'Ikke registrert',
+  'Registered · awaiting data': 'Registrert · venter på data', 'Valid ': 'Gyldig ', 'Due today': 'Frist i dag',
+  'Due tomorrow': 'Frist i morgen', 'Service OK': 'Service OK', 'Service due today': 'Service forfaller i dag',
+  'New from factory': 'Ny fra fabrikk', 'Used': 'Brukt', 'New/used': 'Ny/brukt', 'Condition': 'Tilstand',
+  // ---- fuel / vehicle fields
+  'Petrol': 'Bensin', 'Diesel': 'Diesel', 'Hybrid': 'Hybrid', 'Plug-in hybrid': 'Ladbar hybrid', 'Electric': 'Elektrisk',
+  'LPG': 'LPG', 'CNG': 'CNG', 'Hydrogen': 'Hydrogen', 'Make': 'Merke', 'Model': 'Modell', 'Make *': 'Merke *',
+  'Model *': 'Modell *', 'Make / model': 'Merke / modell', 'Model year': 'Årsmodell', 'Variant': 'Variant',
+  'Variant / trim': 'Variant / utstyrsnivå', 'Colour': 'Farge', 'Fuel': 'Drivstoff', 'Fuel type': 'Drivstoff',
+  'Fuel / charge level': 'Drivstoff / ladenivå', 'Registration no.': 'Registreringsnr.', 'Reg. no': 'Reg.nr.',
+  'No reg. no': 'Uten reg.nr.', 'Registration number (if the car has one)': 'Registreringsnummer (hvis bilen har det)',
+  'VIN (chassis number)': 'VIN (understellsnummer)', '17-character VIN': 'VIN på 17 tegn', 'VIN location': 'VIN-plassering',
+  'VIN plate': 'VIN-skilt', 'Odometer (km) *': 'Kilometerstand (km) *', 'Odometer reading': 'Kilometerstand',
+  'Keys received': 'Antall nøkler mottatt', 'Registration': 'Registrering', 'Registration status': 'Registreringsstatus',
+  'EU-kontroll': 'EU-kontroll', 'EU-kontroll: ': 'EU-kontroll: ', 'EU-kontroll due': 'EU-kontroll frist', 'EU-kontroll approved': 'EU-kontroll godkjent',
+  'Last approved': 'Sist godkjent', 'Storage spot': 'Lagerplass', 'Last service': 'Siste service',
+  'Last service date': 'Dato for siste service', 'Km at last service': 'Km ved siste service', 'finn.no code': 'finn.no-kode',
+  'In system since': 'I systemet siden', 'Marked by': 'Markert av', 'Registered in Norway': 'Registrert i Norge',
+  'New or used': 'Ny eller brukt', 'New or used? *': 'Ny eller brukt? *', 'Choose…': 'Velg…', 'Service': 'Service',
+  'Service date': 'Servicedato', 'Odometer at service (km)': 'Kilometerstand ved service (km)',
+  'Odometer at last service (km)': 'Kilometerstand ved siste service (km)', 'Save service': 'Lagre service',
+  'Service done': 'Service utført', 'Service recorded': 'Service registrert', 'Service due': 'Service forfaller',
+  'Leave empty if the service history is unknown; the next service is then estimated from the registration date.':
+    'La stå tomt hvis servicehistorikken er ukjent; neste service beregnes da fra registreringsdatoen.',
+  'New car: no service record needed. The first service is due one year after registration (date from Statens vegvesen).':
+    'Ny bil: ingen servicehistorikk trengs. Første service er ett år etter registrering (dato fra Statens vegvesen).',
+  'Choose new or used (Edit details) to track service': 'Velg ny eller brukt (Rediger detaljer) for å følge opp service',
+  'First service: one year after registration.': 'Første service: ett år etter registrering.',
+  'No service history recorded; based on the registration date.': 'Ingen servicehistorikk registrert; basert på registreringsdatoen.',
+  'First service is due one year after registration.': 'Første service er ett år etter registrering.',
+  'No service history or registration date yet.': 'Ingen servicehistorikk eller registreringsdato ennå.',
+  // ---- vehicles list & page
+  'Search VIN, make, model, reg. no or spot…': 'Søk VIN, merke, modell, reg.nr. eller plass…', 'All statuses': 'Alle statuser',
+  '🗑 Recently deleted': '🗑 Nylig slettet', 'Recently deleted': 'Nylig slettet', 'No vehicles found.': 'Ingen biler funnet.',
+  '← Vehicles': '← Biler', 'Edit details': 'Rediger detaljer', 'Edit vehicle details': 'Rediger bildetaljer', 'Details saved': 'Detaljer lagret',
+  'Return to storage': 'Tilbake til lager', 'Move car': 'Flytt bil', 'Move to': 'Flytt til', 'Moved by': 'Flyttet av',
+  'Choose a storage spot first': 'Velg en lagerplass først', 'Off site (workshop, test drive, delivered…)': 'Ikke på lager (verksted, prøvekjøring, levert…)',
+  'Optional, e.g. "At workshop for paint"': 'Valgfritt, f.eks. «Hos verksted for lakk»', 'Currently off site.': 'Er nå ikke på lager.',
+  'Known damage': 'Kjente skader', 'No unrepaired damage on record.': 'Ingen ureparerte skader registrert.', '✓ Repaired': '✓ Reparert',
+  'Mark repaired': 'Merk som reparert', 'Repair note': 'Reparasjonsmerknad', 'Optional, e.g. "Repainted by workshop"': 'Valgfritt, f.eks. «Lakkert av verksted»',
+  'Damage marked as repaired': 'Skaden er merket som reparert', 'Repair undone': 'Reparasjon angret',
+  'Undo "repaired"? The damage will be listed as known damage again.': 'Angre «reparert»? Skaden vises som kjent skade igjen.',
+  'Inspections': 'Kontroller', 'Vehicle history →': 'Bilens historikk →', '🗑 Delete car': '🗑 Slett bil', 'View vehicle': 'Vis bil',
+  'Mark as registered': 'Merk som registrert', 'Undo mark': 'Angre merking', '↻ Sync now': '↻ Synkroniser nå', 'Raw data': 'Rådata',
+  'All vehicle data': 'Alle kjøretøydata', 'Statens vegvesen': 'Statens vegvesen', 'Statens vegvesen data': 'Data fra Statens vegvesen',
+  'Not registered yet. When sales has registered the car, use "Mark as registered" above to fetch its data.':
+    'Ikke registrert ennå. Når salg har registrert bilen, bruk «Merk som registrert» over for å hente data.',
+  'Remove the "registered" mark? Registry data already fetched is kept, but syncing stops.':
+    'Fjerne merkingen «registrert»? Data som allerede er hentet beholdes, men synkroniseringen stopper.',
+  'Technical data, registration number and EU-kontroll dates will then be fetched from Statens vegvesen and kept up to date automatically.':
+    'Tekniske data, registreringsnummer og EU-kontrolldatoer hentes da fra Statens vegvesen og holdes oppdatert automatisk.',
+  'Marked as registered': 'Merket som registrert', 'Marked as registered — data fetched from Statens vegvesen': 'Merket som registrert — data hentet fra Statens vegvesen',
+  'Marked as registered. Registry sync starts once the API key is configured.': 'Merket som registrert. Synkronisering starter når API-nøkkelen er satt.',
+  'Synced with Statens vegvesen': 'Synkronisert med Statens vegvesen', 'Sync failed — will retry automatically': 'Synkronisering feilet — prøver igjen automatisk',
+  'Not found in the vehicle registry yet — retried daily': 'Ikke funnet i kjøretøyregisteret ennå — prøves daglig',
+  'Waiting for first sync with Statens vegvesen': 'Venter på første synkronisering med Statens vegvesen',
+  'No date from Statens vegvesen yet': 'Ingen dato fra Statens vegvesen ennå', 'No data yet.': 'Ingen data ennå.',
+  'Statens vegvesen does not list this car as registered.': 'Statens vegvesen oppgir ikke bilen som registrert.',
+  'The Statens vegvesen API key is not configured on the server, so no data can be fetched yet.': 'API-nøkkelen til Statens vegvesen er ikke satt, så ingen data kan hentes ennå.',
+  'Check data: Statens vegvesen differs': 'Sjekk data: Statens vegvesen avviker', 'Use Statens vegvesen': 'Bruk Statens vegvesen', 'Keep ours': 'Behold vår',
+  'On file': 'Registrert hos oss', 'In Carbonara': 'I Carbonara', 'Differs from what we have on file': 'Avviker fra det vi har registrert',
+  '"Keep ours" is remembered until Statens vegvesen changes the value again.': '«Behold vår» huskes til Statens vegvesen endrer verdien igjen.',
+  'Tick at least one field': 'Kryss av minst ett felt', '✓ Matches Statens vegvesen': '✓ Stemmer med Statens vegvesen',
+  'Tick the fields this applies to and choose which value is right. ': 'Kryss av feltene dette gjelder og velg hvilken verdi som er riktig. ',
+  'Not on finn.no': 'Ikke på finn.no', '+ Add finn.no link': '+ Legg til finn.no-lenke', 'Available on finn.no ↗': 'Tilgjengelig på finn.no ↗',
+  'finn.no ad': 'finn.no-annonse', 'finn.no link or FINN code': 'finn.no-lenke eller FINN-kode', 'Paste the ad link': 'Lim inn annonselenken',
+  'Remove link': 'Fjern lenke', 'change': 'endre', 'finn.no link saved': 'finn.no-lenke lagret', 'finn.no link removed': 'finn.no-lenke fjernet',
+  'Open the car’s ad on finn.no, copy the address from the browser and paste it here (the FINN code alone works too).':
+    'Åpne bilens annonse på finn.no, kopier adressen fra nettleseren og lim den inn her (FINN-koden alene fungerer også).',
+  'Possible duplicate': 'Mulig duplikat', 'Possible duplicates': 'Mulige duplikater',
+  'Almost the same VIN is already in Carbonara: ': 'Nesten samme VIN finnes allerede i Carbonara: ', ' Use this VIN': ' Bruk denne VIN-en',
+  '(VIN ': '(VIN ', '). Same car with a mistyped VIN?': '). Samme bil med feilskrevet VIN?', ' on ': ' på ',
+  'Nothing here. Deleted cars appear here and can be restored for a while.': 'Ingenting her. Slettede biler vises her og kan gjenopprettes en stund.',
+  'Delete permanently': 'Slett permanent', 'Deleted permanently': 'Slettet permanent', 'Restored from Recently deleted': 'Gjenopprettet fra Nylig slettet',
+  'Restored (off site — use Move to place it)': 'Gjenopprettet (ikke på lager — bruk Flytt for å plassere den)',
+  'After that period it is removed for good, with its inspections, photos and history.': 'Etter den perioden slettes den for godt, med kontroller, bilder og historikk.',
+  // history
+  'Added to the system': 'Lagt inn i systemet', 'Arrival inspection started': 'Mottakskontroll startet', 'Arrival inspection completed': 'Mottakskontroll fullført',
+  'Arrival inspection cancelled': 'Mottakskontroll avbrutt', 'Placed in storage': 'Plassert på lager', 'Details updated': 'Detaljer oppdatert',
+  'Marked as registered in Norway': 'Merket som registrert i Norge', '"Registered" mark removed': 'Merkingen «registrert» fjernet',
+  'Data fetched from Statens vegvesen': 'Data hentet fra Statens vegvesen', 'Updated from Statens vegvesen': 'Oppdatert fra Statens vegvesen',
+  'Moved': 'Flyttet', 'Taken off site': 'Tatt ut av lager', 'Damage repaired': 'Skade reparert', '"Repaired" undone': '«Reparert» angret',
+  'Checked against Statens vegvesen': 'Kontrollert mot Statens vegvesen', 'Deleted': 'Slettet', 'Out on test drive': 'Ute på prøvekjøring',
+  'Back from test drive': 'Tilbake fra prøvekjøring', 'PDI order sent': 'Bestilling av nybilklargjøring sendt', 'PDI booked': 'Nybilklargjøring booket',
+  'PDI date removed': 'Dato for nybilklargjøring fjernet', 'PDI done': 'Nybilklargjøring utført', 'PDI order cancelled': 'Bestilling av nybilklargjøring avbrutt',
+  'Storage check': 'Lagerkontroll', 'Storage check cancelled': 'Lagerkontroll annullert',
+  'Automatically — listed as registered in Statens vegvesen': 'Automatisk — oppført som registrert hos Statens vegvesen',
+  'from e-mail app': 'fra e-postprogram', 'sent again': 'sendt på nytt', 'Items not all back': 'Ikke alt utstyr tilbake',
+  'Arrival check': 'Ankomstkontroll', 'Monthly': 'Månedlig', 'Monthly check': 'Månedlig sjekk', '3-month check': '3-månederssjekk',
+  '6-month check': '6-månederssjekk',
+  // ---- today
+  '+ New arrival': '+ Ny ankomst', 'Needs attention': 'Trenger oppfølging', 'PDI tomorrow – make the car ready': 'Nybilklargjøring i morgen – klargjør bilen',
+  'PDI today': 'Nybilklargjøring i dag', 'PDI date passed – mark as done?': 'Dato for nybilklargjøring passert – merk som utført?',
+  'Arrivals in progress': 'Pågående ankomster', 'PDI orders waiting for the workshop’s reply': 'Bestillinger som venter på svar fra verkstedet',
+  'PDI orders not sent yet': 'Bestillinger som ikke er sendt ennå', 'Statens vegvesen differences to check': 'Avvik mot Statens vegvesen som må sjekkes',
+  'open the car to confirm': 'åpne bilen for å bekrefte', 'Nothing needs attention. 👍': 'Ingenting trenger oppfølging. 👍',
+  'Upcoming PDIs': 'Kommende nybilklargjøringer', 'In storage ': 'På lager ', 'Free places': 'Ledige plasser', 'Arrived this week': 'Ankommet denne uken',
+  'PDIs this week': 'Nybilklargjøringer denne uken', 'Storage checks due (new cars)': 'Lagerkontroller som forfaller (nye biler)',
+  'arrival check missing': 'ankomstkontroll mangler', 'today': 'i dag', 'tomorrow': 'i morgen',
+  // ---- arrivals / intake / inspection
+  'New arrival': 'Ny ankomst', 'No arrival inspections in progress.': 'Ingen pågående mottakskontroller.', 'Recently placed in storage': 'Nylig plassert på lager',
+  'Nothing yet.': 'Ingenting ennå.', 'Select inspector…': 'Velg kontrollør…', 'Select staff…': 'Velg ansatt…', 'Inspector': 'Kontrollør',
+  'Checked by': 'Kontrollert av', 'Add at least one staff member before starting inspections. ': 'Legg til minst én ansatt før du starter kontroller. ',
+  'Go to settings': 'Gå til innstillinger', 'Find VIN': 'Finn VIN', 'Looking up…': 'Slår opp…', 'Type a registration number first.': 'Skriv inn et registreringsnummer først.',
+  'No car found with this registration number.': 'Ingen bil funnet med dette registreringsnummeret.', '✓ Found — VIN filled in from Statens vegvesen': '✓ Funnet — VIN fylt inn fra Statens vegvesen',
+  'Checking Statens vegvesen…': 'Sjekker Statens vegvesen…', 'Not found in Statens vegvesen — normal for cars not yet registered in Norway.': 'Ikke funnet hos Statens vegvesen — normalt for biler som ikke er registrert i Norge ennå.',
+  'Statens vegvesen API key is not configured on the server.': 'API-nøkkelen til Statens vegvesen er ikke satt på serveren.',
+  'The data is saved when the inspection starts.': 'Dataene lagres når kontrollen starter.', 'The data is saved and the car is marked as registered when the inspection starts.': 'Dataene lagres og bilen merkes som registrert når kontrollen starter.',
+  'Ticked fields are updated to the Statens vegvesen value when the inspection starts.': 'Avkryssede felt oppdateres til verdien fra Statens vegvesen når kontrollen starter.',
+  '📷 Read VIN or plate from photo': '📷 Les VIN eller skilt fra bilde', 'Reading photo…': 'Leser bilde…', 'Text recognition': 'Tekstgjenkjenning', 'Barcode': 'Strekkode',
+  'No VIN or registration plate found. Try again a bit closer, avoid glare, or type it in.': 'Fant ingen VIN eller skilt. Prøv litt nærmere, unngå gjenskinn, eller skriv det inn.',
+  'Possible VINs — tap the right one:': 'Mulige VIN — trykk på riktig:', 'Possible plates — tap the right one:': 'Mulige skilt — trykk på riktig:',
+  'VIN found:': 'VIN funnet:', 'Registration plate found:': 'Registreringsskilt funnet:',
+  'Tip: photograph the registration plate, the VIN plate at the bottom of the windscreen, the label in the driver door frame (barcode), or the registration document. The photo does not need to be level.':
+    'Tips: ta bilde av skiltet, VIN-skiltet nederst i frontruten, merket i førerdørkarmen (strekkode) eller vognkortet. Bildet trenger ikke være rett.',
+  '✓ Valid VIN (check digit matches)': '✓ Gyldig VIN (kontrollsiffer stemmer)',
+  '✓ Valid format. (Check digit not used by this manufacturer — normal for many European cars.)': '✓ Gyldig format. (Kontrollsiffer brukes ikke av denne produsenten — normalt for mange europeiske biler.)',
+  'Check digit does not match — for this manufacturer a character is probably wrong.': 'Kontrollsifferet stemmer ikke — for denne produsenten er trolig et tegn feil.',
+  'Check digit does not match. ': 'Kontrollsifferet stemmer ikke. ',
+  'For this manufacturer that means a character is probably wrong (8/B, 5/S, 0/D, 2/Z…). Compare with the car.': 'For denne produsenten betyr det trolig at et tegn er feil (8/B, 5/S, 0/D, 2/Z…). Sammenlign med bilen.',
+  'Only letters and digits are allowed.': 'Bare bokstaver og tall er tillatt.', 'New vehicle — not seen before.': 'Ny bil — ikke sett før.',
+  'Start inspection': 'Start kontroll', 'Continue inspection': 'Fortsett kontroll', 'Always compare with the car before starting.': 'Sammenlign alltid med bilen før du starter.',
+  'Personalised plate? · tap to look up': 'Personlig skilt? · trykk for å slå opp',
+  '1. Vehicle details': '1. Bildetaljer', '2. Photos': '2. Bilder', '3. Damage inspection': '3. Skadekontroll', '4. Place in storage': '4. Plasser på lager', '4. Storage': '4. Lager',
+  '✓ Saved': '✓ Lagret', 'Still to do: ': 'Gjenstår: ', 'Make and model recorded': 'Merke og modell registrert', 'New or used car selected': 'Ny eller brukt bil valgt',
+  'Odometer reading recorded': 'Kilometerstand registrert', 'Photos from all four sides': 'Bilder fra alle fire sider', 'Damage inspection done': 'Skadekontroll utført',
+  'Take one photo from each side with the whole car in frame. "Left" means the left side when sitting in the car.': 'Ta ett bilde fra hver side med hele bilen i bildet. «Venstre» betyr venstre side sett fra førersetet.',
+  '📷 Take photo': '📷 Ta bilde', '📷 Retake photo': '📷 Ta nytt bilde', '+ Extra photo': '+ Ekstra bilde', 'Extra photo': 'Ekstra bilde', 'no photo': 'ingen bilde',
+  'Delete this photo?': 'Slette dette bildet?', 'Photo': 'Bilde', 'Damage photo': 'Skadebilde', 'Photo of the damage': 'Bilde av skaden', 'Open original': 'Åpne original',
+  'Walk around the car. Tap the diagram where you find damage.': 'Gå rundt bilen. Trykk på diagrammet der du finner skade.',
+  '+ Add damage without diagram position': '+ Legg til skade uten plassering i diagrammet', 'Add damage': 'Legg til skade', 'Damage': 'Skade',
+  'No damage recorded.': 'Ingen skader registrert.', ' No damage found on this vehicle': ' Ingen skader funnet på denne bilen', 'Delete this damage?': 'Slette denne skaden?',
+  'Severity': 'Alvorlighet', 'Size (mm)': 'Størrelse (mm)', 'Car damage diagram, front at the top': 'Skadediagram for bil, front øverst', '▲ FRONT': '▲ FRONT',
+  'scratch': 'ripe', 'dent': 'bulk', 'chip': 'steinsprut', 'crack': 'sprekk', 'scuff': 'skrubbmerke', 'rust': 'rust', 'broken': 'ødelagt', 'missing': 'mangler', 'other': 'annet',
+  'Scratch': 'Ripe', 'Dent': 'Bulk', 'Chip': 'Steinsprut', 'Crack': 'Sprekk', 'Scuff': 'Skrubbmerke', 'Rust': 'Rust', 'Broken': 'Ødelagt', 'Missing': 'Mangler',
+  'minor': 'liten', 'moderate': 'middels', 'severe': 'alvorlig', 'Minor': 'Liten', 'Moderate': 'Middels', 'Severe': 'Alvorlig',
+  'Front': 'Front', 'Rear': 'Bak', 'Left': 'Venstre', 'Right': 'Høyre', 'Left side': 'Venstre side', 'Right side': 'Høyre side', 'Roof': 'Tak', 'Interior': 'Interiør',
+  'Underbody': 'Understell', 'Windscreen': 'Frontrute', 'Rear window': 'Bakrute', 'Bonnet / hood': 'Panser', 'Boot / tailgate': 'Bagasjelokk / bakluke',
+  'Front bumper': 'Støtfanger foran', 'Rear bumper': 'Støtfanger bak', 'Grille': 'Grill', 'Left front door': 'Venstre fordør', 'Left rear door': 'Venstre bakdør',
+  'Right front door': 'Høyre fordør', 'Right rear door': 'Høyre bakdør', 'Left front wing': 'Venstre forskjerm', 'Right front wing': 'Høyre forskjerm',
+  'Left rear quarter': 'Venstre bakskjerm', 'Right rear quarter': 'Høyre bakskjerm', 'Left sill': 'Venstre dørterskel', 'Right sill': 'Høyre dørterskel',
+  'Left headlight': 'Venstre frontlykt', 'Right headlight': 'Høyre frontlykt', 'Left tail light': 'Venstre baklykt', 'Right tail light': 'Høyre baklykt',
+  'Left mirror': 'Venstre speil', 'Right mirror': 'Høyre speil', 'Left front wheel / tyre': 'Venstre forhjul / dekk', 'Right front wheel / tyre': 'Høyre forhjul / dekk',
+  'Left rear wheel / tyre': 'Venstre bakhjul / dekk', 'Right rear wheel / tyre': 'Høyre bakhjul / dekk',
+  'Placed when the arrival inspection is completed': 'Plasseres når mottakskontrollen er fullført', 'Complete & place in storage': 'Fullfør og plasser på lager',
+  'Cancel inspection': 'Avbryt kontroll', 'Cancel this arrival inspection? It stays in the vehicle history as cancelled.': 'Avbryte denne mottakskontrollen? Den blir stående i bilens historikk som avbrutt.',
+  'Cancelled': 'Avbrutt', 'All storage spots are full. ': 'Alle lagerplasser er fulle. ', 'Add spots or raise capacity in settings': 'Legg til plasser eller øk kapasiteten i innstillingene',
+  'Add spots in settings': 'Legg til plasser i innstillingene', 'Notes': 'Merknader',
+  // ---- storage page
+  '← All storage': '← Alt lager', 'No storage spots yet.': 'Ingen lagerplasser ennå.', 'No storage spots yet. ': 'Ingen lagerplasser ennå. ', 'Manage spots →': 'Administrer plasser →',
+  'No zone': 'Ingen sone', 'No cars here.': 'Ingen biler her.', 'No cars in this spot.': 'Ingen biler på denne plassen.', 'No cars are off site.': 'Ingen biler er utenfor lageret.',
+  'Not in a sub-zone': 'Ikke i en undersone', 'These cars were placed before the spot was split. Open a car and use Move to put it in a sub-zone.': 'Disse bilene ble plassert før plassen ble delt. Åpne en bil og bruk Flytt for å sette den i en undersone.',
+  'Workshop, test drive, delivered…': 'Verksted, prøvekjøring, levert…', 'empty →': 'tom →',
+  // ---- test drive
+  'Start a test drive': 'Start en prøvekjøring', 'Search reg. no, VIN, make, model, colour or spot…': 'Søk reg.nr., VIN, merke, modell, farge eller plass…',
+  'No cars found.': 'Ingen biler funnet.', 'Choose another car': 'Velg en annen bil', 'Customer': 'Kunde', 'Driving licence': 'Førerkort', 'Phone number': 'Telefonnummer',
+  '📷 Photo of driving licence': '📷 Bilde av førerkort', '📷 Retake licence photo': '📷 Ta nytt bilde av førerkort', 'No photo yet': 'Ingen bilde ennå',
+  'Take the photo first — the name is filled in from the licence.': 'Ta bildet først — navnet fylles inn fra førerkortet.',
+  'Reading the name from the licence…': 'Leser navnet fra førerkortet…', '✓ Read from the licence — check the spelling.': '✓ Lest fra førerkortet — sjekk stavemåten.',
+  '⚠ Read from the licence, but unsure — check it carefully.': '⚠ Lest fra førerkortet, men usikkert — sjekk nøye.', 'Could not read the name from the photo. Type it in.': 'Klarte ikke å lese navnet fra bildet. Skriv det inn.',
+  'The car': 'Bilen', 'Taken out of the car for the test drive': 'Tatt ut av bilen for prøvekjøringen', 'Put into the car for the test drive': 'Lagt i bilen for prøvekjøringen',
+  'Other (separate with commas)': 'Annet (skill med komma)', 'Odometer out (optional)': 'Kilometerstand ut (valgfritt)', 'Handed out by': 'Utlevert av', 'Note (optional)': 'Merknad (valgfritt)',
+  'The customer has been given the privacy information ': 'Kunden har fått personverninformasjonen ', '(show / print)': '(vis / skriv ut)',
+  'Start test drive': 'Start prøvekjøring', '🔑 Start test drive': '🔑 Start prøvekjøring', 'Take a photo of the driving licence first': 'Ta bilde av førerkortet først',
+  'Give the customer the privacy information and tick the box': 'Gi kunden personverninformasjonen og kryss av', 'No cars are out on a test drive.': 'Ingen biler er ute på prøvekjøring.',
+  'Returned': 'Levert tilbake', 'Check that the car is back as it was': 'Sjekk at bilen er tilbake slik den var', 'Odometer in (optional)': 'Kilometerstand inn (valgfritt)',
+  'Received by': 'Mottatt av', 'Note (required if something is missing)': 'Merknad (påkrevd hvis noe mangler)', 'Register return': 'Registrer innlevering', 'Car returned': 'Bil levert tilbake',
+  'e.g. winter wheels left at the customer': 'f.eks. vinterhjul igjen hos kunden', 'Tick every item, or write a note about what is missing': 'Kryss av alle punkter, eller skriv hva som mangler',
+  'Test drive returned · customer details moved to the trash': 'Prøvekjøring levert · kundeopplysninger flyttet til papirkurven',
+  'The customer’s name, phone number and licence photo are moved to the trash and deleted for good after 30 days.': 'Kundens navn, telefonnummer og førerkortbilde flyttes til papirkurven og slettes for godt etter 30 dager.',
+  'Licence': 'Førerkort', 'Access log': 'Tilgangslogg', 'Delete now': 'Slett nå', 'Customer details deleted': 'Kundeopplysninger slettet', 'Nothing in the trash.': 'Papirkurven er tom.',
+  'Nobody has opened the licence photo.': 'Ingen har åpnet førerkortbildet.', 'Opened licence photo': 'Åpnet førerkortbilde', 'Deleted customer details': 'Slettet kundeopplysninger',
+  'On test drive': 'På prøvekjøring', 'Go to Test drive': 'Gå til Prøvekjøring', '🔒 Privacy notice for customers': '🔒 Personvernerklæring for kunder', '🖨 Print': '🖨 Skriv ut',
+  'The customer privacy notice has no contact details yet. A system admin can add them on the System page → Company.': 'Personvernerklæringen mangler kontaktinformasjon. En systemadministrator kan legge den inn under System → Firma.',
+  'Winter wheels': 'Vinterhjul', 'Summer wheels': 'Sommerhjul', 'Charging cable': 'Ladekabel', 'Floor mats': 'Gulvmatter', 'Cargo cover / parcel shelf': 'Bagasjeromstrekk / hattehylle',
+  'Trade plates (prøvekjennemerker)': 'Prøvekjennemerker', 'Fuel / charging card': 'Drivstoff- / ladekort', 'Child seat': 'Barnesete', 'e.g. 912 34 567': 'f.eks. 912 34 567',
+  // ---- PDI (nybilklargjøring)
+  'PDI order': 'Bestilling av nybilklargjøring', 'No PDI order.': 'Ingen bestilling av nybilklargjøring.', 'Create PDI order': 'Opprett bestilling',
+  'New car – no PDI order yet. Register what the customer ordered and send it to the workshop.': 'Ny bil – ingen bestilling av nybilklargjøring ennå. Registrer hva kunden har bestilt og send det til verkstedet.',
+  'Not sent': 'Ikke sendt', 'Sent – waiting for date': 'Sendt – venter på dato', 'PDI done': 'Nybilklargjøring utført',
+  'Changed since it was sent — send it again so the workshop has the latest order.': 'Endret etter at den ble sendt — send på nytt så verkstedet har siste versjon.',
+  'PDI date is set, but the order list has not been sent to the workshop yet.': 'Dato er satt, men bestillingen er ikke sendt til verkstedet ennå.',
+  'Nothing ordered yet.': 'Ingenting bestilt ennå.', 'Cancel order': 'Avbryt bestilling', 'Edit order': 'Rediger bestilling', 'Send again…': 'Send på nytt…',
+  'Send to workshop…': 'Send til verkstedet…', 'Change PDI date': 'Endre dato', 'Enter PDI date': 'Legg inn dato', '✓ PDI done': '✓ Nybilklargjøring utført',
+  'Ordered by the customer': 'Bestilt av kunden', 'Anything else the customer ordered': 'Annet kunden har bestilt', 'Winter tyres': 'Vinterdekk',
+  'Choose tyre company…': 'Velg dekkleverandør…', 'Tyre company (the workshop orders from)': 'Dekkleverandør (verkstedet bestiller fra)', 'Tyre company (optional)': 'Dekkleverandør (valgfritt)',
+  'Expected delivery date': 'Forventet leveringsdato', 'Tyre details (optional)': 'Dekkdetaljer (valgfritt)', 'Dimension, rims, studded/unstudded…': 'Dimensjon, felger, piggdekk/piggfritt…',
+  'Note to the workshop (optional)': 'Merknad til verkstedet (valgfritt)', 'Save order': 'Lagre bestilling', 'PDI order saved': 'Bestilling lagret', 'New PDI order': 'Ny bestilling av nybilklargjøring',
+  'Edit PDI order': 'Rediger bestilling av nybilklargjøring', 'Send PDI order': 'Send bestilling av nybilklargjøring', 'Send to': 'Send til', 'Loading': 'Laster',
+  'Send from Carbonara': 'Send fra Carbonara', 'Open in e-mail app': 'Åpne i e-postprogram', 'Copy text': 'Kopier tekst', 'Marked as sent': 'Merket som sendt',
+  'Did you send the e-mail from your e-mail app?': 'Sendte du e-posten fra e-postprogrammet ditt?', 'Copy not allowed here – select the text instead': 'Kopiering er ikke tillatt her – merk teksten i stedet',
+  'Sending directly from Carbonara is not set up yet (a system admin can add the mail server on the System page → E-mail), so use your own e-mail app.':
+    'Sending direkte fra Carbonara er ikke satt opp ennå (en systemadministrator kan legge inn e-postserver under System → E-post), så bruk ditt eget e-postprogram.',
+  'No e-mail recipients yet. An administrator can add them under Settings → PDI order lists.': 'Ingen e-postmottakere ennå. En administrator kan legge dem til under Innstillinger → Lister for nybilklargjøring.',
+  'PDI date and time': 'Dato og klokkeslett for nybilklargjøring', 'Save PDI date': 'Lagre dato', 'Remove date': 'Fjern dato', 'PDI date saved': 'Dato lagret',
+  'Enter the date and time the workshop replied with. Everyone sees it on the Today page, with a reminder the day before.':
+    'Legg inn datoen og klokkeslettet verkstedet svarte med. Alle ser det på I dag-siden, med påminnelse dagen før.',
+  'Mark the PDI as done?': 'Merke nybilklargjøringen som utført?', 'PDI marked as done': 'Nybilklargjøring merket som utført', 'Cancel this PDI order?': 'Avbryte denne bestillingen?',
+  'Cancel this PDI order? It has already been sent – remember to tell the workshop.': 'Avbryte denne bestillingen? Den er allerede sendt – husk å gi beskjed til verkstedet.',
+  // ---- storage maintenance
+  'Storage maintenance': 'Lagervedlikehold', 'not done yet': 'ikke utført ennå', 'due today': 'frist i dag', 'Do arrival check': 'Utfør ankomstkontroll',
+  '🖨 Storage report': '🖨 Lagerrapport', 'Storage report': 'Lagerrapport', 'Only 12V battery form': 'Bare 12V-batteriskjema', '🖨 Print / save as PDF': '🖨 Skriv ut / lagre som PDF',
+  'MG storage requirements (SI-GI2022102501): arrival check, then every month (more every 3 and 6 months) until the PDI.':
+    'MGs lagringskrav (SI-GI2022102501): ankomstkontroll, deretter hver måned (mer hver 3. og 6. måned) frem til nybilklargjøring.',
+  'Checklist': 'Sjekkliste', 'Mark all OK': 'Merk alle OK', 'Tyre pressure': 'Dekktrykk', 'Measured (bar)': 'Målt (bar)', '12V battery (tester)': '12V-batteri (tester)',
+  'Voltage on arrival (V)': 'Spenning ved mottak (V)', 'Voltage before charging (V)': 'Spenning før lading (V)', 'Battery status': 'Batteristatus', 'Tester result…': 'Testresultat…',
+  'Voltage after charging (V)': 'Spenning etter lading (V)', 'Battery part number': 'Delenummer batteri', 'From the battery label': 'Fra batterietiketten', 'HV battery': 'HV-batteri',
+  'State of charge (SOC %)': 'Ladenivå (SOC %)', 'Required if something is not OK: what was found and what was done': 'Påkrevd hvis noe ikke er OK: hva som ble funnet og hva som ble gjort',
+  'Signed with your name and the time when saved.': 'Signeres med navnet ditt og tidspunktet når det lagres.', 'Save check': 'Lagre kontroll',
+  'A point is not OK – describe it under Remarks.': 'Et punkt er ikke OK – beskriv det under Anmerkninger.', 'Battery tester did not say “Good” – charge or replace.': 'Batteritesteren viste ikke «God» – lad eller bytt.',
+  'Check cancelled': 'Kontroll annullert', 'Give a reason (at least 3 characters)': 'Oppgi en begrunnelse (minst 3 tegn)',
+  // ---- settings
+  'Staff / inspectors': 'Ansatte / kontrollører', 'Only an administrator can add staff or change PINs.': 'Bare en administrator kan legge til ansatte eller endre PIN-koder.',
+  'Everyone logs in with a personal PIN. Give new staff a PIN here; reset it if someone forgets theirs (that also unlocks the account and logs out their devices).':
+    'Alle logger inn med personlig PIN-kode. Gi nye ansatte en PIN-kode her; tilbakestill den hvis noen glemmer sin (det låser også opp kontoen og logger ut enhetene deres).',
+  'Set PIN': 'Sett PIN-kode', 'Reset PIN': 'Tilbakestill PIN-kode', 'Make admin': 'Gjør til admin', 'Remove admin': 'Fjern admin', 'Make system admin': 'Gjør til systemadministrator',
+  'Remove system admin': 'Fjern systemadministrator', 'No PIN — can’t log in': 'Ingen PIN-kode — kan ikke logge inn', 'PIN (4–8 digits)': 'PIN-kode (4–8 sifre)', 'Save PIN': 'Lagre PIN-kode',
+  'The PIN must be 4–8 digits': 'PIN-koden må være 4–8 sifre', 'Storage spots': 'Lagerplasser', 'Add a spot': 'Legg til en plass', 'Code, e.g. A-12': 'Kode, f.eks. A-12',
+  'Zone, e.g. Yard A': 'Sone, f.eks. Uteplass A', 'Description (optional)': 'Beskrivelse (valgfritt)', 'Max cars (empty = no limit)': 'Maks biler (tom = ingen grense)', 'Add spot': 'Legg til plass',
+  'Add a numbered range': 'Legg til en nummerert rekke', 'Prefix, e.g. A-': 'Prefiks, f.eks. A-', 'Add range': 'Legg til rekke', 'Range must be 1–500 spots': 'Rekken må være 1–500 plasser',
+  '+ Sub-zone': '+ Undersone', 'Sub-zone name': 'Navn på undersone', 'Max cars': 'Maks biler', 'Empty = no limit': 'Tom = ingen grense', 'Add sub-zone': 'Legg til undersone',
+  'Sum of the sub-zones': 'Sum av undersonene', 'Split a spot into sub-zones (rows, areas) with "+ Sub-zone"; cars are then placed in a sub-zone.': 'Del en plass i undersoner (rader, områder) med «+ Undersone»; bilene plasseres da i en undersone.',
+  'Choose a spot…': 'Velg en plass…', 'Each move is written to the car’s history.': 'Hver flytting skrives i bilens historikk.', 'See the cars': 'Se bilene',
+  'PDI order lists': 'Lister for nybilklargjøring', 'Only an administrator can change these lists.': 'Bare en administrator kan endre disse listene.',
+  'Items the customer can order': 'Utstyr kunden kan bestille', 'Shown as tick boxes on the PDI order. Names go to the workshop as written (Norwegian is fine).': 'Vises som avkrysningsbokser på bestillingen. Navnene sendes til verkstedet slik de er skrevet.',
+  'Item, e.g. Takboks': 'Utstyr, f.eks. Takboks', 'Choices (optional), e.g. Gummi, Tekstil': 'Valg (valgfritt), f.eks. Gummi, Tekstil', 'Tyre companies': 'Dekkleverandører',
+  'Who the workshop orders winter tyres from.': 'Hvem verkstedet bestiller vinterdekk fra.', 'Tyre company': 'Dekkleverandør', 'E-mail recipients': 'E-postmottakere',
+  'Who PDI orders can be sent to. The default is preselected when sending.': 'Hvem bestillinger kan sendes til. Standardmottakeren er forhåndsvalgt ved sending.',
+  'Name, e.g. RBV': 'Navn, f.eks. RBV', 'E-mail address': 'E-postadresse', 'Make default': 'Gjør til standard', ' Default': ' Standard',
+  'Choices, separated by commas (empty = none)': 'Valg, skilt med komma (tom = ingen)', 'Statens vegvesen sync': 'Synkronisering med Statens vegvesen', 'Synced OK': 'Synkronisert OK',
+  'Not found in registry': 'Ikke funnet i registeret', 'Due for sync now': 'Klar for synkronisering nå', 'No API key configured yet.': 'Ingen API-nøkkel satt ennå.',
+  'To add or replace the key: ': 'For å legge inn eller bytte nøkkelen: ', 'A system admin can add or replace the key on the System page.': 'En systemadministrator kan legge inn eller bytte nøkkelen på System-siden.',
+  'Data retention': 'Lagring av data', 'Deleted cars stay in ': 'Slettede biler ligger i ', 'Automatic deletion of old cars is turned off.': 'Automatisk sletting av gamle biler er slått av.',
+  'Change the periods on the ': 'Endre periodene på ', 'A system admin can change the periods on the System page.': 'En systemadministrator kan endre periodene på System-siden.',
+  // ---- system page
+  'Only a system admin can open this page.': 'Bare en systemadministrator kan åpne denne siden.', 'Set here': 'Satt her', 'From server environment': 'Fra servermiljøet',
+  'Server settings. A value saved here takes effect within half a minute and overrides the server environment (.env / Portainer). ':
+    'Serverinnstillinger. En verdi lagret her gjelder innen et halvt minutt og overstyrer servermiljøet (.env / Portainer). ',
+  '“Reset” goes back to the environment or the default. Passwords and keys are never shown – only their last characters.':
+    '«Tilbakestill» går tilbake til servermiljøet eller standardverdien. Passord og nøkler vises aldri – bare de siste tegnene.',
+  'Type a value first (or use Reset)': 'Skriv inn en verdi først (eller bruk Tilbakestill)', 'E-mail': 'E-post', 'Company': 'Firma',
+  'API key': 'API-nøkkel', 'Re-sync registered cars every (days)': 'Synkroniser registrerte biler hver (dag)', 'API address': 'API-adresse',
+  'Auth header name': 'Navn på autentiseringsheader', 'Auth scheme': 'Autentiseringsskjema', 'Pause between API calls (seconds)': 'Pause mellom API-kall (sekunder)',
+  'Mail server (SMTP host)': 'E-postserver (SMTP-vert)', 'Port': 'Port', 'Security': 'Sikkerhet', 'Username': 'Brukernavn', 'Password': 'Passord', 'Sender': 'Avsender',
+  'Company name': 'Firmanavn', 'Dealer number (Forh. nr.)': 'Forhandlernummer (Forh. nr.)', 'Contact for customers': 'Kontakt for kunder',
+  'Keep deleted data (days)': 'Behold slettede data (dager)', 'Delete inactive off-site cars after (years)': 'Slett inaktive biler utenfor lageret etter (år)',
+  "Key for 'API for tekniske kjøretøyopplysninger' (apply at vegvesen.no).": "Nøkkel for 'API for tekniske kjøretøyopplysninger' (søk på vegvesen.no).",
+  'Only change if Statens vegvesen changes their API.': 'Endres bare hvis Statens vegvesen endrer API-et sitt.',
+  'Empty = not set up; staff send from their own e-mail app. Gmail: smtp.gmail.com': 'Tom = ikke satt opp; ansatte sender fra eget e-postprogram. Gmail: smtp.gmail.com',
+  'starttls for port 587, ssl for port 465.': 'starttls for port 587, ssl for port 465.', 'Gmail: an app password, not the normal password.': 'Gmail: et app-passord, ikke det vanlige passordet.',
+  'Shown on the privacy notice, PDI e-mails and storage reports.': 'Vises i personvernerklæringen, e-post om nybilklargjøring og lagerrapporter.',
+  'Printed on the storage maintenance report.': 'Skrives ut på lagerrapporten.', 'E-mail and/or phone shown to test drive customers on the privacy notice.': 'E-post og/eller telefon som vises for prøvekjøringskunder i personvernerklæringen.',
+  'Recently deleted cars and returned test drive customers.': 'Nylig slettede biler og kunder fra avsluttede prøvekjøringer.', '0 = never.': '0 = aldri.',
+  // ---- login
+  'Who are you?': 'Hvem er du?', 'Log in with your personal PIN.': 'Logg inn med din personlige PIN-kode.', 'PIN': 'PIN-kode', 'Choose your name…': 'Velg navnet ditt…',
+  'Your name': 'Navnet ditt', 'First-time setup. ': 'Førstegangsoppsett. ', 'Choose your name and a PIN. You become the administrator and can give the others their PINs under Settings.':
+    'Velg navnet ditt og en PIN-kode. Du blir administrator og kan gi de andre PIN-koder under Innstillinger.', 'Choose a PIN (4–8 digits)': 'Velg en PIN-kode (4–8 sifre)',
+  'Repeat the PIN': 'Gjenta PIN-koden', 'Set PIN and log in': 'Sett PIN-kode og logg inn', 'Nobody has a PIN yet. Ask an administrator.': 'Ingen har PIN-kode ennå. Spør en administrator.',
+  'The two PINs are not the same': 'De to PIN-kodene er ikke like', 'Change PIN': 'Endre PIN-kode', 'Current PIN': 'Nåværende PIN-kode', 'New PIN (4–8 digits)': 'Ny PIN-kode (4–8 sifre)',
+  'Repeat new PIN': 'Gjenta ny PIN-kode', 'Your other devices are logged out.': 'De andre enhetene dine logges ut.', 'The two new PINs are not the same': 'De to nye PIN-kodene er ikke like',
+  'PIN changed': 'PIN-kode endret', 'Language': 'Språk', 'Staff ': 'Ansatt ',
+  // ---- date/time fields
+  'dd.mm.yyyy': 'dd.mm.åååå', 'hh:mm': 'tt:mm', 'Use the format dd.mm.yyyy': 'Bruk formatet dd.mm.åååå', 'Use 24-hour time, e.g. 08:00 or 14:30': 'Bruk 24-timers tid, f.eks. 08:00 eller 14:30',
+  // ---- registry detail labels (from the server)
+  'Vehicle ': 'Kjøretøy ', 'Approval': 'Godkjenning', 'Body': 'Karosseri', 'Class': 'Klasse', 'CO₂': 'CO₂', 'Curb weight': 'Egenvekt', 'Current owner since': 'Nåværende eier siden',
+  'Doors': 'Dører', 'Drivetrain and environment': 'Drivlinje og miljø', 'Energy use': 'Energiforbruk', 'Engine': 'Motor', 'Engine code': 'Motorkode', 'EU type approval': 'EU-typegodkjenning',
+  'Euro class': 'Euroklasse', 'First registered': 'Første gang registrert', 'First registered in Norway': 'Første gang registrert i Norge', 'Fuel consumption': 'Drivstofforbruk',
+  'Gearbox': 'Girkasse', 'Length × width × height': 'Lengde × bredde × høyde', 'Manufacturer': 'Produsent', 'Max total weight': 'Tillatt totalvekt', 'Max train weight': 'Tillatt vogntogvekt',
+  'Payload': 'Nyttelast', 'Plate type': 'Skilttype', 'Power': 'Effekt', 'Range (WLTP)': 'Rekkevidde (WLTP)', 'Seats': 'Sitteplasser', 'Status': 'Status', 'Top speed': 'Toppfart',
+  'Towing': 'Tilhenger', 'Trailer with brakes': 'Tilhenger med brems', 'Trailer without brakes': 'Tilhenger uten brems', 'Type designation': 'Typebetegnelse',
+  'Type plate location': 'Plassering typeskilt', 'Tyres and rims': 'Dekk og felger', 'Weights and towing': 'Vekter og tilhenger',
+  // ---- server messages
+  'Not logged in': 'Ikke innlogget', 'Wrong name or PIN': 'Feil navn eller PIN-kode', 'Wrong PIN': 'Feil PIN-kode', 'Current PIN is wrong': 'Nåværende PIN-kode er feil',
+  'Only a system admin can do this': 'Bare en systemadministrator kan gjøre dette', 'Only an administrator can do this': 'Bare en administrator kan gjøre dette',
+  'Only a system admin can give or remove system admin': 'Bare en systemadministrator kan gi eller fjerne systemadministrator', 'Only a system admin can change another system admin': 'Bare en systemadministrator kan endre en annen systemadministrator',
+  "You can't deactivate yourself or remove your own rights": 'Du kan ikke deaktivere deg selv eller fjerne dine egne rettigheter', 'Setup is already done. Log in instead.': 'Oppsettet er allerede gjort. Logg inn i stedet.',
+  'Choose your name, or type it in': 'Velg navnet ditt, eller skriv det inn', 'Staff member not found': 'Ansatt ikke funnet', 'Unknown or inactive staff member': 'Ukjent eller inaktiv ansatt',
+  'Unknown or inactive storage location': 'Ukjent eller inaktiv lagerplass', 'Choose a spot outside the one you are deleting': 'Velg en plass utenfor den du sletter',
+  'Sub-zones can only be added to a top-level spot, not to another sub-zone': 'Undersoner kan bare legges til en hovedplass, ikke til en annen undersone',
+  'The car is already off site': 'Bilen er allerede utenfor lageret', 'This vehicle is already in stock': 'Denne bilen er allerede på lager',
+  'Finish the arrival inspection first; it places the car in storage': 'Fullfør mottakskontrollen først; den plasserer bilen på lager',
+  'Damages are recorded; remove them before confirming \'no damage\'': 'Det er registrert skader; fjern dem før du bekrefter «ingen skader»',
+  'This damage is already marked as repaired': 'Denne skaden er allerede merket som reparert', 'This damage is not marked as repaired': 'Denne skaden er ikke merket som reparert',
+  'Photo does not belong to this inspection': 'Bildet hører ikke til denne kontrollen', 'File is not a readable image': 'Filen er ikke et lesbart bilde', 'Image too large': 'Bildet er for stort',
+  'VIN must be 17 characters: A–Z and 0–9, without I, O or Q': 'VIN må være 17 tegn: A–Z og 0–9, uten I, O eller Q',
+  'This VIN was registered at the same moment by someone else; try again': 'Denne VIN-en ble registrert samtidig av noen andre; prøv igjen',
+  "A car with this VIN has been added again since; it can't be restored": 'En bil med denne VIN-en er lagt inn på nytt siden; den kan ikke gjenopprettes',
+  'Give a VIN or a registration number': 'Oppgi VIN eller registreringsnummer', 'Vehicle is already marked as registered': 'Bilen er allerede merket som registrert',
+  'Vehicle is not marked as registered': 'Bilen er ikke merket som registrert', 'Mark the vehicle as registered before syncing with Statens vegvesen': 'Merk bilen som registrert før synkronisering med Statens vegvesen',
+  'Statens vegvesen API key is not configured on the server': 'API-nøkkelen til Statens vegvesen er ikke satt på serveren', 'Not found in the vehicle registry': 'Ikke funnet i kjøretøyregisteret',
+  'Rate limit / daily quota reached': 'Grensen for antall oppslag er nådd', 'Response did not contain this VIN': 'Svaret inneholdt ikke denne VIN-en', 'Response was not JSON': 'Svaret var ikke JSON',
+  'Customer name is required': 'Kundens navn er påkrevd', 'Phone number: 8–15 digits, optionally starting with +': 'Telefonnummer: 8–15 sifre, eventuelt med + foran',
+  'Odometer reading is not valid': 'Kilometerstanden er ikke gyldig', 'This car is already out on a test drive': 'Denne bilen er allerede ute på prøvekjøring',
+  'The car is out on a test drive. Register it as returned first.': 'Bilen er ute på prøvekjøring. Registrer den som levert tilbake først.',
+  'This test drive is already returned': 'Denne prøvekjøringen er allerede levert tilbake', 'Return the car before deleting the customer details': 'Lever bilen tilbake før kundeopplysningene slettes',
+  'Confirm that the items are back in place, or write a note about what is missing': 'Bekreft at utstyret er på plass igjen, eller skriv hva som mangler',
+  'Confirm that the customer has been given the privacy information': 'Bekreft at kunden har fått personverninformasjonen',
+  'Choose the tyre company the workshop should order from': 'Velg dekkleverandøren verkstedet skal bestille fra', 'Give the expected delivery date for the tyres': 'Oppgi forventet leveringsdato for dekkene',
+  'This PDI order is closed': 'Denne bestillingen er avsluttet', 'Unknown recipient': 'Ukjent mottaker', 'Give a valid e-mail address': 'Oppgi en gyldig e-postadresse',
+  'E-mail sending is not set up on the server (SMTP_HOST / SMTP_FROM)': 'Sending av e-post er ikke satt opp på serveren (SMTP_HOST / SMTP_FROM)',
+  'Empty value: use Reset to go back to the server environment / default': 'Tom verdi: bruk Tilbakestill for å gå tilbake til servermiljøet / standard',
+  'Enter the tyre pressure': 'Legg inn dekktrykket', 'Enter the 12V voltage and the battery tester result': 'Legg inn 12V-spenningen og resultatet fra batteritesteren',
+  'Enter the voltage after charging': 'Legg inn spenningen etter lading', 'Enter the HV battery charge (SOC %)': 'Legg inn ladenivået på HV-batteriet (SOC %)',
+  'Something is not OK – describe it and what was done under Remarks': 'Noe er ikke OK – beskriv det og hva som ble gjort under Anmerkninger',
+  'The page is out of date – reload and try again': 'Siden er utdatert – last inn på nytt og prøv igjen', 'This check is already cancelled': 'Denne kontrollen er allerede annullert',
+  'Give a reason': 'Oppgi en begrunnelse', 'No storage check is due for this car': 'Ingen lagerkontroll forfaller for denne bilen',
+  'The storage programme is for factory-new cars.': 'Lagerprogrammet gjelder fabrikknye biler.', 'PDI done – storage programme finished.': 'Nybilklargjøring utført – lagerprogrammet er avsluttet.',
+  'The car is off site.': 'Bilen er ikke på lager.', 'Starts when the car is placed in storage.': 'Starter når bilen plasseres på lager.',
+  'Licence photo': 'Førerkortbilde', 'Licence photo file': 'Førerkortbildefil', 'Photo file': 'Bildefil', 'Photo variant': 'Bildevariant', 'Storage location': 'Lagerplass',
+  'Parent spot': 'Hovedplass', 'Staff member': 'Ansatt', 'Inspection': 'Kontroll', 'List entry': 'Listeelement', 'Setting': 'Innstilling', 'Storage check ': 'Lagerkontroll ',
+};
+
+// Texts with numbers, names or dates in them. {} = any text, {n} = a number.
+// In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
+const NO_PATTERNS = [
+  ['{} not found', '{1t} ble ikke funnet'],
+  ['Known damage ({n})', 'Kjente skader ({1})'], ['Repaired damage ({n})', 'Reparerte skader ({1})'],
+  ['Check data: Statens vegvesen differs ({n})', 'Sjekk data: Statens vegvesen avviker ({1})'],
+  ['In progress ({n})', 'Pågår ({1})'], ['Out on test drive now ({n})', 'Ute på prøvekjøring nå ({1})'],
+  ['Returned — customer details in the trash ({n})', 'Levert tilbake — kundeopplysninger i papirkurven ({1})'],
+  ['All checks ({n})', 'Alle kontroller ({1})'], ['Storage spots ({n} active)', 'Lagerplasser ({1} aktive)'],
+  ['{n} car', '{1} bil'], ['{n} cars', '{1} biler'], ['{n} car →', '{1} bil →'], ['{n} cars →', '{1} biler →'],
+  ['{n} / {n} cars', '{1} / {2} biler'], ['{n} total', '{1} totalt'], ['{n} sub-zones', '{1} undersoner'], ['{n} to place', '{1} skal plasseres'],
+  ['{n} cars in {n} spots', '{1} biler på {2} plasser'], ['{n} car in {n} spot', '{1} bil på {2} plass'], ['{n} cars in {n} spot', '{1} biler på {2} plass'],
+  ['{n} car in {n} spots', '{1} bil på {2} plasser'], ['· {n} off site', '· {1} utenfor lageret'],
+  ['{} ({n} cars)', '{1} ({2} biler)'], ['{} ({n} car)', '{1} ({2} bil)'], ['{} ({n}/{n} cars)', '{1} ({2}/{3} biler)'], ['{} ({n}/{n} car)', '{1} ({2}/{3} bil)'],
+  ['{n} day', '{1} dag'], ['{n} days', '{1} dager'], ['in {n} d', 'om {1} d'], ['{n} d overdue', '{1} d forsinket'], ['overdue by {n} d', 'forsinket med {1} d'],
+  ['Due in {n} days', 'Frist om {1} dager'], ['Due in {n} day', 'Frist om {1} dag'], ['Overdue by {n} days', 'Forsinket med {1} dager'], ['Overdue by {n} day', 'Forsinket med {1} dag'],
+  ['Service due in {n} days', 'Service om {1} dager'], ['Service due in {n} day', 'Service om {1} dag'], ['Service due ({n} days ago)', 'Service forfalt ({1} dager siden)'],
+  ['Service due ({n} day ago)', 'Service forfalt ({1} dag siden)'], ['Service overdue by {n} days', 'Service forsinket med {1} dager'], ['Service overdue by {n} day', 'Service forsinket med {1} dag'],
+  ['EU-kontroll: Due in {n} days', 'EU-kontroll: frist om {1} dager'], ['EU-kontroll: Overdue by {n} days', 'EU-kontroll: forsinket med {1} dager'],
+  ['EU-kontroll: Overdue by {n} day', 'EU-kontroll: forsinket med {1} dag'], ['EU-kontroll: Due today', 'EU-kontroll: frist i dag'], ['EU-kontroll: Due tomorrow', 'EU-kontroll: frist i morgen'],
+  ['EU-kontroll {}', 'EU-kontroll {1}'], ['EU-kontroll due {}', 'EU-kontroll frist {1}'], ['due {}', 'frist {1}'], ['due {} (in {n} d)', 'frist {1} (om {2} d)'],
+  ['last {} at {}', 'sist {1} ved {2}'], ['last {}', 'sist {1}'], ['Previous service: {} at {}.', 'Forrige service: {1} ved {2}.'], ['Previous service: {}.', 'Forrige service: {1}.'],
+  ['{} min', '{1} min'], ['{n} h {n} min', '{1} t {2} min'], ['{n} d {n} h', '{1} d {2} t'],
+  ['Spot {}', 'Plass {1}'], ['spot {}', 'plass {1}'], ['{} since {}', '{1} siden {2}'], ['since {}', 'siden {1}'], ['In spot since {}', 'På plassen siden {1}'],
+  ['Out since {} ({})', 'Ute siden {1} ({2})'], ['Started {}', 'Startet {1}'], ['started {}', 'startet {1}'], ['Stored {}', 'Lagret {1}'],
+  ['{n}/4 photos', '{1}/4 bilder'], ['{n} damage', '{1} skade'], ['{n} damages', '{1} skader'], ['{n} damage(s)', '{1} skade(r)'], ['{}, {n} damage(s)', '{1}, {2} skade(r)'],
+  ['Arrival inspection · {} · started {}', 'Mottakskontroll · {1} · startet {2}'], ['Arrival inspection · no inspector · started {}', 'Mottakskontroll · ingen kontrollør · startet {1}'],
+  ['Arrival inspection ', 'Mottakskontroll '], ['Completed {}. Odometer {}.', 'Fullført {1}. Kilometerstand {2}.'], ['This inspection was cancelled {}.', 'Denne kontrollen ble avbrutt {1}.'],
+  ['Stored at {}', 'Lagret på {1}'], ['{}: no photo', '{1t}: ingen bilde'], ['✓ {}', '✓ {1t}'], ['📷 {}', '📷 {1t}'], ['{} (missing: {})', '{1t} (mangler: {2t})'],
+  ['{} is already in stock ({}). ', '{1} er allerede på lager ({2t}). '], ['{} already has an arrival inspection in progress. Continuing will open it.', '{1} har allerede en pågående mottakskontroll. Fortsett for å åpne den.'],
+  ['Known vehicle: {}. A new arrival inspection will be added to its history.', 'Kjent bil: {1}. En ny mottakskontroll legges til i historikken.'],
+  ['{n}/17 characters', '{1}/17 tegn'], ['From the VIN: {}.', 'Fra VIN: {1}.'], ['model year {n}', 'årsmodell {1}'], ['{} confidence', '{1t} sikkerhet'],
+  ['high', 'høy'], ['medium', 'middels'], ['low', 'lav'], ['Plate · {} confidence · tap to look up', 'Skilt · {1t} sikkerhet · trykk for å slå opp'],
+  ['1 character corrected (read as {})', '1 tegn rettet (lest som {1})'], ['VINs never contain {} — did you mean 1 or 0?', 'VIN inneholder aldri {1} — mente du 1 eller 0?'],
+  ['Could not reach Statens vegvesen: {}', 'Fikk ikke kontakt med Statens vegvesen: {1t}'], ['Registration status: {}. ', 'Registreringsstatus: {1}. '],
+  ['EU-kontroll {}. ', 'EU-kontroll {1t}. '], ['due in {n} days', 'frist om {1} dager'], ['overdue by {n} days', 'forsinket med {1} dager'],
+  ['— only character {n} differs.', '— bare tegn {1} er forskjellig.'], ['Reg. no {} is already on ', 'Reg.nr. {1} er allerede på '], ['Reg. no {}', 'Reg.nr. {1}'],
+  ['— {}, {}', '— {1t}, {2t}'], ['{} — {}, {}', '{1t} — {2t}, {3t}'], ['{} · {}', '{1t} · {2t}'], ['{} · {} · {}', '{1t} · {2t} · {3t}'],
+  ['Found {}', 'Funnet {1}'], ['Repaired {} — {}', 'Reparert {1} — {2}'], ['Repaired {}', 'Reparert {1}'],
+  ['Deleted {} by {}', 'Slettet {1} av {2}'], ['Deleted {}', 'Slettet {1}'], ['Deleted automatically {} (no activity for the retention period)', 'Slettet automatisk {1} (ingen aktivitet i lagringsperioden)'],
+  ['· removed for good {}', '· slettes for godt {1}'], ['Restored to {}', 'Gjenopprettet til {1}'], ['{} moved to Recently deleted', '{1} flyttet til Nylig slettet'],
+  ['Last fetched {} · {n} distinct version(s) stored', 'Sist hentet {1} · {2} ulike versjoner lagret'], ['· last {}', '· sist {1}'],
+  ['Marked as registered. {}', 'Merket som registrert. {1t}'], ['Confirm that {} ({}) has been registered in Norway.', 'Bekreft at {1} ({2}) er registrert i Norge.'],
+  ['The deadline is {}. Book EU-kontroll now.', 'Fristen er {1}. Bestill EU-kontroll nå.'],
+  ['The deadline was {}. The car must pass EU-kontroll before it is driven on public roads.', 'Fristen var {1}. Bilen må godkjennes på EU-kontroll før den kjøres på offentlig vei.'],
+  ['Registered ({})', 'Registrert ({1})'], ['{}: {} → {}', '{1t}: {2} → {3}'], ['{} → {}', '{1} → {2}'], ['From {}', 'Fra {1}'], ['To {}', 'Til {1}'],
+  ['VIN via {}', 'VIN via {1t}'], ['manual', 'manuelt'], ['photo', 'bilde'], ['registry', 'registeret'], ['barcode', 'strekkode'],
+  ['Used Statens vegvesen: {}', 'Brukte Statens vegvesen: {1}'], ['Kept ours: {}', 'Beholdt vår: {1}'], ['{} driven', '{1} kjørt'],
+  ['Taken out: {}', 'Tatt ut: {1}'], ['Put in: {}', 'Lagt i: {1}'], ['Not OK: {n}', 'Ikke OK: {1}'], ['12V {} V', '12V {1} V'], ['battery charged', 'batteri ladet'], ['battery replaced', 'batteri byttet'],
+  ['To {} · from e-mail app · sent again', 'Til {1} · fra e-postprogram · sendt på nytt'], ['To {} · from e-mail app', 'Til {1} · fra e-postprogram'], ['To {} · sent again', 'Til {1} · sendt på nytt'],
+  ['from {}', 'fra {1}'], ['Delete this car?\n\n{}\n\nIt moves to "Recently deleted" and can be restored from there. {}', 'Slette denne bilen?\n\n{1}\n\nDen flyttes til «Nylig slettet» og kan gjenopprettes derfra. {2t}'],
+  ['It is removed for good after {n} days.', 'Den slettes for godt etter {1} dager.'],
+  ['Delete {} ({}) permanently?\n\nAll its data and photos are removed now. This cannot be undone.', 'Slette {1} ({2}) permanent?\n\nAlle data og bilder fjernes nå. Dette kan ikke angres.'],
+  // today
+  ['sent {} to {} · enter the date when they reply', 'sendt {1} til {2} · legg inn datoen når de svarer'], ['started {} by {}', 'startet {1} av {2}'],
+  ['{} ({})', '{1} ({2t})'], ['was {}', 'var {1}'], ['{} · today', '{1t} · i dag'], ['{} · {n} d overdue', '{1t} · {2} d forsinket'], ['{} · in {n} d', '{1t} · om {2} d'],
+  // test drive
+  ['{} is out on a test drive', '{1} er ute på prøvekjøring'], ['Put back in the car: {}', 'Legg tilbake i bilen: {1}'], ['Taken out of the car: {}', 'Tatt ut av bilen: {1}'],
+  ['Customer details and the licence photo are moved to the trash when the car is returned, and deleted for good after {n} days.', 'Kundeopplysninger og førerkortbilde flyttes til papirkurven når bilen leveres tilbake, og slettes for godt etter {1} dager.'],
+  ['Kept for {n} days after the return (e.g. for toll or speeding fines), then deleted for good.', 'Beholdes i {1} dager etter innlevering (f.eks. for bompenger eller fartsbøter), deretter slettes de for godt.'],
+  ['{} → {} · {} driven · deleted for good {}', '{1} → {2} · {3} kjørt · slettes for godt {4}'], ['{} → {} · deleted for good {}', '{1} → {2} · slettes for godt {3}'],
+  ['Note: {}', 'Merknad: {1}'], ['Driving licence — {}', 'Førerkort — {1}'], ['Access log — {}', 'Tilgangslogg — {1}'], ['Access log — test drive', 'Tilgangslogg — prøvekjøring'],
+  ['Opened licence photo — {}', 'Åpnet førerkortbilde — {1}'], ['Deleted customer details — {}', 'Slettet kundeopplysninger — {1}'],
+  ["Delete {}'s details and licence photo for good now? This cannot be undone.", 'Slette opplysningene og førerkortbildet til {1} for godt nå? Dette kan ikke angres.'],
+  [' since {} — {}, ', ' siden {1} — {2}, '],
+  // PDI
+  ['Sent {} to {} by {} (e-mail app)', 'Sendt {1} til {2} av {3} (e-postprogram)'], ['Sent {} to {} by {}', 'Sendt {1} til {2} av {3}'], ['Sent {} to {} (e-mail app)', 'Sendt {1} til {2} (e-postprogram)'],
+  ['Sent {} to {}', 'Sendt {1} til {2}'], ['Sent to {}', 'Sendt til {1}'], ['PDI done {} ({})', 'Nybilklargjøring utført {1} ({2})'], ['PDI done {}', 'Nybilklargjøring utført {1}'],
+  ['{} · expected {}', '{1} · forventet {2}'], ['{} · {} · expected {}', '{1} · {2} · forventet {3}'], ['expected {}', 'forventet {1}'],
+  // storage maintenance
+  ['Do {}', 'Utfør {1t}'], ['monthly check', 'månedlig sjekk'], ['3-month check', '3-månederssjekk'], ['6-month check', '6-månederssjekk'],
+  ['{} — {}', '{1t} — {2t}'], ['{} saved', '{1t} lagret'], ['Last check {} by {}', 'Siste kontroll {1} av {2}'], ['Last check {}', 'Siste kontroll {1}'],
+  ['· 12V {} V', '· 12V {1} V'], ['· SOC {n} %', '· SOC {1} %'], ['In storage since {} · {n} checks recorded', 'På lager siden {1} · {2} kontroller registrert'],
+  ['In storage since {} · {n} check recorded', 'På lager siden {1} · {2} kontroll registrert'], ['— {}, {}', '— {1}, {2}'],
+  ['Cancelled {} by {}: {}', 'Annullert {1} av {2}: {3}'], ['Cancelled {}: {}', 'Annullert {1}: {2}'],
+  ['Cancel the {} from {}?\n\nIt stops counting in the schedule but stays in the report, struck through.\nReason (required):',
+    'Annullere {1t} fra {2}?\n\nDen teller ikke lenger i planen, men blir stående i rapporten, gjennomstreket.\nBegrunnelse (påkrevd):'],
+  ['arrival check', 'ankomstkontroll'],
+  ['Answer every point (missing: {})', 'Svar på alle punkter (mangler: {1t})'], ['Tyre pressure {} bar – adjust to 2,7 ± 0,1 bar.', 'Dekktrykk {1} bar – juster til 2,7 ± 0,1 bar.'],
+  ['12V is below {} V – charge or replace the battery.', '12V er under {1} V – lad eller bytt batteriet.'], ['SOC below {n} % – charge to at least {n} %.', 'SOC under {1} % – lad til minst {2} %.'],
+  ['For storage over a month MG wants SOC over {n} %.', 'For lagring over en måned krever MG SOC over {1} %.'], ['Charged to (min. {n} %)', 'Ladet til (min. {1} %)'],
+  ['All four tyres within {}–{} bar (adjusted if needed)', 'Alle fire dekk innenfor {1}–{2} bar (justert ved behov)'], ['{} · {}', '{1t} · {2t}'],
+  ['← {}', '← {1}'],
+  // settings
+  ['Last login {}', 'Siste innlogging {1}'], ['New PIN for {}. Tell them the PIN in person; they can change it themselves afterwards (their name at the top → Change PIN).',
+    'Ny PIN-kode for {1}. Gi beskjed om PIN-koden personlig; de kan endre den selv etterpå (navnet sitt øverst → Endre PIN-kode).'],
+  ['PIN saved for {}', 'PIN-kode lagret for {1}'], ['Make {} system admin? They can change all system settings (API key, e-mail server…).', 'Gjøre {1} til systemadministrator? Vedkommende kan endre alle systeminnstillinger (API-nøkkel, e-postserver…).'],
+  ['Capacity for {}', 'Kapasitet for {1}'], ['{}: max {n} cars', '{1}: maks {2} biler'], ['{}: no limit', '{1}: ingen grense'], ['Added {n} spots', 'La til {1} plasser'],
+  ['Added {}', 'La til {1}'], ['Sub-zone in {}', 'Undersone i {1}'], ['Deactivate {} and all its sub-zones?', 'Deaktivere {1} og alle undersonene?'],
+  ['New code for {}', 'Ny kode for {1}'], ['{} renamed to {}', '{1} har fått nytt navn: {2}'], ['{} deleted', '{1} slettet'], ['Delete {}', 'Slett {1}'], ['Delete {}?', 'Slette {1}?'],
+  ['{} and its {n} sub-zone', '{1} og {2} undersone'], ['{} and its {n} sub-zones', '{1} og {2} undersoner'],
+  ['{} has {n} car. Move it to:', '{1} har {2} bil. Flytt den til:'], ['{} has {n} cars. Move all of them to:', '{1} har {2} biler. Flytt alle til:'],
+  ['Move {n} car and delete', 'Flytt {1} bil og slett'], ['Move {n} cars and delete', 'Flytt {1} biler og slett'],
+  ['No spot has room for {n} cars. Add a spot or raise a capacity first, or move the cars one by one.', 'Ingen plass har rom for {1} biler. Legg til en plass eller øk kapasiteten først, eller flytt bilene én og én.'],
+  ['{n} car moved to {}; {} deleted', '{1} bil flyttet til {2}; {3} slettet'], ['{n} cars moved to {}; {} deleted', '{1} biler flyttet til {2}; {3} slettet'],
+  ['The {n} car already in {} stay there ', 'Den {1} bilen som allerede står på {2}, blir stående '], ['The {n} cars already in {} stay there ', 'De {1} bilene som allerede står på {2}, blir stående '],
+  ['as "not in a sub-zone" until moved into one. New cars must go into a sub-zone.', 'som «ikke i en undersone» til de flyttes inn i en. Nye biler må plasseres i en undersone.'],
+  ['Name', 'Navn'], ['E-mail address', 'E-postadresse'], ['Choices, separated by commas (empty = none)', 'Valg, skilt med komma (tom = ingen)'],
+  ['API key configured (ending in …{}). ', 'API-nøkkel satt (slutter på …{1}). '], ['API key configured. ', 'API-nøkkel satt. '],
+  ['Registered vehicles are re-synced every {n} days.', 'Registrerte biler synkroniseres hver {1}. dag.'], ['Latest error ({}): {}', 'Siste feil ({1}): {2}'],
+  [' for {n} days and can be restored. After that they are removed for good, with all photos.', ' i {1} dager og kan gjenopprettes. Deretter slettes de for godt, med alle bilder.'],
+  ['Cars that are off site (sold/delivered) and have had no activity for {n} years are deleted automatically — they go to Recently deleted first. Cars in storage are never deleted automatically.',
+    'Biler som ikke er på lager (solgt/levert) og har vært uten aktivitet i {1} år slettes automatisk — de havner først i Nylig slettet. Biler på lager slettes aldri automatisk.'],
+  ['In Recently deleted now: {n}', 'I Nylig slettet nå: {1}'], ['In Recently deleted now: {n} · Due for automatic deletion within 30 days: {n}', 'I Nylig slettet nå: {1} · Slettes automatisk innen 30 dager: {2}'],
+  [' → Statens vegvesen → API key.', ' → Statens vegvesen → API-nøkkel.'], [' page → Data retention.', '-siden → Lagring av data.'],
+  // system
+  ['Set ({}) – type a new value to replace', 'Satt ({1}) – skriv en ny verdi for å bytte'], ['Default: {}', 'Standard: {1}'], ['{} saved', '{1t} lagret'],
+  ['Reset “{}” to the server environment / default?', 'Tilbakestille «{1t}» til servermiljøet / standard?'], [' · {} by {}', ' · {1} av {2}'], [' · {}', ' · {1}'],
+  // server messages with values
+  ['{} already exists', '{1} finnes allerede'], ['{} is full ({n} of {n} cars)', '{1} er full ({2} av {3} biler)'], ['{} is inactive', '{1} er inaktiv'],
+  ['{} is split into sub-zones; choose one of them', '{1} er delt i undersoner; velg en av dem'], ['{} has {n} car; choose a spot to move them to', '{1} har {2} bil; velg en plass å flytte den til'],
+  ['{} has {n} cars; choose a spot to move them to', '{1} har {2} biler; velg en plass å flytte dem til'], ['The car is already at {}', 'Bilen står allerede på {1}'],
+  ['There is 1 car here; move them before deactivating', 'Det står 1 bil her; flytt den før du deaktiverer'], ['There are {n} cars here; move them before deactivating', 'Det står {1} biler her; flytt dem før du deaktiverer'],
+  ["There are already {n} cars here; capacity can't be lower than that", 'Det står allerede {1} biler her; kapasiteten kan ikke være lavere enn det'],
+  ['The PIN must be {n}–{n} digits', 'PIN-koden må være {1}–{2} sifre'], ['Too many wrong PINs. Try again in {n} min, or ask an administrator.', 'For mange feil PIN-koder. Prøv igjen om {1} min, eller spør en administrator.'],
+  ['Wrong PIN ({n} tries left)', 'Feil PIN-kode ({1} forsøk igjen)'], ['Wrong PIN. Locked for {n} min.', 'Feil PIN-kode. Låst i {1} min.'],
+  ['Inspection is not complete yet: {}', 'Kontrollen er ikke fullført ennå: {1t}'], ['Inspection is {} and can no longer be changed', 'Kontrollen er {1t} og kan ikke lenger endres'],
+  ['completed', 'fullført'], ['cancelled', 'avbrutt'], ['in progress', 'pågår'],
+  ['Odometer in ({n}) is lower than when the car left ({n})', 'Kilometerstand inn ({1}) er lavere enn da bilen dro ({2})'],
+  ["12V below {} V or not 'Good': record whether the battery was charged or replaced", "12V under {1} V eller ikke 'God': registrer om batteriet ble ladet eller byttet"],
+  ['SOC below {n} %: charge to at least {n} % and enter the new value', 'SOC under {1} %: lad til minst {2} % og legg inn ny verdi'],
+  ['API key rejected by Statens vegvesen (HTTP {n})', 'API-nøkkelen ble avvist av Statens vegvesen (HTTP {1})'], ['Network error: {}', 'Nettverksfeil: {1}'],
+  ['Could not send the e-mail: {}', 'Kunne ikke sende e-posten: {1}'], ['Spot {} deleted', 'Plass {1} slettet'],
+  ['{}: give at most {n} items', '{1t}: oppgi maks {2} punkter'], ['{}: not a valid list', '{1t}: ikke en gyldig liste'], ['Removed items', 'Uttatt utstyr'], ['Added items', 'Tillagt utstyr'],
+  ['Carbonara v{} · built {}', 'Carbonara v{1} · bygget {2}'], ['Error {n}', 'Feil {1}'], ['Not before {}', 'Ikke før {1}'], ['Not after {}', 'Ikke etter {1}'],
+];
+
+// Norwegian texts Carbonara itself uses (outside documents) -> English.
+const EN = {
+  // storage checklist (labels are Norwegian because they are printed on the report)
+  'Minimum 150 mm til neste objekt foran og bak': 'At least 150 mm to the next object in front and behind',
+  'Minimum 600 mm åpen plass på siden': 'At least 600 mm of open space at the side',
+  'Ikke parkert under trær eller annet som kan skade bilen': 'Not parked under trees or anything else that can damage the car',
+  'Lagret vekk fra varmekilder og svært fuktige områder': 'Stored away from heat sources and very humid areas',
+  'Girspak i P (automat) / 1. gir (manuell), parkeringsbrems ikke på': 'Gear lever in P (automatic) / 1st gear (manual), parking brake not applied',
+  'Ingenting på dashbordet, solskjerm i hvileposisjon': 'Nothing on the dashboard, sun visor in rest position',
+  'Alle A/C-ventiler åpne': 'All A/C vents open',
+  'Takluke og gardin, vinduer, dører, panser og bakluke lukket': 'Sunroof and sunshade, windows, doors, bonnet and tailgate closed',
+  'Teppebeskyttelse lagt inn på førersiden': 'Carpet cover fitted on the driver side',
+  'Viskerarmer løftet': 'Wiper arms lifted',
+  'Alt elektrisk utstyr avslått': 'All electrical equipment switched off',
+  '12V-batteri frakoblet (minuspol)': '12V battery disconnected (negative terminal)',
+  'Sjekk lakk for aggressive stoffer (mose, støv, fugleskitt), vask ved behov': 'Check paint for aggressive substances (moss, dust, bird droppings); wash if needed',
+  'Åpne og lukk dører, panser og bakluke; test horn 3 ganger': 'Open and close doors, bonnet and tailgate; test the horn 3 times',
+  'Start bilen på tomgang i minst 5 minutter, lytt etter lyder': 'Run the engine at idle for at least 5 minutes, listen for noises',
+  'Skru på A/C og bruk ventilasjonen én gang (over 5 °C)': 'Turn on the A/C and use the vents once (above 5 °C)',
+  'Flytt bilen minimum 40 cm': 'Move the car at least 40 cm',
+  'Koble fra 12V-batteri': 'Disconnect the 12V battery',
+  'READY-modus i 10 min, deretter 12V tilkoblet i 2 timer (balansering av HV-batteri)': 'READY mode for 10 min, then 12V connected for 2 hours (HV battery balancing)',
+  'Rengjør viskere og ruter, test spylere': 'Clean wipers and windows, test the washers',
+  'Sjekk og etterfyll væsker: kjølevæske, motorolje, spylervæske, bremsevæske': 'Check and top up fluids: coolant, engine oil, washer fluid, brake fluid',
+  'Sjekk alle dørpakninger og taklukepakning': 'Check all door seals and the sunroof seal',
+  'Sjekk lakk, interiør og overflater': 'Check paint, interior and surfaces',
+  'Lad HV-batteriet i minimum 2 timer med AC-lading': 'Charge the HV battery for at least 2 hours with AC charging',
+  // battery tester results / actions
+  'God': 'Good', 'God – lad opp': 'Good – recharge', 'Lad og test på nytt': 'Charge and retest', 'Bytt batteri': 'Replace battery',
+  'Ingen': 'None', 'Ladet': 'Charged', 'Byttet': 'Replaced',
+  // winter tyre options
+  'Ingen vinterdekk': 'No winter tyres', 'Vinterdekk på lager': 'Winter tyres in stock',
+  'Vinterdekk bestilt av selger': 'Winter tyres ordered by sales', 'Vinterdekk bestilles av verkstedet': 'Winter tyres ordered by the workshop',
+  // date/time placeholders written in Norwegian
+  'dd.mm.åååå': 'dd.mm.yyyy', 'tt:mm': 'hh:mm',
+};
+
+// ---------------------------------------------------------------- engine
+
+// Texts are matched without their leading/trailing spaces (those are kept as they are).
+const trimmed = (map) => Object.fromEntries(Object.entries(map).map(([k, v]) => [k.trim(), v.trim()]));
+const NO_T = trimmed(NO);
+const EN_T = trimmed(EN);
+const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const COMPILED = NO_PATTERNS.map(([from, to]) => {
+  const parts = from.trim().split(/(\{\}|\{n\})/);
+  const re = parts.map((p) => (p === '{}' ? '([\\s\\S]+?)' : p === '{n}' ? '(-?\\d+(?:[.,]\\d+)?)' : escapeRe(p))).join('');
+  return [new RegExp(`^${re}$`), to.trim()];
+});
+
+function translateCore(core) {
+  if (!/[A-Za-zÆØÅæøå]{2}/.test(core)) return core; // numbers, dates, symbols
+  if (lang === 'no') {
+    if (Object.prototype.hasOwnProperty.call(NO_T, core)) return NO_T[core];
+    for (const [re, to] of COMPILED) {
+      const m = core.match(re);
+      if (m) return to.replace(/\{(\d+)(t?)\}/g, (_, i, t) => (t ? translateCore(m[i]) : m[i]));
+    }
+    return core;
+  }
+  return Object.prototype.hasOwnProperty.call(EN_T, core) ? EN_T[core] : core;
+}
+
+/** Translate one text (keeps leading/trailing spaces). */
+export function tr(text) {
+  if (text == null) return text;
+  const s = String(text);
+  const m = s.match(/^(\s*)([\s\S]*?)(\s*)$/);
+  if (!m[2]) return s;
+  const out = translateCore(m[2]);
+  return out === m[2] ? s : m[1] + out + m[3];
+}
+
+const SKIP = 'script,style,textarea,[translate="no"],.mono,.vin';
+const ATTRS = ['placeholder', 'title', 'aria-label'];
+
+function translateNode(node) {
+  if (node.nodeType === Node.TEXT_NODE) {
+    const p = node.parentElement;
+    if (!p || p.closest(SKIP)) return;
+    const next = tr(node.nodeValue);
+    if (next !== node.nodeValue) node.nodeValue = next;
+    return;
+  }
+  if (node.nodeType !== Node.ELEMENT_NODE || node.closest(SKIP)) return;
+  for (const a of ATTRS) {
+    if (node.hasAttribute(a)) {
+      const v = node.getAttribute(a);
+      const next = tr(v);
+      if (next !== v) node.setAttribute(a, next);
+    }
+  }
+  const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
+    acceptNode: (n) => (n.nodeType === Node.ELEMENT_NODE && n.matches(SKIP) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+    if (n.nodeType === Node.TEXT_NODE) {
+      const next = tr(n.nodeValue);
+      if (next !== n.nodeValue) n.nodeValue = next;
+    } else {
+      for (const a of ATTRS) {
+        if (n.hasAttribute(a)) {
+          const v = n.getAttribute(a);
+          const next = tr(v);
+          if (next !== v) n.setAttribute(a, next);
+        }
+      }
+    }
+  }
+}
+
+/** Translate the page now and everything added to it later. */
+export function startTranslator() {
+  document.documentElement.lang = lang === 'no' ? 'nb' : 'en';
+  translateNode(document.body);
+  new MutationObserver((records) => {
+    for (const r of records) {
+      if (r.type === 'characterData') translateNode(r.target);
+      else if (r.type === 'attributes') translateNode(r.target);
+      else r.addedNodes.forEach(translateNode);
+    }
+  }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ATTRS });
+
+  // Native dialogs too.
+  const { confirm: c, prompt: p, alert: a } = window;
+  window.confirm = (msg) => c.call(window, tr(msg));
+  window.prompt = (msg, def) => p.call(window, tr(msg), def);
+  window.alert = (msg) => a.call(window, tr(msg));
+}

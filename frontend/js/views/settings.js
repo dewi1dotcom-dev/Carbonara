@@ -95,7 +95,7 @@ export async function settingsView(el) {
           + (r.retention_years > 0 ? ` · Due for automatic deletion within 30 days: ${r.due_within_30_days}` : ''))),
       h('p', { class: 'muted small' }, session.me?.is_superadmin
         ? ['Change the periods on the ', h('a', { href: '#/system' }, 'System'), ' page → Data retention.']
-        : 'A super-admin can change the periods on the System page.')));
+        : 'A system admin can change the periods on the System page.')));
   }
 
   async function renderRegistry() {
@@ -109,7 +109,7 @@ export async function settingsView(el) {
         : h('div', { class: 'notice warn' }, 'No API key configured yet.'),
       h('p', { class: 'muted small' }, session.me?.is_superadmin
         ? ['To add or replace the key: ', h('a', { href: '#/system' }, 'System'), ' → Statens vegvesen → API key.']
-        : 'A super-admin can add or replace the key on the System page.'),
+        : 'A system admin can add or replace the key on the System page.'),
       h('dl', { class: 'kv' },
         [['Synced OK', s.ok], ['Waiting', s.pending], ['Not found in registry', s.not_found], ['Errors', s.error],
           ['Due for sync now', s.due]].map(([k, val]) => [h('dt', {}, k), h('dd', {}, String(val))])),
@@ -142,10 +142,10 @@ export async function settingsView(el) {
       s.id === me.id || !me.is_superadmin ? null : h('button', {
         class: 'link', type: 'button',
         onClick: () => {
-          if (!s.is_superadmin && !confirm(`Make ${s.name} super-admin? They can change all system settings (API key, e-mail server…).`)) return;
+          if (!s.is_superadmin && !confirm(`Make ${s.name} system admin? They can change all system settings (API key, e-mail server…).`)) return;
           patch(s, { is_superadmin: !s.is_superadmin });
         },
-      }, s.is_superadmin ? 'Remove super-admin' : 'Make super-admin'),
+      }, s.is_superadmin ? 'Remove system admin' : 'Make system admin'),
       s.id === me.id ? null : h('button', { class: 'link', type: 'button', onClick: () => patch(s, { active: !s.active }) },
         s.active ? 'Deactivate' : 'Activate')));
 
@@ -156,7 +156,7 @@ export async function settingsView(el) {
         : 'Only an administrator can add staff or change PINs.'),
       h('ul', { class: 'plain rows' }, staff.map((s) => h('li', { class: s.active ? '' : 'inactive' },
         h('span', {}, s.name, s.id === me?.id ? ' (you)' : '', s.active ? '' : ' (inactive)', ' ',
-          s.is_superadmin ? h('span', { class: 'badge good' }, 'Super-admin') : s.is_admin ? h('span', { class: 'badge' }, 'Admin') : null, ' ',
+          s.is_superadmin ? h('span', { class: 'badge good' }, 'System admin') : s.is_admin ? h('span', { class: 'badge' }, 'Admin') : null, ' ',
           s.active && !s.has_pin ? h('span', { class: 'badge warn' }, 'No PIN — can’t log in') : null,
           s.last_login_at ? h('span', { class: 'muted small block' }, `Last login ${fmtDate(s.last_login_at)}`) : null),
         actions(s)))),

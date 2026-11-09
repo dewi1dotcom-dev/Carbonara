@@ -516,3 +516,14 @@ a.tile:hover { border-color: var(--primary); }
 .report th.rep-void .rep-sub { text-decoration: none; font-weight: 700; color: #b91c1c; }
 .sc-void > span { text-decoration: line-through; color: var(--muted); }
 .sc-void > span .block { text-decoration: none; }
+/* ---------------------------------------------------------------- date / time fields (dd.mm.yyyy, 24 h) */
+.dt-field { position: relative; display: flex; align-items: stretch; gap: .35rem; }
+.dt-field .dt-text { flex: 1; min-width: 0; font-variant-numeric: tabular-nums; }
+.dt-field .dt-time { max-width: 7rem; }
+.dt-btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px;
+  padding: 0 .6rem; cursor: pointer; font-size: 1.05rem; }
+.dt-btn:disabled { opacity: .5; cursor: default; }
+/* The native picker is only used for its calendar popup; the field itself is hidden. */
+.dt-native { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
+/* ---------------------------------------------------------------- language */
+.lang-switch { display: flex; gap: .9rem; justify-content: center; margin-top: 1rem; }

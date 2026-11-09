@@ -1,4 +1,5 @@
 import { api, fmtDate, h, openDialog, session, setInspectorId, showError, startClock, toast } from './ui.js';
+import { lang, setLang, startTranslator } from './i18n.js';
 import { changePinForm, loginView } from './views/login.js';
 import { arrivalsView } from './views/dashboard.js';
 import { todayView } from './views/today.js';
@@ -71,7 +72,18 @@ function renderUser() {
     class: 'user-btn', type: 'button', title: 'Account',
     onClick: () => {
       const { close } = openDialog(me.name, h('div', {},
-        h('p', { class: 'muted' }, me.is_admin ? 'Administrator' : 'Staff'),
+        h('p', { class: 'muted' }, me.is_superadmin ? 'System admin' : me.is_admin ? 'Administrator' : 'Staff'),
+        h('div', { class: 'field' }, h('label', {}, 'Language'),
+          h('div', { class: 'row' },
+            [['en', 'English'], ['no', 'Norsk']].map(([code, label]) => h('button', {
+              class: code === lang ? 'btn primary' : 'btn', type: 'button', translate: 'no',
+              onClick: async () => {
+                if (code === lang) return;
+                try { await api.post('/auth/language', { language: code }); } catch (e) { showError(e); return; }
+                setLang(code);
+                location.reload(); // simplest way to show every page in the new language
+              },
+            }, label)))),
         h('div', { class: 'actions spread' },
           h('button', {
             class: 'btn', type: 'button',
@@ -99,6 +111,8 @@ function boot() {
     try {
       const state = await api.get('/auth/state');
       session.me = state.me;
+      // The user's saved language wins over the device's; reload once to apply it.
+      if (state.me?.language && state.me.language !== lang) { setLang(state.me.language); location.reload(); return; }
       renderUser();
       document.body.classList.toggle('logged-out', !state.me);
       if (!state.me) {
@@ -120,6 +134,7 @@ function boot() {
 
 window.addEventListener('carbonara:logged-out', () => { if (session.me) { session.me = null; boot(); } });
 window.addEventListener('hashchange', () => { if (session.me) render(); });
+startTranslator();
 boot();
 startClock(document.getElementById('clock'));
 

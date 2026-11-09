@@ -13,7 +13,7 @@ formats are Norwegian.
 
 ## Working with the user
 
-- The user's own Carbonara account is **Supern** (super-admin). "Andy" is a different person
+- The user's own Carbonara account is **Supern** (system admin). "Andy" is a different person
   (a regular admin).
 
 - **Commit and push only when the user says so** ("commit and push"). Never commit on your own.
@@ -147,7 +147,7 @@ backend/
   app/mailer.py         SMTP sending (PDI orders)
   app/auth.py           PIN login, sessions, require_staff / require_admin
   app/routers/          vehicles.py, inspections.py, vin.py, admin.py, testdrives.py, session.py (login),
-                        pdi.py, dashboard.py, system.py (super-admin settings), storage_care.py
+                        pdi.py, dashboard.py, system.py (system admin settings), storage_care.py
   app/storagecare.py    MG storage programme: checklist items, schedule
   migrations/           001…008 (see below)
 frontend/               no build step; plain ES modules
@@ -161,13 +161,14 @@ vin_source 'registry'), `004_spot_capacity` (multi-car spots), `005_sub_zones` (
 `storage_spots` view), `006_service_and_condition` (condition, last_service_date/km, reg.
 numbers normalized), `007_soft_delete` (deleted_at/by/reason), `008_finn_link` (finn_code),
 `009_test_drives` (test_drives table), `010_login_and_privacy`, `011_pdi_orders`,
-`012_system_settings`, `013_delete_spots`, `014_storage_care`, `015_void_storage_checks`.
+`012_system_settings`, `013_delete_spots`, `014_storage_care`, `015_void_storage_checks`,
+`016_language`.
 **New schema changes = a new numbered file. Never edit an applied migration.**
 
 Frontend routes: `#/` dashboard, `#/intake`, `#/inspections/:id`, `#/vehicles`,
 `#/vehicles/:id`, `#/vehicles/deleted`, `#/storage`, `#/storage/:id|off-site`,
 `#/test-drive`, `#/test-drive/new/:vehicleId` (start form with the car preselected), `#/settings`,
-`#/system` (super-admins), `#/arrivals`, `#/vehicles/:id/storage-report` (printable).
+`#/system` (system admins), `#/arrivals`, `#/vehicles/:id/storage-report` (printable).
 
 ## Domain rules (the nuance)
 
@@ -327,9 +328,9 @@ warning offers "Use this VIN".
 - **Reminders are on the dashboard only** (the user's choice): "PDI tomorrow – make the car
   ready".
 
-**System page & super-admin (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`,
+**System page & system admin (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`,
 `views/system.js`, migration 012):
-- **What can be changed:** server settings, edited at `#/system` (super-admins only; the nav
+- **What can be changed:** server settings, edited at `#/system` (system admins only; the nav
   link is hidden for others). This covers the SVV API key/URL/sync days, SMTP, the privacy
   notice company/contact, and retention days/years.
 - **Where a value comes from:** `settings.<name>` = the value saved in `app_settings` (DB),
@@ -339,12 +340,12 @@ warning offers "Use this VIN".
 - **To add a setting:** add one `Setting(...)` line to `SETTINGS`, then use `settings.<name>`.
 - **Secrets** (`secret=True`) are write-only: the API only returns the last 4 characters. The
   log records who changed which key, never the value.
-- **Super-admin:**
-  - `staff.is_superadmin`. The person doing first-time setup becomes super-admin. Migration
-    012 made **Supern** (the user's own account) super-admin, with a fallback to the
+- **System admin:**
+  - `staff.is_superadmin`. The person doing first-time setup becomes system admin. Migration
+    012 made **Supern** (the user's own account) system admin, with a fallback to the
     lowest-id admin. **Andy is a regular admin.**
-  - Only super-admins can grant or remove super-admin, or change another super-admin. A
-    super-admin is always an admin.
+  - Only system admins can grant or remove system admin, or change another system admin. A
+    system admin is always an admin.
 - **The SVV key can now live in the DB** (entered on the System page) instead of the env.
   It still must never be committed to git.
 
@@ -397,10 +398,51 @@ FINN code (option C). The validator extracts 6–12 digits, and the link is
 "Fetch from FINN" import needs the official FINN API (option A) or a feed from their ad
 system (option B).
 
-**Time:** Norwegian standard, Europe/Oslo. Every date on the pages goes through `fmtDate`
-in `ui.js`: `dd.mm.yyyy` for dates and `dd.mm.yyyy HH:mm` (24-hour) for timestamps. Bare
-ISO dates are formatted as-is, with no timezone shift. Only the live header clock uses the
-long form ("søndag 8. november 2026"). Never format dates anywhere else.
+**Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`, migration 016).
+- **The rule:** no Norwegian words in the English version, and no English in the Norwegian
+  version.
+- **How it's chosen:** per user (`staff.language`, default `en`), switched under their name
+  at the top (`POST /api/auth/language`), and saved in localStorage too. Before login it
+  follows the device, with a switch on the login screen.
+- **How it works:** the code is written in English. `startTranslator()` translates every text
+  node and the placeholder/title/aria-label attributes as they are rendered (a
+  MutationObserver), and `confirm`/`prompt`/`alert` are wrapped.
+  - `NO` holds exact texts. `NO_PATTERNS` holds texts with values: `{}` = any text,
+    `{n}` = a number, and `{1t}` in the target also translates that part.
+  - Server messages (English) are translated the same way when they reach the page.
+  - `EN` translates the few Norwegian texts Carbonara uses itself (storage checklist labels,
+    battery results, winter-tyre options) when English is chosen. Use `tr()` when such a
+    text is joined into a longer string.
+- **Not translated (the user's choices):**
+  - **documents are always Norwegian:** the PDI e-mail, the customer privacy notice and the
+    storage report. They are marked `translate="no"`.
+  - **Statens vegvesen data** is shown as it comes.
+  - **PDI items** are one name each, as written in Settings.
+  - `.mono` / `.vin` (VINs, plates, codes) and input values are also skipped.
+- **Adding UI text:** write it in English, then add the Norwegian to `NO`, or a pattern if it
+  contains a value. Check the page in both languages.
+- **Norwegian terms:** PDI = **nybilklargjøring**; Arrival inspection = **Mottakskontroll**;
+  storage Arrival check = **Ankomstkontroll**; Vehicles = Biler; Off site = Ikke på lager;
+  System admin = **Systemadministrator**.
+- **The role formerly called "super-admin" is "System admin" in all text** (the user's
+  wording). The code name `is_superadmin` is unchanged.
+
+**Dates & times: ALWAYS dd.mm.yyyy and 24-hour HH:MM, everywhere, unless the user says
+otherwise.** This is a standing rule from the user, and it covers both display and input.
+- **Display:** everything goes through `fmtDate` in `ui.js` (`dd.mm.yyyy`, or
+  `dd.mm.yyyy HH:mm` for timestamps). Bare ISO dates are formatted as-is, with no timezone
+  shift. Only the live header clock uses the long form ("søndag 8. november 2026").
+- **Input:** never use `<input type="date|time">`. They follow the device language
+  (mm/dd/yyyy and AM/PM on English phones). Use `dateInput()` / `timeInput()` from `ui.js`
+  instead (0.13.3).
+  - They show `dd.mm.åååå` / `tt:mm`, accept loose typing ("9.11.26", "09112026", "800").
+  - The date field has a 📅 button that opens the native calendar.
+  - `.value` is ISO, like the native inputs, and `.id`, `.disabled` and change/input events
+    work the same. Invalid input never fires `change` to listeners.
+- **Today:** use `osloTodayIso()`, never `new Date().toISOString()` (that is UTC, so it's
+  the wrong day just after midnight).
+- **Numbers:** Norwegian format, e.g. `fmtKm` → "119 782 km". Decimals in reports use a
+  comma ("12,59 V").
 
 ---
 
@@ -468,12 +510,14 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.14.0 | **English / Norwegian** per user (translator + dictionary; documents stay Norwegian); "super-admin" renamed "System admin"; Sprutlapper → Skvettlapper, PDI item → Nybilklargjøring |
+| 0.13.3 | All date/time inputs are Carbonara's own dd.mm.yyyy / 24 h fields (no more browser mm/dd/yyyy, AM/PM); km in Norwegian number format |
 | 0.13.2 | "Enter PDI date" available before the order is sent |
 | 0.13.1 | Storage checks can be cancelled by an admin with a reason (kept struck through in the report) |
 | 0.13.0 | **Storage maintenance** for new cars (MG SI-GI2022102501): arrival + monthly/3/6-month checks, 12V/SOC/tyre rules, Today reminders, printable report; dealer number setting |
 | 0.12.2 | Fix: System page and PDI card printed "[object HTMLElement]" / "null" (native `append` again) |
 | 0.12.1 | Storage spots can be renamed and deleted (cars moved to another spot first) |
-| 0.12.0 | **PDI orders** to RBV (items, tyres, editable lists, e-mail via SMTP or e-mail app, manual booking date); **Today board** as start page; Arrivals moved to `#/arrivals`; **System page** (super-admin) to change server settings incl. SVV key and SMTP; no built-in e-mail addresses |
+| 0.12.0 | **PDI orders** to RBV (items, tyres, editable lists, e-mail via SMTP or e-mail app, manual booking date); **Today board** as start page; Arrivals moved to `#/arrivals`; **System page** (system admin) to change server settings incl. SVV key and SMTP; no built-in e-mail addresses |
 | 0.11.0 | **Login** with personal PIN (first-time setup → admin; admins manage PINs); all API behind login; test drive privacy notice (NO) + "customer informed" checkbox; licence access log; `PRIVACY_COMPANY`/`PRIVACY_CONTACT` env |
 
 **Next / ideas (not started):**

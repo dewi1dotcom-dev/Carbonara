@@ -1,4 +1,4 @@
-"""System settings (super-admins): values saved here override the server
+"""System settings (system admins): values saved here override the server
 environment. Secrets are write-only: only their last 4 characters are shown."""
 
 import logging

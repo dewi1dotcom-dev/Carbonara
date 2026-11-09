@@ -2,7 +2,7 @@ import { PANEL_LABELS } from '../diagram.js';
 import { pdiCard } from './pdi.js';
 import { storageCard } from './storagecare.js';
 import {
-  api, append, badge, busy, CONDITION, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, append, badge, busy, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   regStatus, showError, spotLabel, STATUS,
   toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
@@ -207,7 +207,7 @@ function editDialog(v, done) {
         return s;
       })()),
       field('last_service_date', 'Last service date',
-        h('input', { type: 'date', value: v.last_service_date ?? '', max: new Date().toISOString().slice(0, 10) })),
+        dateInput({ value: v.last_service_date ?? '', max: osloTodayIso() })),
       field('last_service_km', 'Km at last service', h('input', { type: 'number', inputmode: 'numeric', min: 0, value: v.last_service_km ?? '' })),
       field('finn_code', 'finn.no link or FINN code', text(v.finn_code ?? '', { placeholder: 'Paste the ad link' }))),
     h('datalist', { id: 'edit-dl-fuel' }, FUEL_TYPES.map((f) => h('option', { value: f }))),
@@ -275,8 +275,8 @@ function moveDialog(v, done) {
 
 /** Record a service done while the car is with us: moves "next service" a year on. */
 function serviceDialog(v, done) {
-  const today = new Date().toISOString().slice(0, 10);
-  const date = h('input', { type: 'date', id: 'svc-date', value: today, max: today, required: true });
+  const today = osloTodayIso();
+  const date = dateInput({ id: 'svc-date', value: today, max: today, required: true });
   const km = h('input', { type: 'number', id: 'svc-km', inputmode: 'numeric', min: 0, placeholder: 'Odometer reading' });
   const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Save service');
   const form = h('form', { class: 'form' },

@@ -1,8 +1,9 @@
 // The start page ("Today board"): what needs doing today and tomorrow first,
 // then what needs attention, then a few numbers.
+import { lang } from '../i18n.js';
 import { api, append, fmtDate, h, vehicleTitle } from '../ui.js';
 
-const weekday = new Intl.DateTimeFormat('nb-NO', { timeZone: 'Europe/Oslo', weekday: 'long' });
+const weekday = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', { timeZone: 'Europe/Oslo', weekday: 'long' });
 const clock = new Intl.DateTimeFormat('nb-NO', { timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
 const carText = (c) => [vehicleTitle(c), c.registration_number].filter(Boolean).join(' · ');

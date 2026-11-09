@@ -35,7 +35,7 @@ export function privacyDialog(privacy, trashDays) {
     ? h('strong', {}, privacy.contact)
     : h('strong', { class: 'td-items' }, '[kontaktinfo mangler – legges inn under System → Company]');
   const company = privacy?.company || 'Forhandleren';
-  const body = h('div', { class: 'privacy-text' },
+  const body = h('div', { class: 'privacy-text', translate: 'no' }, // a Norwegian document
     h('p', {}, h('strong', {}, company), ' er behandlingsansvarlig for opplysningene vi registrerer når du prøvekjører en bil.'),
     h('h3', {}, 'Hva vi registrerer'),
     h('p', {}, 'Navn, telefonnummer og et bilde av førerkortet ditt (hele kortet, også fødselsnummer), hvilken bil du kjører, og når den ble hentet og levert.'),
@@ -81,7 +81,7 @@ export async function testDriveView(el, [preselectId]) {
       h('button', { class: 'link small', type: 'button', onClick: () => privacyDialog(data.privacy, data.trash_days) },
         '🔒 Privacy notice for customers')),
     data.privacy?.contact ? null : h('div', { class: 'card notice warn' },
-      'The customer privacy notice has no contact details yet. A super-admin can add them on the System page → Company.'),
+      'The customer privacy notice has no contact details yet. A system admin can add them on the System page → Company.'),
     startCard(staff, data, rerender, preselect),
     h('section', { class: 'card' },
       h('h2', {}, `Out on test drive now (${data.active.length})`),

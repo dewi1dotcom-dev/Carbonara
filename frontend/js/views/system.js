@@ -1,4 +1,4 @@
-// System settings (super-admins only): change server settings without
+// System settings (system admins only): change server settings without
 // touching Portainer. A value saved here overrides the server environment;
 // "Reset" goes back to it. Secrets are write-only.
 import { api, append, busy, fmtDate, h, session, showError, toast } from '../ui.js';
@@ -11,7 +11,7 @@ const SOURCE = {
 
 export async function systemView(el) {
   if (!session.me?.is_superadmin) {
-    el.append(h('h1', {}, 'System'), h('div', { class: 'card notice warn' }, 'Only a super-admin can open this page.'));
+    el.append(h('h1', {}, 'System'), h('div', { class: 'card notice warn' }, 'Only a system admin can open this page.'));
     return;
   }
   const rows = await api.get('/system/settings');

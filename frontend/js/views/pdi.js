@@ -1,6 +1,7 @@
 // PDI order card on the vehicle page: what the customer ordered, sent to the
 // workshop (RBV) by e-mail; the workshop's date/time is entered by staff.
-import { api, append, busy, fmtDate, h, openDialog, showError, toast } from '../ui.js';
+import { tr } from '../i18n.js';
+import { api, append, busy, dateInput, fmtDate, h, openDialog, showError, timeInput, toast } from '../ui.js';
 
 const STATUS_TEXT = { draft: 'Not sent', sent: 'Sent – waiting for date', booked: 'PDI booked', done: 'PDI done', cancelled: 'Cancelled' };
 const STATUS_CLS = { draft: 'warn', sent: 'warn', booked: 'good', done: 'good', cancelled: '' };
@@ -9,7 +10,7 @@ function itemsList(o, opts) {
   const lines = (o.items || []).map((i) => `${i.label}${i.choice ? `: ${i.choice}` : ''}`);
   const t = o.tyres || {};
   if (t.mode && t.mode !== 'none') {
-    lines.push([opts.tyre_modes[t.mode], t.company, t.expected_date && `expected ${fmtDate(t.expected_date, false)}`]
+    lines.push([tr(opts.tyre_modes[t.mode]), t.company, t.expected_date && `expected ${fmtDate(t.expected_date, false)}`]
       .filter(Boolean).join(' · '));
   }
   return lines;
@@ -80,7 +81,7 @@ function editDialog(v, o, opts, done) {
     opts.tyre_companies.map((c) => h('option', { value: c.label }, c.label)),
     t.company && !opts.tyre_companies.some((c) => c.label === t.company) ? h('option', { value: t.company }, t.company) : null);
   company.value = t.company || '';
-  const expected = h('input', { type: 'date', id: 'pdi-expected', value: t.expected_date || '' });
+  const expected = dateInput({ id: 'pdi-expected', value: t.expected_date || '' });
   const tyreNote = h('input', { type: 'text', maxlength: 300, placeholder: 'Dimension, rims, studded/unstudded…', value: t.note || '' });
   const tyreSlot = h('div');
   const drawTyres = () => {
@@ -129,7 +130,7 @@ function sendDialog(o, opts, done) {
   if (!opts.recipients.length) { showError(new Error('No e-mail recipients yet. An administrator can add them under Settings → PDI order lists.')); return; }
   const recipient = h('select', { id: 'pdi-to' }, opts.recipients.map((r) => h('option', { value: r.id }, `${r.label} – ${r.email}`)));
   recipient.value = String((opts.recipients.find((r) => r.is_default) || opts.recipients[0]).id);
-  const preview = h('div', { class: 'pdi-mail' }, 'Loading…');
+  const preview = h('div', { class: 'pdi-mail', translate: 'no' }); // the e-mail is always Norwegian
   let mail = null;
   const load = async () => {
     try {
@@ -168,7 +169,7 @@ function sendDialog(o, opts, done) {
     h('div', { class: 'field' }, h('label', { for: 'pdi-to' }, 'Send to'), recipient),
     preview,
     opts.smtp_configured ? null : h('p', { class: 'muted small' },
-      'Sending directly from Carbonara is not set up yet (a super-admin can add the mail server on the System page → E-mail), so use your own e-mail app.'),
+      'Sending directly from Carbonara is not set up yet (a system admin can add the mail server on the System page → E-mail), so use your own e-mail app.'),
     h('div', { class: 'actions' }, copyBtn, appBtn, opts.smtp_configured ? smtpBtn : null));
   const { close } = openDialog('Send PDI order', body, { wide: true });
   load();
@@ -178,8 +179,8 @@ function sendDialog(o, opts, done) {
 
 function bookingDialog(o, done) {
   const [d0, t0] = (o.pdi_local || '').split('T');
-  const date = h('input', { type: 'date', id: 'pdi-date', required: true, value: d0 || '' });
-  const time = h('input', { type: 'time', id: 'pdi-time', required: true, value: (t0 || '').slice(0, 5) || '08:00', step: 300 });
+  const date = dateInput({ id: 'pdi-date', required: true, value: d0 || '' });
+  const time = timeInput({ id: 'pdi-time', required: true, value: (t0 || '').slice(0, 5) || '08:00' });
   const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save PDI date');
   const form = h('form', {},
     h('p', { class: 'muted' }, 'Enter the date and time the workshop replied with. Everyone sees it on the Today page, with a reminder the day before.'),

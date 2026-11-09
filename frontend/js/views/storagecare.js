@@ -186,7 +186,7 @@ export async function storageReportView(el, [id]) {
   const voidCls = (c) => (c.voided_at ? 'rep-void' : '');
   const sign = (c) => c.performed_by_name ?? '';
   const only12 = h('input', { type: 'checkbox', id: 'only12' });
-  const body = h('div', { class: 'report' });
+  const body = h('div', { class: 'report', translate: 'no' }); // a Norwegian document
 
   const head = () => h('table', { class: 'rep-head' }, h('tbody', {},
     h('tr', {}, h('th', {}, 'Forhandler'), h('td', {}, r.company), h('th', {}, 'Forh. nr.'), h('td', {}, r.dealer_number ?? '')),

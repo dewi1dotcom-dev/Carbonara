@@ -1,3 +1,5 @@
+import { lang } from './i18n.js';
+
 // Small DOM + API helpers shared by all views. No framework, no build step.
 
 export class ApiError extends Error {
@@ -162,10 +164,11 @@ export function viewPhoto(id, title = 'Photo') {
 
 // All dates/times are shown in Norwegian standard, 24-hour, Oslo time,
 // regardless of the device's language settings: "08.11.2026 00:48".
-// (The header clock keeps the long form: "søndag 8. november 2026".)
+// (The header clock keeps the long form, in the user's language:
+// "søndag 8. november 2026" / "Sunday 8 November 2026".)
 const TZ = 'Europe/Oslo';
 const fmtTime = new Intl.DateTimeFormat('nb-NO', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-const fmtLongDate = new Intl.DateTimeFormat('nb-NO', {
+const fmtLongDate = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', {
   timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
 });
 const fmtParts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -187,6 +190,114 @@ export function fmtDate(iso, withTime = true) {
   const d = iso instanceof Date ? iso : new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
   return withTime ? `${fmtDay(d)} ${fmtTime.format(d)}` : fmtDay(d);
+}
+
+// ---------------------------------------------------------------- date / time inputs
+// The browser's own <input type=date/time> follow the device language (e.g.
+// mm/dd/yyyy and AM/PM on an English phone). These always show dd.mm.yyyy and
+// 24-hour HH:MM. `.value` is ISO (YYYY-MM-DD / HH:MM) like the native inputs,
+// and `.id`, `.disabled`, change/input events work the same.
+
+const pad2 = (n) => String(n).padStart(2, '0');
+
+/** "9.11.2026", "09112026", "9/11/2026", "2026-11-09" -> "2026-11-09"; '' if empty; null if invalid. */
+export function parseDate(text) {
+  const s = String(text ?? '').trim();
+  if (!s) return '';
+  let d, m, y;
+  let r;
+  if ((r = s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/))) [, y, m, d] = r;
+  else if ((r = s.match(/^(\d{1,2})[.\/\-\s](\d{1,2})[.\/\-\s](\d{2}|\d{4})$/))) [, d, m, y] = r;
+  else if ((r = s.match(/^(\d{2})(\d{2})(\d{4})$/))) [, d, m, y] = r;
+  else return null;
+  y = Number(y.length === 2 ? `20${y}` : y);
+  const dt = new Date(Date.UTC(y, Number(m) - 1, Number(d)));
+  if (dt.getUTCFullYear() !== y || dt.getUTCMonth() !== Number(m) - 1 || dt.getUTCDate() !== Number(d)) return null;
+  return `${y}-${pad2(m)}-${pad2(d)}`;
+}
+
+/** "8", "800", "0800", "8:00", "8.00", "14:30" -> "08:00"/"14:30"; '' if empty; null if invalid. */
+export function parseTime(text) {
+  const s = String(text ?? '').trim();
+  if (!s) return '';
+  const r = s.match(/^(\d{1,2})(?:[:.\s]?(\d{2}))?$/);
+  if (!r) return null;
+  const hh = Number(r[1]);
+  const mm = Number(r[2] ?? 0);
+  return hh <= 23 && mm <= 59 ? `${pad2(hh)}:${pad2(mm)}` : null;
+}
+
+const isoToNo = (iso) => (iso ? iso.split('-').reverse().join('.') : '');
+
+/** Wraps a visible text field so it behaves like a native input with an ISO `.value`. */
+function wrapField(wrap, text, controls, toIso, fromIso) {
+  Object.defineProperty(wrap, 'value', {
+    get: () => { const v = toIso(text.value); return v ?? text.value; },
+    set: (v) => { text.value = fromIso(v ?? ''); text.setCustomValidity(''); },
+  });
+  Object.defineProperty(wrap, 'id', { get: () => text.id, set: (v) => { text.id = v; } });
+  Object.defineProperty(wrap, 'disabled', {
+    get: () => text.disabled,
+    set: (v) => { text.disabled = !!v; controls.forEach((c) => { c.disabled = !!v; }); },
+  });
+  wrap.focus = () => text.focus();
+  return wrap;
+}
+
+/** Date field: dd.mm.yyyy, with a 📅 button that opens the device's calendar. */
+export function dateInput({ value = '', min, max, required = false, id } = {}) {
+  const text = h('input', {
+    type: 'text', class: 'dt-text', inputmode: 'numeric', autocomplete: 'off', maxlength: 10,
+    placeholder: 'dd.mm.yyyy', required, id, value: isoToNo(value),
+  });
+  const picker = h('input', { type: 'date', class: 'dt-native', tabindex: '-1', 'aria-hidden': 'true', min, max, value });
+  const btn = h('button', {
+    class: 'dt-btn', type: 'button', 'aria-label': 'Open calendar', title: 'Calendar',
+    onClick: () => {
+      picker.value = parseDate(text.value) || '';
+      try { picker.showPicker(); } catch { picker.focus(); picker.click(); }
+    },
+  }, '📅');
+  const check = () => {
+    const iso = parseDate(text.value);
+    let msg = '';
+    if (iso === null) msg = 'Use the format dd.mm.yyyy';
+    else if (iso && min && iso < min) msg = `Not before ${isoToNo(min)}`;
+    else if (iso && max && iso > max) msg = `Not after ${isoToNo(max)}`;
+    text.setCustomValidity(msg);
+    if (iso) text.value = isoToNo(iso);
+    return !msg;
+  };
+  // Runs before listeners on the wrapper: an invalid date never reaches them.
+  text.addEventListener('change', (e) => { if (!check()) { e.stopPropagation(); text.reportValidity(); } });
+  picker.addEventListener('change', (e) => {
+    e.stopPropagation();
+    text.value = isoToNo(picker.value);
+    text.dispatchEvent(new Event('input', { bubbles: true }));
+    text.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  const wrap = h('span', { class: 'dt-field' }, text, btn, picker);
+  return wrapField(wrap, text, [btn], parseDate, isoToNo);
+}
+
+/** Time field: 24-hour HH:MM (typing "800" or "8" gives 08:00). */
+export function timeInput({ value = '', required = false, id } = {}) {
+  const text = h('input', {
+    type: 'text', class: 'dt-text dt-time', inputmode: 'numeric', autocomplete: 'off', maxlength: 5,
+    placeholder: 'hh:mm', required, id, value: value ? value.slice(0, 5) : '',
+  });
+  text.addEventListener('change', (e) => {
+    const t = parseTime(text.value);
+    text.setCustomValidity(t === null ? 'Use 24-hour time, e.g. 08:00 or 14:30' : '');
+    if (t === null) { e.stopPropagation(); text.reportValidity(); } else text.value = t;
+  });
+  const wrap = h('span', { class: 'dt-field' }, text);
+  return wrapField(wrap, text, [], parseTime, (v) => (v || '').slice(0, 5));
+}
+
+/** Today's date in Oslo as YYYY-MM-DD (not UTC: right also just after midnight). */
+export function osloTodayIso() {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: TZ }).format(new Date());
 }
 
 /** Today's date in Oslo as [year, month, day]. */
@@ -286,7 +397,8 @@ export function startClock(el) {
   tick();
 }
 
-export const fmtKm = (n) => (n == null ? '–' : `${Number(n).toLocaleString()} km`);
+// Norwegian number format: 119 782 km (space as thousands separator).
+export const fmtKm = (n) => (n == null ? '–' : `${Number(n).toLocaleString('nb-NO')} km`);
 
 export const STATUS = {
   intake: 'Arrival inspection',

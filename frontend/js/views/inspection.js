@@ -1,7 +1,7 @@
 // Arrival inspection: vehicle details -> 4 photos -> damage -> storage.
 import { carDiagram, DIAGRAM_PANELS, EXTRA_PANELS, PANEL_LABELS } from '../diagram.js';
 import {
-  api, busy, cameraPicker, CONDITION, duplicateNotice, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, busy, cameraPicker, CONDITION, dateInput, osloTodayIso, duplicateNotice, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   showError, spotLabel, toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
 
@@ -111,7 +111,7 @@ export async function inspectionView(el, [id]) {
     const condSel = h('select', {}, h('option', { value: '' }, 'Choose…'),
       Object.entries(CONDITION).map(([k, l]) => h('option', { value: k }, l)));
     condSel.value = v.condition ?? '';
-    const today = new Date().toISOString().slice(0, 10);
+    const today = osloTodayIso();
 
     // The details card is built once (so typing isn't interrupted by reloads),
     // so this part redraws itself as soon as New/Used is chosen.
@@ -121,7 +121,7 @@ export async function inspectionView(el, [id]) {
       serviceSlot.replaceChildren(...(condition === 'used'
         ? [h('div', { class: 'grid' },
           field('vehicle', 'last_service_date', 'Last service date',
-            h('input', { type: 'date', value: cur.last_service_date ?? '', max: today })),
+            dateInput({ value: cur.last_service_date ?? '', max: today })),
           field('vehicle', 'last_service_km', 'Odometer at last service (km)', num(cur.last_service_km, { min: 0 }))),
         h('p', { class: 'muted small' }, 'Leave empty if the service history is unknown; the next service is then estimated from the registration date.')]
         : condition === 'new'

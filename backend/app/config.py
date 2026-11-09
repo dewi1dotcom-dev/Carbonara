@@ -19,7 +19,7 @@ log = logging.getLogger("carbonara.config")
 
 
 # --------------------------------------------------------------------------- #
-# Settings that a super-admin can change on the System page. Each one is read
+# Settings that a system admin can change on the System page. Each one is read
 # from (1) the value saved in the database (app_settings), else (2) the server
 # environment (.env / Portainer stack), else (3) the default here.
 # To add a setting later: add one Setting(...) line and use settings.<name>.
