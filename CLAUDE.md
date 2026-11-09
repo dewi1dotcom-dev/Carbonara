@@ -275,6 +275,8 @@ ORM. Match the style of the surrounding code. Comments explain *why*, not what.
 - **Pitfall:** the native `append()` / `replaceChildren()` print arrays and `null` as text
   ("null[object HTMLElement]"). Use `el.replaceChildren(...list.filter(Boolean))` or the
   `append()` helper from `ui.js`. This bug has shipped three times.
+- `ul.rows li` is a flex row (label left, buttons right). Sentences mixing text and links
+  inside it must be wrapped in one `<span>`, or they split into columns (0.10.3 fix).
 - A card that is built once must redraw its dependent parts when inputs change, using a slot
   element + a render function (see `serviceSlot` in `inspection.js`).
 - User-facing text is English. Dates use the `nb-NO` locale.
@@ -307,6 +309,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.0 | **Test drive** page: start (customer, licence photo, items out/in), cars out now, return with item check; customer name auto-filled from the licence photo (OCR); customer details trashed on return and wiped after 30 days; vehicle search also matches variant/colour |
 | 0.10.1 | Licence names: spaces the OCR dropped are restored from the gaps in the photo (middle names, double surnames) |
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
+| 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 
 **Next / ideas (not started):**
 - FINN import with image checkboxes. Blocked on official FINN API access or an ad-system feed.

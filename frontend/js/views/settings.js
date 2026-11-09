@@ -13,8 +13,9 @@ export async function settingsView(el) {
     retentionBox.replaceChildren(h('section', { class: 'card' },
       h('h2', {}, 'Data retention'),
       h('ul', { class: 'plain rows' },
-        h('li', {}, `Deleted cars stay in `, h('a', { href: '#/vehicles/deleted' }, 'Recently deleted'),
-          ` for ${r.trash_days} days and can be restored. After that they are removed for good, with all photos.`),
+        // One <span>: the rows are flex lines, so loose text + link would become columns.
+        h('li', {}, h('span', {}, 'Deleted cars stay in ', h('a', { href: '#/vehicles/deleted' }, 'Recently deleted'),
+          ` for ${r.trash_days} days and can be restored. After that they are removed for good, with all photos.`)),
         h('li', {}, r.retention_years > 0
           ? `Cars that are off site (sold/delivered) and have had no activity for ${r.retention_years} years are deleted automatically — they go to Recently deleted first. Cars in storage are never deleted automatically.`
           : 'Automatic deletion of old cars is turned off.'),
