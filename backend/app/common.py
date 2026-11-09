@@ -102,6 +102,34 @@ def log_event(conn, vehicle_id: int, event_type: str, *, staff_id=None, inspecti
 
 
 # --------------------------------------------------------------------------- #
+# Possible duplicates (warnings only — never blocks)
+# --------------------------------------------------------------------------- #
+
+def similar_vehicles(conn, vin: str, regnr: str | None = None, exclude_id: int | None = None) -> list:
+    """Other cars that may be the same car: same registration number, or a
+    VIN that differs in exactly one position (a typo or misread character).
+    Each row gets `reason` ('same_reg' / 'similar_vin') and, for a similar
+    VIN, `diff_pos` (1-based position of the differing character)."""
+    regnr = "".join(ch for ch in (regnr or "").upper() if ch.isalnum()) or None
+    rows = conn.execute(
+        """SELECT v.id, v.vin, v.registration_number, v.make, v.model, v.model_year, v.status
+             FROM vehicles v
+            WHERE v.deleted_at IS NULL AND v.vin <> %(vin)s
+              AND (%(ex)s::bigint IS NULL OR v.id <> %(ex)s)
+              AND ((%(reg)s::text IS NOT NULL AND v.registration_number = %(reg)s)
+                   OR (SELECT count(*) FROM generate_series(1, 17) g
+                        WHERE substr(v.vin, g, 1) <> substr(%(vin)s, g, 1)) = 1)
+            LIMIT 5""",
+        {"vin": vin, "reg": regnr, "ex": exclude_id},
+    ).fetchall()
+    for r in rows:
+        diffs = [i + 1 for i, (a, b) in enumerate(zip(r["vin"], vin)) if a != b]
+        r["reason"] = "same_reg" if regnr and r["registration_number"] == regnr else "similar_vin"
+        r["diff_pos"] = diffs[0] if len(diffs) == 1 else None
+    return rows
+
+
+# --------------------------------------------------------------------------- #
 # Deleting cars: "Recently deleted" first, removed for good later
 # --------------------------------------------------------------------------- #
 

@@ -9,7 +9,7 @@ from psycopg import errors
 from .. import photostore, vegvesen, vinlib
 from ..common import (
     bad_request, check_staff, conflict, insert_row, log_event, not_found, patch_fields, place_in_location,
-    purge_vehicle, update_row,
+    purge_vehicle, similar_vehicles, update_row,
 )
 from ..config import settings
 from ..db import get_conn
@@ -99,6 +99,8 @@ def load_inspection(conn, inspection_id: int) -> dict:
         "current_location": location,
         "checklist": checklist,
         "ready_to_complete": all(c["done"] for c in checklist),
+        # Same reg. no or a VIN one character away on another car: warn, never block.
+        "possible_duplicates": similar_vehicles(conn, vehicle["vin"], vehicle["registration_number"], vehicle["id"]),
     }
 
 

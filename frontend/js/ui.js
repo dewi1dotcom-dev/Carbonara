@@ -226,6 +226,32 @@ export function serviceStatus(service) {
 
 export const CONDITION = { new: 'New from factory', used: 'Used' };
 
+/** The car's ad on finn.no (FINN redirects old ad URLs to this one too). */
+export const finnUrl = (code) => `https://www.finn.no/mobility/item/${encodeURIComponent(code)}`;
+export const finnLink = (code, text = 'Available on finn.no ↗') =>
+  h('a', { class: 'finn-link', href: finnUrl(code), target: '_blank', rel: 'noopener noreferrer' }, text);
+
+/** VIN in monospace, with the character at `pos` (1-based) highlighted. */
+export function vinWithDiff(vin, pos = null) {
+  if (!pos) return h('span', { class: 'mono' }, vin);
+  return h('span', { class: 'mono' }, vin.slice(0, pos - 1), h('mark', { class: 'vin-diff' }, vin[pos - 1]), vin.slice(pos));
+}
+
+/** Warning for cars that may be this same car (same reg. no, or a VIN one
+ *  character away). Never blocks; `onUseVin(vin)` adds a "Use this VIN" button. */
+export function duplicateNotice(list, { onUseVin = null } = {}) {
+  if (!list?.length) return null;
+  const link = (d) => h('a', { href: `#/vehicles/${d.id}` }, vehicleTitle(d));
+  return h('div', { class: 'card notice warn dup-notice' },
+    h('strong', {}, list.length === 1 ? 'Possible duplicate' : 'Possible duplicates'),
+    h('ul', { class: 'plain' }, list.map((d) => h('li', {},
+      d.reason === 'same_reg'
+        ? [`Reg. no ${d.registration_number} is already on `, link(d), ' (VIN ', vinWithDiff(d.vin), '). Same car with a mistyped VIN?']
+        : ['Almost the same VIN is already in Carbonara: ', vinWithDiff(d.vin, d.diff_pos), ' on ', link(d),
+          d.diff_pos ? ` — only character ${d.diff_pos} differs.` : '.',
+          onUseVin ? h('button', { class: 'link', type: 'button', onClick: () => onUseVin(d.vin) }, ' Use this VIN') : null]))));
+}
+
 export const badge = (st, prefix = '') => st && h('span', { class: `badge ${st.cls}` }, prefix + st.text);
 
 /** Live clock: keeps `el` showing the current time and date, updated on the minute. */

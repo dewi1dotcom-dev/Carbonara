@@ -1,7 +1,7 @@
 // Step 0 of an arrival: identify the car by VIN (typed, read from a photo, or
 // found from the registration number) and pull its data from Statens vegvesen.
 import {
-  api, badge, busy, cameraPicker, debounce, euStatus, fmtDate, getInspectorId, h, normalizeVin, regStatus,
+  api, badge, busy, cameraPicker, debounce, duplicateNotice, euStatus, fmtDate, getInspectorId, h, normalizeVin, regStatus,
   setInspectorId, showError, STATUS, vehicleTitle, vinCheckDigitOk, vinFormatOk,
 } from '../ui.js';
 
@@ -146,6 +146,9 @@ export async function intakeView(el) {
     ].filter(([, v]) => v);
 
     const mism = r.mismatches || [];
+    // The plate is already on another car in Carbonara with a different VIN.
+    const regDup = duplicateNotice(r.reg_matches);
+    if (regDup) registryBox.append(regDup);
     registryBox.append(h('section', { class: 'card' },
       h('h2', {}, 'Statens vegvesen'),
       h('dl', { class: 'kv' }, rows.map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)])),
@@ -217,6 +220,11 @@ export async function intakeView(el) {
       lookupBox.append(h('div', { class: 'card notice' },
         'New vehicle — not seen before.', decoded ? ` From the VIN: ${decoded}.` : ''));
     }
+    // A car with a VIN one character away is probably this car with a typo.
+    const dup = duplicateNotice(lk.similar, {
+      onUseVin: (vin) => { vinInput.value = vin; state.vinSource = 'manual'; onVinChanged(); },
+    });
+    if (dup) lookupBox.append(dup);
     // NA/China VINs (e.g. MG) must pass the check digit; if not, a character is misread.
     if (lk.check_digit_required && lk.check_digit_ok === false) {
       lookupBox.append(h('div', { class: 'card notice bad' },

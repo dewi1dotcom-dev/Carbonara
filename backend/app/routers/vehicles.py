@@ -5,7 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from .. import photostore, vegvesen, vinlib
 from ..common import (RETENTION_DUE_SQL, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
-                      place_in_location, purge_vehicle, service_due, soft_delete_vehicle, update_row)
+                      place_in_location, purge_vehicle, service_due, similar_vehicles, soft_delete_vehicle,
+                      update_row)
 from ..config import settings
 from ..db import get_conn
 from ..schemas import MarkRegisteredIn, MoveIn, RepairIn, ResolveMismatchIn, VehicleDetails
@@ -65,8 +66,14 @@ def registry_lookup(vin: Optional[str] = None, regnr: Optional[str] = None, conn
         reg = conn.execute("SELECT kept_values FROM vehicle_registry WHERE vehicle_id = %s",
                            (vehicle["id"],)).fetchone()
         mismatches = vegvesen.mismatch_list(vehicle, item, reg["kept_values"] if reg else None)
+    # The plate already on another car in Carbonara (different VIN): probably
+    # the same car entered earlier with a mistyped VIN.
+    reg_matches = [s for s in similar_vehicles(conn, info["vin"] or "", info["values"].get("registration_number"),
+                                               vehicle["id"] if vehicle else None)
+                   if s["reason"] == "same_reg"] if info["values"].get("registration_number") else []
     return {"configured": True, "found": True, **info,
-            "existing_vehicle_id": vehicle["id"] if vehicle else None, "mismatches": mismatches}
+            "existing_vehicle_id": vehicle["id"] if vehicle else None, "mismatches": mismatches,
+            "reg_matches": reg_matches}
 
 
 @router.get("/vehicles")
@@ -171,6 +178,7 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "registry_mismatches": mismatches,  # differences waiting for staff to confirm
         "registry_configured": vegvesen.is_configured(),
         "service": service_due(vehicle, registry and (registry["first_registered"] or registry["first_registered_norway"])),
+        "possible_duplicates": similar_vehicles(conn, vehicle["vin"], vehicle["registration_number"], vehicle_id),
     }
 
 

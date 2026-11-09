@@ -67,6 +67,21 @@ class VehicleDetails(_Clean):
     condition: Optional[Literal["new", "used"]] = None
     last_service_date: Optional[dt.date] = None
     last_service_km: Optional[int] = Field(None, ge=0, le=5_000_000)
+    # The ad on finn.no: a pasted link or just the FINN code; stored as the code.
+    finn_code: Optional[str] = Field(None, max_length=500)
+
+    @field_validator("finn_code")
+    @classmethod
+    def finn_code_from_link(cls, v):
+        """Accepts '412345678', 'https://www.finn.no/mobility/item/412345678',
+        '…/car/used/ad.html?finnkode=412345678' and similar."""
+        if not v:
+            return None
+        m = (re.search(r"finnkode=(\d{6,12})", v) or re.search(r"/item/(\d{6,12})", v)
+             or re.search(r"/ad/(\d{6,12})", v) or re.fullmatch(r"\s*(\d{6,12})\s*", v))
+        if not m:
+            raise ValueError("Paste a finn.no ad link or the FINN code (6–12 digits)")
+        return m.group(1)
 
     @field_validator("registration_number")
     @classmethod

@@ -335,6 +335,16 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .meter.warn > div { background: var(--warn); }
 .meter.bad > div { background: var(--bad); }
 .cap-input { width: 7rem; }
+/* finn.no ad link (FINN blue) */
+.finn-link {
+  display: inline-block; padding: .15rem .65rem; border-radius: 99px; font-weight: 700; font-size: .85rem;
+  background: #0063fb; color: #fff; text-decoration: none; white-space: nowrap;
+}
+.finn-link:hover { background: #004fc9; }
+.badge.finn { background: #0063fb; color: #fff; border-color: transparent; }
+.dup-notice ul { margin: .35rem 0 0; }
+.dup-notice li + li { margin-top: .25rem; }
+.vin-diff { background: var(--warn); color: var(--surface); border-radius: 3px; padding: 0 .1em; font-weight: 700; }
 .deleted-card { opacity: .9; border-style: dashed; }
 .deleted-card .row-actions { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
 .danger-zone { display: flex; justify-content: flex-end; margin: 1.5rem 0 0; padding-top: 1rem; border-top: 1px solid var(--border); }

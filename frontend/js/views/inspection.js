@@ -1,7 +1,7 @@
 // Arrival inspection: vehicle details -> 4 photos -> damage -> storage.
 import { carDiagram, DIAGRAM_PANELS, EXTRA_PANELS, PANEL_LABELS } from '../diagram.js';
 import {
-  api, busy, cameraPicker, CONDITION, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, busy, cameraPicker, CONDITION, duplicateNotice, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   showError, spotLabel, toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
 
@@ -52,14 +52,16 @@ export async function inspectionView(el, [id]) {
   // ------------------------------------------------------------ header
   function renderHead() {
     const v = data.vehicle;
-    slots.head.replaceChildren(h('div', { class: 'page-head' },
+    // filter(Boolean): replaceChildren() would print a missing warning as "null"
+    slots.head.replaceChildren(...[h('div', { class: 'page-head' },
       h('div', {},
         h('h1', {}, vehicleTitle(v)),
         h('div', { class: 'vin mono big' }, v.vin),
         h('div', { class: 'muted' },
           `Arrival inspection · ${data.inspector_name ?? 'no inspector'} · started ${fmtDate(data.started_at)}`)),
       h('div', { class: 'head-side' }, pill(data.status),
-        h('a', { href: `#/vehicles/${v.id}`, class: 'small' }, 'Vehicle history →'))));
+        h('a', { href: `#/vehicles/${v.id}`, class: 'small' }, 'Vehicle history →'))),
+    duplicateNotice(data.possible_duplicates)].filter(Boolean));
   }
 
   function renderChecklist() {
@@ -110,20 +112,30 @@ export async function inspectionView(el, [id]) {
       Object.entries(CONDITION).map(([k, l]) => h('option', { value: k }, l)));
     condSel.value = v.condition ?? '';
     const today = new Date().toISOString().slice(0, 10);
-    const serviceFields = v.condition === 'used'
-      ? h('div', { class: 'grid' },
-        field('vehicle', 'last_service_date', 'Last service date',
-          h('input', { type: 'date', value: v.last_service_date ?? '', max: today })),
-        field('vehicle', 'last_service_km', 'Odometer at last service (km)', num(v.last_service_km, { min: 0 })))
-      : v.condition === 'new'
-        ? h('p', { class: 'muted small' },
-          'New car: no service record needed. The first service is due one year after registration (date from Statens vegvesen).')
-        : null;
+
+    // The details card is built once (so typing isn't interrupted by reloads),
+    // so this part redraws itself as soon as New/Used is chosen.
+    const serviceSlot = h('div', { class: 'service-slot' });
+    const renderService = (condition) => {
+      const cur = data.vehicle;
+      serviceSlot.replaceChildren(...(condition === 'used'
+        ? [h('div', { class: 'grid' },
+          field('vehicle', 'last_service_date', 'Last service date',
+            h('input', { type: 'date', value: cur.last_service_date ?? '', max: today })),
+          field('vehicle', 'last_service_km', 'Odometer at last service (km)', num(cur.last_service_km, { min: 0 }))),
+        h('p', { class: 'muted small' }, 'Leave empty if the service history is unknown; the next service is then estimated from the registration date.')]
+        : condition === 'new'
+          ? [h('p', { class: 'muted small' },
+            'New car: no service record needed. The first service is due one year after registration (date from Statens vegvesen).')]
+          : []));
+    };
+    renderService(v.condition);
+    condSel.addEventListener('change', () => renderService(condSel.value));
 
     return h('section', { class: 'card step' },
       h('div', { class: 'step-head' }, h('h2', {}, '1. Vehicle details'), status),
       h('div', { class: 'grid' }, field('vehicle', 'condition', 'New or used? *', condSel)),
-      serviceFields,
+      serviceSlot,
       h('div', { class: 'grid' },
         field('vehicle', 'make', 'Make *', text(v.make, { list: 'dl-makes', autocomplete: 'off' })),
         field('vehicle', 'model', 'Model *', text(v.model)),

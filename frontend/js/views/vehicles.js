@@ -1,6 +1,6 @@
 import { PANEL_LABELS } from '../diagram.js';
 import {
-  api, append, badge, busy, CONDITION, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, append, badge, busy, CONDITION, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   regStatus, showError, spotLabel, STATUS,
   toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
@@ -44,7 +44,8 @@ export function vehicleCard(v, extra = null) {
       h('div', { class: 'badges' },
         badge(regStatus(v.registered_marked_at, v.registration_status_code, v.registration_status)),
         eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null,
-        svc && svc.cls !== 'good' ? badge(svc) : null)),
+        svc && svc.cls !== 'good' ? badge(svc) : null,
+        v.finn_code ? h('span', { class: 'badge finn' }, 'finn.no') : null)),
     h('div', { class: 'list-meta' },
       [v.registration_number, v.color, v.location_code && `Spot ${v.location_code}`,
         v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`, extra].filter(Boolean).join(' · ')));
@@ -75,6 +76,7 @@ const FIELD_LABELS = {
   eu_control_last_approved: 'EU-kontroll approved', color: 'Colour', make: 'Make', model: 'Model', fuel_type: 'Fuel',
   variant: 'Variant', model_year: 'Model year',
   condition: 'New/used', last_service_date: 'Last service', last_service_km: 'Km at last service',
+  finn_code: 'finn.no code',
 };
 const changeText = (obj) => Object.entries(obj || {})
   .map(([k, [a, b]]) => `${FIELD_LABELS[k] ?? k}: ${a ?? '–'} → ${b ?? '–'}`).join(', ');
@@ -175,7 +177,8 @@ function editDialog(v, done) {
       })()),
       field('last_service_date', 'Last service date',
         h('input', { type: 'date', value: v.last_service_date ?? '', max: new Date().toISOString().slice(0, 10) })),
-      field('last_service_km', 'Km at last service', h('input', { type: 'number', inputmode: 'numeric', min: 0, value: v.last_service_km ?? '' }))),
+      field('last_service_km', 'Km at last service', h('input', { type: 'number', inputmode: 'numeric', min: 0, value: v.last_service_km ?? '' })),
+      field('finn_code', 'finn.no link or FINN code', text(v.finn_code ?? '', { placeholder: 'Paste the ad link' }))),
     h('datalist', { id: 'edit-dl-fuel' }, FUEL_TYPES.map((f) => h('option', { value: f }))),
     h('div', { class: 'actions' }, okBtn));
 
@@ -265,6 +268,30 @@ function serviceDialog(v, done) {
     });
   });
   const { close } = openDialog('Service done', form);
+}
+
+/** Add, change or remove the car's finn.no ad link. */
+function finnDialog(v, done) {
+  const input = h('input', {
+    type: 'text', id: 'finn-input', value: v.finn_code ? finnUrl(v.finn_code) : '', autocomplete: 'off',
+    placeholder: 'https://www.finn.no/mobility/item/412345678 or 412345678',
+  });
+  const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
+  const save = (value) => busy(okBtn, async () => {
+    await api.patch(`/vehicles/${v.id}`, { finn_code: value });
+    close();
+    toast(value ? 'finn.no link saved' : 'finn.no link removed', 'success');
+    done();
+  });
+  const form = h('form', { class: 'form' },
+    h('p', { class: 'muted small' }, 'Open the car’s ad on finn.no, copy the address from the browser and paste it here (the FINN code alone works too).'),
+    h('label', { for: 'finn-input' }, 'finn.no link or FINN code'), input,
+    h('div', { class: 'actions spread' },
+      v.finn_code ? h('button', { class: 'link danger', type: 'button', onClick: () => save(null) }, 'Remove link') : h('span'),
+      okBtn));
+  form.addEventListener('submit', (e) => { e.preventDefault(); save(input.value.trim() || null); });
+  const { close } = openDialog('finn.no ad', form);
+  setTimeout(() => input.focus(), 0);
 }
 
 /** Text + badge for the "Service" row. */
@@ -490,6 +517,11 @@ function overviewCard(v, rerender) {
         ? h('span', { class: 'inline' }, badge(eu), `due ${fmtDate(r.eu_control_due, false)}`)
         : h('span', { class: 'muted' }, v.registered_marked_at ? 'No date from Statens vegvesen yet' : '–')],
       ['Last approved', r.eu_control_last_approved && fmtDate(r.eu_control_last_approved, false)],
+      ['finn.no', v.finn_code
+        ? h('span', { class: 'inline' }, finnLink(v.finn_code),
+          h('button', { class: 'link small', type: 'button', onClick: () => finnDialog(v, rerender) }, 'change'))
+        : h('span', { class: 'inline' }, h('span', { class: 'muted' }, 'Not on finn.no'),
+          h('button', { class: 'link', type: 'button', onClick: () => finnDialog(v, rerender) }, '+ Add finn.no link'))],
       ['Service', serviceRow(v)],
       ['Condition', v.condition ? CONDITION[v.condition] : null],
       ['Colour', v.color ?? r.color ?? '–'],
@@ -593,7 +625,10 @@ export async function vehicleView(el, [id]) {
           ? h('div', { class: 'reg-big mono' }, v.registration_number)
           : h('div', { class: 'reg-big none' }, 'No reg. no'),
         h('div', { class: 'vin mono big' }, v.vin)),
-      pill(v.status)),
+      h('div', { class: 'head-side' }, pill(v.status),
+        // Visual hint: the car is advertised (on the website, via finn.no)
+        v.finn_code ? finnLink(v.finn_code, 'finn.no ↗') : null)),
+    duplicateNotice(v.possible_duplicates),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
     registryCard(v, rerender),

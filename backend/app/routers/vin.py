@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from PIL import UnidentifiedImageError
 
 from .. import vinlib
+from ..common import similar_vehicles
 from ..config import settings
 from ..db import get_conn
 
@@ -26,9 +27,11 @@ def lookup_vin(vin: str, conn=Depends(get_conn)):
     registered (see vehicles router)."""
     vin = vinlib.normalize(vin)
     result = vinlib.describe(vin)
-    result.update(existing_vehicle=None, open_inspection_id=None)
+    result.update(existing_vehicle=None, open_inspection_id=None, similar=[])
     if not result["valid_format"]:
         return result
+    # A car with a VIN one character away is probably this car with a typo.
+    result["similar"] = [s for s in similar_vehicles(conn, vin) if s["reason"] == "similar_vin"]
 
     vehicle = conn.execute(
         """SELECT id, vin, make, model, model_year, color, registration_number, status
