@@ -68,8 +68,13 @@ SETTINGS: tuple[Setting, ...] = (
             help="Shown on the privacy notice, PDI e-mails and storage reports."),
     Setting("dealer_number", "Dealer number (Forh. nr.)", "Company",
             help="Printed on the storage maintenance report."),
-    Setting("privacy_contact", "Contact for customers", "Company",
-            help="E-mail and/or phone shown to test drive customers on the privacy notice."),
+    # Contact details shown to test drive customers on the privacy notice (each on its own line).
+    Setting("privacy_contact", "Phone for customers", "Company",
+            help="Shown to test drive customers on the privacy notice."),
+    Setting("privacy_email", "E-mail for customers", "Company",
+            help="Shown to test drive customers on the privacy notice."),
+    Setting("privacy_address", "Postal address", "Company",
+            help="Shown on the privacy notice, e.g. Kvaenveien 2, 1529 Moss."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),

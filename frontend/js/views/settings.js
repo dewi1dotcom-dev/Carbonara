@@ -189,21 +189,39 @@ export async function settingsView(el) {
     const admin = !!session.me?.is_admin; // deleting spots is admin-only
 
     const code = h('input', { type: 'text', placeholder: 'Code, e.g. A-12', required: true, maxlength: 30 });
-    const zone = h('input', { type: 'text', placeholder: 'Zone, e.g. Yard A', maxlength: 60 });
     const desc = h('input', { type: 'text', placeholder: 'Description (optional)', maxlength: 200 });
     const cap = h('input', { type: 'number', placeholder: 'Max cars (empty = no limit)', min: 1, max: 10000, inputmode: 'numeric' });
     const addBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Add spot');
-    const single = h('form', { class: 'inline-form wrap' }, code, zone, desc, cap, addBtn);
+    const single = h('form', { class: 'inline-form wrap' }, code, desc, cap, addBtn);
     single.addEventListener('submit', (e) => {
       e.preventDefault();
       busy(addBtn, async () => {
         await api.post('/storage-locations', {
-          code: code.value, zone: zone.value || null, description: desc.value || null,
+          code: code.value, description: desc.value || null,
           capacity: cap.value ? Number(cap.value) : null,
         });
         await renderLocations();
       });
     });
+
+    // Description is edited in place too: type and leave the field to save.
+    const descInput = (l) => {
+      const input = h('input', {
+        type: 'text', class: 'desc-input', maxlength: 200, value: l.description ?? '',
+        placeholder: 'Description (optional)', 'aria-label': `Description for ${l.code}`,
+      });
+      input.addEventListener('change', async () => {
+        try {
+          await api.patch(`/storage-locations/${l.id}`, { description: input.value.trim() || null });
+          toast(`Description saved for ${l.code}`, 'success');
+          await renderLocations();
+        } catch (err) {
+          input.value = l.description ?? '';
+          showError(err);
+        }
+      });
+      return input;
+    };
 
     // Capacity is edited in place: change the number and leave the field to save.
     const capacityInput = (l) => {
@@ -227,9 +245,8 @@ export async function settingsView(el) {
     const prefix = h('input', { type: 'text', placeholder: 'Prefix, e.g. A-', maxlength: 20 });
     const from = h('input', { type: 'number', placeholder: 'From', min: 0, value: 1 });
     const to = h('input', { type: 'number', placeholder: 'To', min: 0, value: 20 });
-    const rZone = h('input', { type: 'text', placeholder: 'Zone', maxlength: 60 });
     const rangeBtn = h('button', { class: 'btn', type: 'submit' }, 'Add range');
-    const range = h('form', { class: 'inline-form wrap' }, prefix, from, to, rZone, rangeBtn);
+    const range = h('form', { class: 'inline-form wrap' }, prefix, from, to, rangeBtn);
     range.addEventListener('submit', (e) => {
       e.preventDefault();
       const a = Number(from.value);
@@ -241,7 +258,7 @@ export async function settingsView(el) {
         for (let n = a; n <= b; n++) {
           try {
             await api.post('/storage-locations', {
-              code: `${prefix.value}${String(n).padStart(width, '0')}`, zone: rZone.value || null,
+              code: `${prefix.value}${String(n).padStart(width, '0')}`,
             });
             added++;
           } catch (err) { if (err.status !== 409) throw err; }
@@ -338,8 +355,7 @@ export async function settingsView(el) {
       return [
         h('tr', { class: p.active ? '' : 'inactive' },
           h('td', { class: 'mono strong' }, p.code),
-          h('td', {}, p.zone ?? ''),
-          h('td', {}, p.description ?? ''),
+          h('td', {}, descInput(p)),
           h('td', {}, p.child_count
             ? h('span', { class: 'muted', title: 'Sum of the sub-zones' }, p.total_capacity ? `${p.total_capacity} total` : 'No limit')
             : capacityInput(p)),
@@ -351,8 +367,7 @@ export async function settingsView(el) {
             admin ? h('button', { class: 'link danger', type: 'button', onClick: () => remove(p) }, 'Delete') : null)),
         ...kids.map((c) => h('tr', { class: `sub-row${c.active ? '' : ' inactive'}` },
           h('td', { class: 'mono' }, `↳ ${c.own_code}`),
-          h('td', {}, ''),
-          h('td', {}, c.description ?? ''),
+          h('td', {}, descInput(c)),
           h('td', {}, capacityInput(c)),
           h('td', {}, carsLink(c, c.vehicle_count)),
           h('td', { class: 'row-actions' },
@@ -367,7 +382,7 @@ export async function settingsView(el) {
       h('p', { class: 'muted small' }, 'Split a spot into sub-zones (rows, areas) with "+ Sub-zone"; cars are then placed in a sub-zone.'),
       locs.length
         ? h('div', { class: 'table-wrap' }, h('table', {},
-          h('thead', {}, h('tr', {}, ['Code', 'Zone', 'Description', 'Capacity', 'Cars', ''].map((t) => h('th', {}, t)))),
+          h('thead', {}, h('tr', {}, ['Code', 'Description', 'Capacity', 'Cars', ''].map((t) => h('th', {}, t)))),
           h('tbody', {}, rows)))
         : h('p', { class: 'empty' }, 'No storage spots yet.'),
       h('h3', {}, 'Add a spot'), single,

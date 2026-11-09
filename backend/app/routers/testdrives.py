@@ -93,7 +93,8 @@ def list_test_drives(conn=Depends(get_conn)):
     trash = conn.execute(DRIVE_SELECT + """ WHERE t.status = 'returned' AND t.customer_purged_at IS NULL
                                             ORDER BY t.returned_at DESC""", params).fetchall()
     return {"active": active, "trash": trash, "trash_days": settings.trash_days,
-            "privacy": {"company": settings.privacy_company, "contact": settings.privacy_contact or None}}
+            "privacy": {"company": settings.privacy_company, "phone": settings.privacy_contact or None,
+                        "email": settings.privacy_email or None, "address": settings.privacy_address or None}}
 
 
 @router.post("/test-drives/read-license")

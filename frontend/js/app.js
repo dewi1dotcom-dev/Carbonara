@@ -31,7 +31,7 @@ const routes = [
 const root = document.getElementById('app');
 
 async function render() {
-  const hash = location.hash || '#/';
+  const hash = (location.hash || '#/').split('?')[0]; // "?…" holds page filters, not part of the route
   const match = routes.map(([re, view, nav]) => [hash.match(re), view, nav]).find(([m]) => m);
 
   // Each navigation renders into a fresh container, so a slow, stale view

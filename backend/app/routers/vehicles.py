@@ -77,8 +77,9 @@ def registry_lookup(vin: Optional[str] = None, regnr: Optional[str] = None, conn
 
 
 @router.get("/vehicles")
-def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, limit: int = 100,
-                  conn=Depends(get_conn)):
+def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, condition: Optional[str] = None,
+                  limit: int = 100, conn=Depends(get_conn)):
+    # condition: 'new' (factory new), 'used', or 'unset' (not chosen yet)
     term = f"%{q.strip()}%" if q and q.strip() else None
     # Reg. numbers are stored without spaces, so "EB 82655" must find "EB82655".
     regterm = f"%{vegvesen.normalize_regnr(q)}%" if q and vegvesen.normalize_regnr(q) else None
@@ -95,6 +96,8 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, limit: 
              LEFT JOIN vehicle_registry r ON r.vehicle_id = v.id
             WHERE v.deleted_at IS NULL
               AND (%(status)s::text IS NULL OR v.status = %(status)s)
+              AND (%(condition)s::text IS NULL OR v.condition = %(condition)s
+                   OR (%(condition)s = 'unset' AND v.condition IS NULL))
               AND (%(term)s::text IS NULL
                    OR v.vin ILIKE %(term)s OR v.make ILIKE %(term)s OR v.model ILIKE %(term)s
                    OR v.variant ILIKE %(term)s OR v.color ILIKE %(term)s
@@ -102,7 +105,7 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, limit: 
                    OR v.registration_number ILIKE %(regterm)s OR l.code ILIKE %(term)s)
             ORDER BY v.updated_at DESC
             LIMIT %(limit)s""",
-        {"status": status, "term": term, "regterm": regterm or term, "limit": max(1, min(limit, 500))},
+        {"status": status, "condition": condition or None, "term": term, "regterm": regterm or term, "limit": max(1, min(limit, 500))},
     ).fetchall()
     for row in rows:
         row["service"] = service_due(row, row["first_registered"])

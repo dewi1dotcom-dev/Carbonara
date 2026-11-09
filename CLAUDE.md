@@ -162,7 +162,7 @@ vin_source 'registry'), `004_spot_capacity` (multi-car spots), `005_sub_zones` (
 numbers normalized), `007_soft_delete` (deleted_at/by/reason), `008_finn_link` (finn_code),
 `009_test_drives` (test_drives table), `010_login_and_privacy`, `011_pdi_orders`,
 `012_system_settings`, `013_delete_spots`, `014_storage_care`, `015_void_storage_checks`,
-`016_language`.
+`016_language`, `017_drop_zones`.
 **New schema changes = a new numbered file. Never edit an applied migration.**
 
 Frontend routes: `#/` dashboard, `#/intake`, `#/inspections/:id`, `#/vehicles`,
@@ -227,6 +227,12 @@ before** the deadline. Service: green / amber (± 31 days) / red.
   spots, so their codes can be reused.
 
 **Storage:** spots have a `capacity` (several cars per spot) and optional **sub-zones** (`parent_id`).
+**Zones are not used (0.14.2, migration 017):**
+- The user's choice: spots + sub-zones + description are enough.
+- Old zone values were moved into the description, and the column is now always NULL. It is
+  kept in the DB and API but never shown.
+- In Settings, the description is edited in place (like capacity). Lists and pickers are flat
+  (no zone grouping). **The user likes the sub-zone layout; keep it as is.**
 `place_in_location` locks the spot and checks capacity and sub-zone rules. "Off-site" means not
 on a spot.
 
@@ -380,7 +386,11 @@ sheets (long-term storage, periodic checklist, 12V battery form).
   - stays in the report struck through ("ANNULLERT"), with a section "Annullerte kontroller"
     (who, when, why)
   - is logged as `storage_check_voided`
-- **Printing:** with a dialog open, only the dialog prints; otherwise the page prints without
+- **Printing:** `@page { margin: 0 }` stops the browser printing its header/footer (title,
+  date, URL, page number). Printed documents (`dialog`, `.report`) get 15 mm padding instead,
+  and dialogs print black on white even in the dark theme. The privacy notice ends with
+  signature / date / name lines.
+- With a dialog open, only the dialog prints; otherwise the page prints without
   topbar, footer and `.no-print` elements.
 
 **Today board (0.12.0)** (`routers/dashboard.py`, `views/today.js`): the start page `#/`.
@@ -514,6 +524,10 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.14.5 | Customer contact on the privacy notice: phone (`privacy_contact`), e-mail (`privacy_email`) and postal address (`privacy_address`) as separate System settings / lines |
+| 0.14.4 | Printing: no browser header/footer (`@page { margin: 0 }`, documents have their own 15 mm margins), black on white; privacy notice gets signature / date / name lines |
+| 0.14.3 | Vehicles page: New/used filter (factory new / used / not chosen) next to search and status, result count; filters kept in the address (`#/vehicles?…`; the router ignores `?…`) |
+| 0.14.2 | Storage spots: zones removed (moved into description), description editable in place |
 | 0.14.1 | Translator: headings with icons and "by …" texts now translated (most specific pattern first) |
 | 0.14.0 | **English / Norwegian** per user (translator + dictionary; documents stay Norwegian); "super-admin" renamed "System admin"; Sprutlapper → Skvettlapper, PDI item → Nybilklargjøring |
 | 0.13.3 | All date/time inputs are Carbonara's own dd.mm.yyyy / 24 h fields (no more browser mm/dd/yyyy, AM/PM); km in Norwegian number format |

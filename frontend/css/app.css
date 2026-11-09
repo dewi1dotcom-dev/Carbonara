@@ -111,8 +111,11 @@ main { max-width: 980px; margin: 0 auto; padding: 1rem 16px 2rem; }
 .list-meta { color: var(--muted); font-size: .85rem; }
 .mini-thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; }
 
-.toolbar { display: flex; gap: .5rem; margin-bottom: 1rem; }
-.toolbar input { flex: 1; }
+.toolbar { display: flex; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; }
+/* Search gets its own full row on phones; on wider screens it takes most of the row. */
+.toolbar input[type=search] { flex: 1 1 100%; width: auto; min-width: 0; }
+.toolbar select { flex: 1 1 10rem; width: auto; min-width: 0; }
+@media (min-width: 760px) { .toolbar input[type=search] { flex: 3 1 20rem; min-width: 16rem; } .toolbar select { flex: 1 1 11rem; } }
 
 /* ---------- forms ---------- */
 input, select, textarea, button { font: inherit; color: inherit; }
@@ -432,7 +435,14 @@ body.logged-out .topbar nav, body.logged-out .user-menu { display: none; }
 @media (max-width: 640px) { .user-btn { max-width: 6.5rem; } }
 .privacy-text h3 { margin: 1rem 0 .3rem; font-size: 1rem; }
 .privacy-text p, .privacy-text li { font-size: .95rem; }
+/* Page margins 0 = the browser prints no header/footer (title, date, address, page
+   number); the documents get their own margins below instead. */
+@page { size: A4; margin: 0; }
 @media print {
+  dialog, .report { padding: 15mm 16mm !important; }
+  /* Always black on white on paper, also when the screen uses the dark theme. */
+  dialog, dialog * { color: #000 !important; background: #fff !important; box-shadow: none !important; }
+  dialog::backdrop { background: #fff !important; }
   /* A dialog is open (privacy notice): print only the dialog. */
   body:has(dialog[open]) > *:not(dialog) { display: none !important; }
   dialog { position: static; border: 0; box-shadow: none; max-width: none; }
@@ -527,3 +537,10 @@ a.tile:hover { border-color: var(--primary); }
 .dt-native { position: absolute; right: 0; bottom: 0; width: 1px; height: 1px; opacity: 0; pointer-events: none; border: 0; padding: 0; }
 /* ---------------------------------------------------------------- language */
 .lang-switch { display: flex; gap: .9rem; justify-content: center; margin-top: 1rem; }
+.desc-input { width: 100%; min-width: 10rem; }
+
+/* Signature lines at the bottom of printed documents (privacy notice). */
+.sign-lines { display: grid; grid-template-columns: 2fr 1fr; gap: 2.2rem 1.5rem; margin-top: 2.5rem; }
+.sign-lines div { border-top: 1px solid currentColor; padding-top: .3rem; font-size: .85rem; }
+.sign-lines .sign-wide { grid-column: 1; }
+@media print { .sign-lines { break-inside: avoid; } }.privacy-contact { margin-top: .25rem; line-height: 1.6; }

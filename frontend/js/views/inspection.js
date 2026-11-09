@@ -353,7 +353,7 @@ export async function inspectionView(el, [id]) {
       slots.finish.replaceChildren(h('section', { class: 'card step done-card' },
         h('h2', {}, '4. Storage'),
         h('p', {}, `Completed ${fmtDate(data.completed_at)}. Odometer ${fmtKm(data.odometer_km)}.`),
-        loc ? h('p', { class: 'big-loc' }, `📍 ${loc.code}${loc.zone ? ` — ${loc.zone}` : ''}`) : null));
+        loc ? h('p', { class: 'big-loc' }, `📍 ${loc.code}`) : null));
       return;
     }
     if (data.status === 'cancelled') {
@@ -364,15 +364,8 @@ export async function inspectionView(el, [id]) {
 
     let locations = [];
     try { locations = await api.get('/storage-locations?available_only=true'); } catch (e) { showError(e); }
-    const zones = new Map();
-    for (const l of locations) {
-      const z = l.zone || 'No zone';
-      if (!zones.has(z)) zones.set(z, []);
-      zones.get(z).push(l);
-    }
     const locSel = h('select', { id: 'loc' }, h('option', { value: '' }, 'Choose a spot…'),
-      [...zones].map(([z, ls]) => h('optgroup', { label: z },
-        ls.map((l) => h('option', { value: l.id }, spotLabel(l))))));
+      locations.map((l) => h('option', { value: l.id }, spotLabel(l))));
 
     const missing = data.checklist.filter((c) => !c.done);
     const completeBtn = h('button', { class: 'btn primary big', type: 'button', disabled: missing.length > 0 },

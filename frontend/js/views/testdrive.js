@@ -31,9 +31,12 @@ function viewLicense(drive) {
 
 /** The privacy notice for the customer (GDPR art. 13), in Norwegian. Printable. */
 export function privacyDialog(privacy, trashDays) {
-  const contact = privacy?.contact
-    ? h('strong', {}, privacy.contact)
-    : h('strong', { class: 'td-items' }, '[kontaktinfo mangler – legges inn under System → Company]');
+  // Phone, e-mail and postal address, each on its own line.
+  const lines = [['Telefon', privacy?.phone], ['E-post', privacy?.email], ['Adresse', privacy?.address]]
+    .filter(([, v]) => v);
+  const contact = lines.length
+    ? h('p', { class: 'privacy-contact' }, lines.map(([label, v]) => h('span', { class: 'block' }, `${label}: `, h('strong', {}, v))))
+    : h('p', {}, h('strong', { class: 'td-items' }, '[kontaktinfo mangler – legges inn under System → Firma]'));
   const company = privacy?.company || 'Forhandleren';
   const body = h('div', { class: 'privacy-text', translate: 'no' }, // a Norwegian document
     h('p', {}, h('strong', {}, company), ' er behandlingsansvarlig for opplysningene vi registrerer når du prøvekjører en bil.'),
@@ -52,11 +55,19 @@ export function privacyDialog(privacy, trashDays) {
     h('p', {}, 'Bare våre ansatte, som logger inn med personlig kode. Opplysningene lagres på vår egen server og deles ikke, '
       + 'med mindre det er nødvendig for å håndtere et krav (for eksempel overfor politi, bompengeselskap eller forsikringsselskap).'),
     h('h3', {}, 'Dine rettigheter'),
-    h('p', {}, 'Du kan be om innsyn, retting og sletting, og protestere mot behandlingen. Kontakt: ', contact,
-      '. Du kan også klage til Datatilsynet (datatilsynet.no).'),
+    h('p', {}, 'Du kan be om innsyn, retting og sletting, og protestere mot behandlingen. '
+      + 'Du kan også klage til Datatilsynet (datatilsynet.no). Kontakt oss:'),
+    contact,
+    // Signed by the customer on the printed copy.
+    h('div', { class: 'sign-lines' },
+      h('div', { class: 'sign-wide' }, 'Kundens signatur'),
+      h('div', {}, 'Dato'),
+      h('div', { class: 'sign-wide' }, 'Navn med blokkbokstaver')));
+  // The print button is outside the (Norwegian, untranslated) document.
+  const wrap = h('div', {}, body,
     h('div', { class: 'actions no-print' },
       h('button', { class: 'btn', type: 'button', onClick: () => window.print() }, '🖨 Print')));
-  openDialog('Personvern – prøvekjøring', body, { wide: true });
+  openDialog('Personvern – prøvekjøring', wrap, { wide: true });
 }
 
 const itemsText = (d) => [
@@ -80,7 +91,7 @@ export async function testDriveView(el, [preselectId]) {
     h('div', { class: 'page-head' }, h('h1', {}, 'Test drive'),
       h('button', { class: 'link small', type: 'button', onClick: () => privacyDialog(data.privacy, data.trash_days) },
         '🔒 Privacy notice for customers')),
-    data.privacy?.contact ? null : h('div', { class: 'card notice warn' },
+    data.privacy?.phone || data.privacy?.email || data.privacy?.address ? null : h('div', { class: 'card notice warn' },
       'The customer privacy notice has no contact details yet. A system admin can add them on the System page → Company.'),
     startCard(staff, data, rerender, preselect),
     h('section', { class: 'card' },

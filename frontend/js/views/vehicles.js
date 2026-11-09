@@ -9,27 +9,42 @@ import {
 
 export async function vehiclesView(el) {
   const search = h('input', { type: 'search', placeholder: 'Search VIN, make, model, reg. no or spot…' });
-  const statusSel = h('select', {}, h('option', { value: '' }, 'All statuses'),
+  const statusSel = h('select', { 'aria-label': 'Status' }, h('option', { value: '' }, 'All statuses'),
     ['intake', 'in_storage', 'off_site'].map((s) => h('option', { value: s }, STATUS[s])));
+  const conditionSel = h('select', { 'aria-label': 'New or used' }, h('option', { value: '' }, 'New and used'),
+    h('option', { value: 'new' }, 'Factory new cars'), h('option', { value: 'used' }, 'Used cars'),
+    h('option', { value: 'unset' }, 'New/used not chosen'));
+  const count = h('p', { class: 'muted small' });
   const results = h('div', { class: 'list' });
+
+  // The filters are kept in the address (#/vehicles?…), so Back and reload keep them.
+  const saved = new URLSearchParams(location.hash.split('?')[1] || '');
+  search.value = saved.get('q') || '';
+  statusSel.value = saved.get('status') || '';
+  conditionSel.value = saved.get('condition') || '';
 
   async function load() {
     const params = new URLSearchParams();
     if (search.value.trim()) params.set('q', search.value.trim());
     if (statusSel.value) params.set('status', statusSel.value);
+    if (conditionSel.value) params.set('condition', conditionSel.value);
+    history.replaceState(null, '', `#/vehicles${params.toString() ? `?${params}` : ''}`);
     try {
       const rows = await api.get(`/vehicles?${params}`);
+      count.textContent = `${rows.length} ${rows.length === 1 ? 'car' : 'cars'}`;
       results.replaceChildren(...(rows.length ? rows.map((v) => vehicleCard(v))
         : [h('p', { class: 'empty' }, 'No vehicles found.')]));
     } catch (e) { showError(e); }
   }
   search.addEventListener('input', debounce(load, 250));
   statusSel.addEventListener('change', load);
+  conditionSel.addEventListener('change', load);
 
   el.append(
     h('div', { class: 'page-head' }, h('h1', {}, 'Vehicles'),
       h('a', { href: '#/vehicles/deleted', class: 'small' }, '🗑 Recently deleted')),
-    h('div', { class: 'toolbar' }, search, statusSel),
+    h('div', { class: 'toolbar' }, search, statusSel, conditionSel),
+    count,
     results);
   await load();
 }
@@ -238,13 +253,10 @@ function moveDialog(v, done) {
   const here = v.current_location;
   const spotSel = h('select', { id: 'move-spot', required: true }, h('option', { value: '' }, 'Loading…'));
   api.get('/storage-locations?available_only=true').then((locs) => {
-    const byZone = new Map();
-    locs.forEach((l) => byZone.set(l.zone || 'Other', [...(byZone.get(l.zone || 'Other') || []), l]));
     spotSel.replaceChildren(...[ // spread: replaceChildren() does not accept arrays or null
       h('option', { value: '' }, 'Select…'),
       v.status !== 'off_site' ? h('option', { value: 'off' }, 'Off site (workshop, test drive, delivered…)') : null,
-      ...[...byZone].map(([zone, list]) => h('optgroup', { label: zone },
-        list.map((l) => h('option', { value: l.id }, spotLabel(l))))),
+      ...locs.map((l) => h('option', { value: l.id }, spotLabel(l))),
     ].filter(Boolean));
   }).catch(showError);
   const note = h('input', { type: 'text', id: 'move-note', maxlength: 200, placeholder: 'Optional, e.g. "At workshop for paint"' });
@@ -252,7 +264,7 @@ function moveDialog(v, done) {
   const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Move');
 
   const form = h('form', { class: 'form' },
-    h('p', {}, here ? `Currently at ${here.code}${here.zone ? ` (${here.zone})` : ''}.` : 'Currently off site.'),
+    h('p', {}, here ? `Currently at ${here.code}.` : 'Currently off site.'),
     h('label', { for: 'move-spot' }, 'Move to'), spotSel,
     h('label', { for: 'move-note' }, 'Note'), note,
     h('label', { for: 'move-staff' }, 'Moved by'), staffSel,
@@ -568,7 +580,7 @@ function overviewCard(v, rerender) {
 
 function storageText(v) {
   const loc = v.current_location;
-  if (loc) return `${loc.code}${loc.zone ? ` (${loc.zone})` : ''} since ${fmtDate(loc.placed_at)}`;
+  if (loc) return `${loc.code} since ${fmtDate(loc.placed_at)}`;
   if (v.status === 'off_site') {
     const ev = v.events.find((e) => e.event_type === 'moved_off_site');
     return h('span', { class: 'inline' }, h('span', { class: 'badge warn' }, 'Off site'),

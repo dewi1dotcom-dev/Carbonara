@@ -34,12 +34,6 @@ export async function storageView(el) {
   const [all, offSite] = await Promise.all([api.get('/storage-locations'), api.get('/vehicles?status=off_site')]);
   const locs = all.filter((l) => !l.parent_id); // top-level spots; sub-zones are shown inside them
   const childrenOf = (id) => all.filter((c) => c.parent_id === id);
-  const zones = new Map();
-  for (const l of locs) {
-    const z = l.zone || 'Other';
-    if (!zones.has(z)) zones.set(z, []);
-    zones.get(z).push(l);
-  }
   const total = locs.reduce((s, l) => s + (l.total_count ?? 0), 0);
 
   append(el,
@@ -50,9 +44,8 @@ export async function storageView(el) {
       h('a', { class: 'small', href: '#/settings' }, 'Manage spots →')),
     locs.length ? null : h('div', { class: 'card notice warn' }, 'No storage spots yet. ',
       h('a', { href: '#/settings' }, 'Add spots in settings')),
-    [...zones].map(([zone, list]) => h('section', {},
-      h('h2', { class: 'zone-title' }, zone),
-      h('div', { class: 'spot-grid' }, list.map((l) => spotTile(l, childrenOf(l.id)))))),
+    locs.length ? h('section', {},
+      h('div', { class: 'spot-grid' }, locs.map((l) => spotTile(l, childrenOf(l.id))))) : null,
     h('section', {},
       h('h2', { class: 'zone-title' }, 'Away'),
       h('div', { class: 'spot-grid' },
@@ -110,7 +103,7 @@ export async function storageSpotView(el, [id]) {
     h('div', { class: 'page-head' },
       h('div', {}, back,
         h('h1', { class: 'mono' }, l.code),
-        h('div', { class: 'muted' }, [l.zone, l.description, l.active ? null : 'Inactive',
+        h('div', { class: 'muted' }, [l.description, l.active ? null : 'Inactive',
           l.children.length ? `${l.children.length} sub-zones` : null].filter(Boolean).join(' · '))),
       h('div', { class: 'spot-side' },
         h('div', { class: 'spot-count big' }, f.text),
