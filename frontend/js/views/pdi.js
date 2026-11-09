@@ -35,6 +35,7 @@ export function pdiCard(v, data, opts, rerender) {
         o.sent_at ? h('span', { class: 'muted small' },
           `Sent ${fmtDate(o.sent_at)} to ${o.sent_to}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}${o.sent_via === 'mail_app' ? ' (e-mail app)' : ''}`) : null),
       o.changed_since_sent ? h('div', { class: 'notice warn small' }, 'Changed since it was sent — send it again so the workshop has the latest order.') : null,
+      o.status === 'booked' && !o.sent_at ? h('div', { class: 'notice warn small' }, 'PDI date is set, but the order list has not been sent to the workshop yet.') : null,
       lines.length ? h('ul', {}, lines.map((l) => h('li', {}, l))) : h('p', { class: 'muted' }, 'Nothing ordered yet.'),
       o.other ? h('p', {}, h('strong', {}, 'Other: '), o.other) : null,
       o.note ? h('p', { class: 'muted' }, `Note: ${o.note}`) : null,
@@ -44,8 +45,9 @@ export function pdiCard(v, data, opts, rerender) {
           h('button', { class: 'btn', type: 'button', onClick: () => editDialog(v, o, opts, rerender) }, 'Edit order'),
           h('button', { class: o.sent_at && !o.changed_since_sent ? 'btn' : 'btn primary', type: 'button', onClick: () => sendDialog(o, opts, rerender) },
             o.sent_at ? 'Send again…' : 'Send to workshop…'),
-          o.sent_at ? h('button', { class: o.status === 'sent' ? 'btn primary' : 'btn', type: 'button', onClick: () => bookingDialog(o, rerender) },
-            o.status === 'booked' ? 'Change PDI date' : 'Enter PDI date') : null,
+          // Always available: the date may be agreed with the workshop in person or by phone.
+          h('button', { class: o.status === 'sent' ? 'btn primary' : 'btn', type: 'button', onClick: () => bookingDialog(o, rerender) },
+            o.status === 'booked' ? 'Change PDI date' : 'Enter PDI date'),
           o.status === 'booked' ? h('button', { class: 'btn', type: 'button', onClick: () => doneOrder(o, rerender) }, '✓ PDI done') : null)));
   }
   const done = data.history.filter((x) => x.status === 'done');

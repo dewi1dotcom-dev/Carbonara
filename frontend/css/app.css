@@ -512,4 +512,7 @@ a.tile:hover { border-color: var(--primary); }
 .rep-sign div { border-top: 1px solid #111; padding-top: .3rem; min-height: 3.5rem; font-size: .85rem; }
 .rep-foot { color: #555; margin-top: 1rem; }
 .report tr { page-break-inside: avoid; }
-@media print { .report { padding: 0; max-width: none; border-radius: 0; } }
+@media print { .report { padding: 0; max-width: none; border-radius: 0; } }.report .rep-void, .report tr.rep-void td { text-decoration: line-through; color: #888 !important; background: #f3f3f3; }
+.report th.rep-void .rep-sub { text-decoration: none; font-weight: 700; color: #b91c1c; }
+.sc-void > span { text-decoration: line-through; color: var(--muted); }
+.sc-void > span .block { text-decoration: none; }

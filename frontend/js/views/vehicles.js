@@ -80,6 +80,7 @@ const EVENT_LABELS = {
   pdi_done: 'PDI done',
   pdi_cancelled: 'PDI order cancelled',
   storage_check: 'Storage check',
+  storage_check_voided: 'Storage check cancelled',
 };
 
 const FIELD_LABELS = {
@@ -106,6 +107,9 @@ function eventDetail(e) {
       return [d.kind === 'arrival' ? 'Arrival check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
         d.v12 != null && `12V ${d.v12} V`, d.battery_action && d.battery_action !== 'none' && `battery ${d.battery_action}`,
         d.problems ? `Not OK: ${d.problems}` : null].filter(Boolean).join(' · ');
+    case 'storage_check_voided':
+      return [d.kind === 'arrival' ? 'Arrival check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
+        d.performed_at && `from ${fmtDate(d.performed_at)}`, d.reason].filter(Boolean).join(' · ');
     case 'test_drive_out':
       return [d.removed?.length && `Taken out: ${d.removed.join(', ')}`, d.added?.length && `Put in: ${d.added.join(', ')}`,
         d.odometer_out != null && fmtKm(d.odometer_out), d.note].filter(Boolean).join(' · ');

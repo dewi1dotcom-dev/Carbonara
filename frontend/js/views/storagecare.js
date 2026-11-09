@@ -1,16 +1,47 @@
 // Storage maintenance for new cars (MG SI-GI2022102501): a card on the vehicle
 // page with the next check, the check form, and the printable record.
-import { api, append, busy, fmtDate, h, openDialog, showError, toast, vehicleTitle } from '../ui.js';
+import { api, append, busy, fmtDate, h, openDialog, session, showError, toast, vehicleTitle } from '../ui.js';
 
 const RESULT = { ok: '✓', not_ok: '✗', na: '–' };
 const dueText = (n) => (n.days < 0 ? `overdue by ${-n.days} d` : n.days === 0 ? 'due today' : `due ${fmtDate(n.due, false)} (in ${n.days} d)`);
 const num = (v, digits = 2) => (v == null ? '' : Number(v).toFixed(digits).replace('.', ','));
 
+const KIND_EN = { arrival: 'Arrival check', monthly: 'Monthly check', quarterly: '3-month check', half_year: '6-month check' };
+const checkName = (c) => KIND_EN[c.kind === 'arrival' ? 'arrival' : c.level];
+
+/** All checks, newest first; admins can cancel one registered by mistake. */
+function checkList(p, rerender) {
+  const admin = !!session.me?.is_admin;
+  const rows = [...p.checks].reverse().map((c) => h('li', { class: c.voided_at ? 'sc-void' : '' },
+    h('span', {},
+      h('strong', {}, checkName(c)), ` — ${fmtDate(c.performed_at)}${c.performed_by_name ? `, ${c.performed_by_name}` : ''}`,
+      c.v12_before != null ? ` · 12V ${num(c.v12_before)} V` : '',
+      c.voided_at ? h('span', { class: 'small block' },
+        `Cancelled ${fmtDate(c.voided_at)}${c.voided_by_name ? ` by ${c.voided_by_name}` : ''}: ${c.void_reason}`) : null),
+    admin && !c.voided_at ? h('button', {
+      class: 'link danger', type: 'button',
+      onClick: async () => {
+        const reason = prompt(`Cancel the ${checkName(c).toLowerCase()} from ${fmtDate(c.performed_at)}?\n\n`
+          + 'It stops counting in the schedule but stays in the report, struck through.\nReason (required):');
+        if (reason == null) return;
+        if (reason.trim().length < 3) { showError(new Error('Give a reason (at least 3 characters)')); return; }
+        try {
+          await api.post(`/storage-checks/${c.id}/void`, { reason: reason.trim() });
+          toast('Check cancelled', 'success');
+          await rerender();
+        } catch (e) { showError(e); }
+      },
+    }, 'Cancel') : null));
+  return h('details', { class: 'more' }, h('summary', {}, `All checks (${p.checks.length})`),
+    h('ul', { class: 'plain rows' }, rows));
+}
+
 export function storageCard(v, p, rerender) {
   if (!p.applies && !p.checks.length) return null;
   const card = h('section', { class: 'card' }, h('h2', {}, 'Storage maintenance'));
   const n = p.next;
-  const last = p.checks[p.checks.length - 1];
+  const valid = p.checks.filter((c) => !c.voided_at);
+  const last = valid[valid.length - 1];
   append(card,
     h('p', { class: 'muted small' }, 'MG storage requirements (SI-GI2022102501): arrival check, then every month (more every 3 and 6 months) until the PDI.'),
     n ? h('div', { class: `notice ${n.days < 0 ? 'bad-notice' : n.days <= 3 ? 'warn' : ''}` },
@@ -19,7 +50,8 @@ export function storageCard(v, p, rerender) {
     last ? h('p', { class: 'small' }, `Last check ${fmtDate(last.performed_at)}${last.performed_by_name ? ` by ${last.performed_by_name}` : ''}`,
       last.v12_before != null ? ` · 12V ${num(last.v12_before)} V` : '',
       last.soc_percent != null ? ` · SOC ${last.soc_percent} %` : '') : null,
-    p.start ? h('p', { class: 'muted small' }, `In storage since ${fmtDate(p.start, false)} · ${p.checks.length} check${p.checks.length === 1 ? '' : 's'} recorded`) : null,
+    p.start ? h('p', { class: 'muted small' }, `In storage since ${fmtDate(p.start, false)} · ${valid.length} check${valid.length === 1 ? '' : 's'} recorded`) : null,
+    p.checks.length ? checkList(p, rerender) : null,
     h('div', { class: 'actions' },
       p.checks.length ? h('a', { class: 'btn', href: `#/vehicles/${v.id}/storage-report` }, '🖨 Storage report') : null,
       n ? h('button', { class: n.days <= 3 ? 'btn primary' : 'btn', type: 'button', onClick: () => checkDialog(v, p, rerender) },
@@ -148,8 +180,10 @@ function checkDialog(v, p, done) {
 export async function storageReportView(el, [id]) {
   const r = await api.get(`/vehicles/${id}/storage-care/report`);
   const v = r.vehicle;
-  const arrival = r.checks.find((c) => c.kind === 'arrival');
-  const periodic = r.checks.filter((c) => c.kind === 'periodic');
+  const arrival = r.checks.find((c) => c.kind === 'arrival' && !c.voided_at);
+  const periodic = r.checks.filter((c) => c.kind === 'periodic'); // cancelled ones too, struck through
+  const voided = r.checks.filter((c) => c.voided_at);
+  const voidCls = (c) => (c.voided_at ? 'rep-void' : '');
   const sign = (c) => c.performed_by_name ?? '';
   const only12 = h('input', { type: 'checkbox', id: 'only12' });
   const body = h('div', { class: 'report' });
@@ -167,7 +201,7 @@ export async function storageReportView(el, [id]) {
 
   const resultCell = (c, key) => {
     const it = (c.items || []).find((i) => i.key === key);
-    return h('td', { class: `res res-${it?.result ?? 'none'}` }, it ? RESULT[it.result] : '');
+    return h('td', { class: `res res-${it?.result ?? 'none'} ${voidCls(c)}` }, it ? RESULT[it.result] : '');
   };
 
   const arrivalSection = () => (!arrival ? h('p', {}, 'Ankomstkontroll er ikke registrert.') : [
@@ -187,19 +221,20 @@ export async function storageReportView(el, [id]) {
     for (let i = 0; i < periodic.length; i += 6) chunks.push(periodic.slice(i, i + 6));
     return chunks.map((cs) => h('table', { class: 'rep-table rep-grid' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Sjekkpunkt / sjekkdato'),
-        cs.map((c) => h('th', {}, fmtDate(c.performed_at, false), h('div', { class: 'rep-sub' }, r.level_text[c.level]))))),
+        cs.map((c) => h('th', { class: voidCls(c) }, fmtDate(c.performed_at, false),
+          h('div', { class: 'rep-sub' }, c.voided_at ? 'ANNULLERT' : r.level_text[c.level]))))),
       h('tbody', {},
         keys.map((k) => h('tr', {}, h('td', {}, k.label), cs.map((c) => resultCell(c, k.key)))),
-        h('tr', {}, h('td', {}, 'Dekktrykk (2,7 bar)'), cs.map((c) => h('td', { class: 'res' }, `${num(c.tyre_pressure)}${c.tyres_ok ? '' : ' ✗'}`))),
-        r.fuel_kind.nev ? h('tr', {}, h('td', {}, 'SOC HV-batteri (%)'), cs.map((c) => h('td', { class: 'res' },
+        h('tr', {}, h('td', {}, 'Dekktrykk (2,7 bar)'), cs.map((c) => h('td', { class: `res ${voidCls(c)}` }, `${num(c.tyre_pressure)}${c.tyres_ok ? '' : ' ✗'}`))),
+        r.fuel_kind.nev ? h('tr', {}, h('td', {}, 'SOC HV-batteri (%)'), cs.map((c) => h('td', { class: `res ${voidCls(c)}` },
           c.soc_percent ?? '', c.soc_charged_to != null ? ` → ${c.soc_charged_to}` : ''))) : null,
-        h('tr', {}, h('td', {}, 'Signatur'), cs.map((c) => h('td', { class: 'res small' }, sign(c)))))));
+        h('tr', {}, h('td', {}, 'Signatur'), cs.map((c) => h('td', { class: `res small ${voidCls(c)}` }, sign(c)))))));
   };
 
   const batterySection = () => h('table', { class: 'rep-table' },
     h('thead', {}, h('tr', {}, ['Sjekk dato', 'Batteristatus', 'Spenning før lading (V)', 'Spenning etter lading (V)', 'Tiltak', 'Sign. insp.']
       .map((t) => h('th', {}, t)))),
-    h('tbody', {}, r.checks.map((c) => h('tr', { class: c.battery_status && c.battery_status !== 'good' ? 'rep-flag' : '' },
+    h('tbody', {}, r.checks.map((c) => h('tr', { class: c.voided_at ? 'rep-void' : c.battery_status && c.battery_status !== 'good' ? 'rep-flag' : '' },
       h('td', {}, fmtDate(c.performed_at)),
       h('td', {}, r.battery_status[c.battery_status] ?? ''),
       h('td', {}, num(c.v12_before)),
@@ -230,6 +265,15 @@ export async function storageReportView(el, [id]) {
       batterySection(),
       h('h2', {}, full ? '4. Anmerkninger' : 'Anmerkninger'),
       remarksSection(),
+      voided.length ? h('h2', {}, full ? '5. Annullerte kontroller' : 'Annullerte kontroller') : null,
+      voided.length ? h('table', { class: 'rep-table' },
+        h('thead', {}, h('tr', {}, ['Kontroll', 'Utført', 'Annullert', 'Av', 'Begrunnelse'].map((t) => h('th', {}, t)))),
+        h('tbody', {}, voided.map((c) => h('tr', {},
+          h('td', {}, c.kind === 'arrival' ? 'Ankomstkontroll' : `${r.level_text[c.level]} sjekk`),
+          h('td', {}, `${fmtDate(c.performed_at)} (${sign(c)})`),
+          h('td', {}, fmtDate(c.voided_at)),
+          h('td', {}, c.voided_by_name ?? ''),
+          h('td', {}, c.void_reason ?? ''))))) : null,
       h('div', { class: 'rep-sign' },
         h('div', {}, 'Signatur og stempel'), h('div', {}, 'Dato')),
       h('p', { class: 'rep-foot small' }, `Utskrift fra Carbonara ${fmtDate(new Date())}. Hver kontroll er signert elektronisk med innlogget ansatt og tidspunkt.`),

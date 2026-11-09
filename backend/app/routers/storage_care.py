@@ -8,6 +8,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from .. import storagecare as sc
+from ..auth import require_admin
 from ..common import bad_request, conflict, log_event, not_found
 from ..config import settings
 from ..db import get_conn
@@ -59,13 +60,15 @@ def programme(conn, vehicle_id: int) -> dict:
     if not v:
         raise not_found("Vehicle")
     checks = conn.execute(
-        """SELECT c.*, (c.performed_at AT TIME ZONE 'Europe/Oslo')::date AS performed_date, s.name AS performed_by_name
-             FROM storage_checks c LEFT JOIN staff s ON s.id = c.performed_by
+        """SELECT c.*, (c.performed_at AT TIME ZONE 'Europe/Oslo')::date AS performed_date, s.name AS performed_by_name,
+                  vb.name AS voided_by_name
+             FROM storage_checks c LEFT JOIN staff s ON s.id = c.performed_by LEFT JOIN staff vb ON vb.id = c.voided_by
             WHERE c.vehicle_id = %s ORDER BY c.performed_at""",
         (vehicle_id,),
     ).fetchall()
     today = conn.execute(TODAY_SQL).fetchone()["d"]
-    arrival = next((c for c in checks if c["kind"] == "arrival"), None)
+    valid = [c for c in checks if not c["voided_at"]]  # cancelled checks don't count in the schedule
+    arrival = next((c for c in valid if c["kind"] == "arrival"), None)
     start = arrival["performed_date"] if arrival else (v["first_placed"].date() if v["first_placed"] else None)
     fuel = _fuel(v, v["registry_fuel"])
 
@@ -80,7 +83,7 @@ def programme(conn, vehicle_id: int) -> dict:
         active, note = False, "Starts when the car is placed in storage."
     else:
         active, note = True, None
-    nxt = sc.next_check(start, arrival is not None, sum(c["kind"] == "periodic" for c in checks), today) if active else None
+    nxt = sc.next_check(start, arrival is not None, sum(c["kind"] == "periodic" for c in valid), today) if active else None
     return {"vehicle": v, "checks": checks, "arrival": arrival, "start": start, "fuel": fuel,
             "fuel_kind": sc.fuel_kind(fuel), "applies": applies, "active": active, "note": note,
             "next": nxt, "today": today}
@@ -169,6 +172,31 @@ def add_check(vehicle_id: int, body: CheckIn, request: Request, conn=Depends(get
               data={"check_id": row["id"], "kind": nxt["kind"], "level": nxt["level"],
                     "v12": body.v12_before, "battery_action": action, "problems": len(problems)})
     return _public(programme(conn, vehicle_id))
+
+
+class VoidIn(BaseModel):
+    reason: str = Field(min_length=3, max_length=500)
+
+
+@router.post("/storage-checks/{check_id}/void")
+def void_check(check_id: int, body: VoidIn, request: Request, conn=Depends(get_conn), _admin=Depends(require_admin)):
+    """Cancel a check registered by mistake. It stops counting in the schedule
+    but stays in the report (struck through, with who/when/why)."""
+    row = conn.execute("SELECT * FROM storage_checks WHERE id = %s FOR UPDATE", (check_id,)).fetchone()
+    if not row:
+        raise not_found("Storage check")
+    if row["voided_at"]:
+        raise conflict("This check is already cancelled")
+    reason = body.reason.strip()
+    if len(reason) < 3:
+        raise bad_request("Give a reason")
+    staff_id = request.state.staff["id"]
+    conn.execute("UPDATE storage_checks SET voided_at = now(), voided_by = %s, void_reason = %s WHERE id = %s",
+                 (staff_id, reason, check_id))
+    log_event(conn, row["vehicle_id"], "storage_check_voided", staff_id=staff_id,
+              data={"check_id": check_id, "kind": row["kind"], "level": row["level"],
+                    "performed_at": row["performed_at"], "reason": reason})
+    return _public(programme(conn, row["vehicle_id"]))
 
 
 @router.get("/vehicles/{vehicle_id}/storage-care/report")

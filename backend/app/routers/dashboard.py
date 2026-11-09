@@ -90,7 +90,7 @@ def dashboard(conn=Depends(get_conn)):
         "pdi_upcoming": [o for o in pdi_open if o["in_days"] is not None and o["in_days"] > 1][:10],
         "pdi_overdue": [o for o in pdi_open if o["in_days"] is not None and o["in_days"] < 0],
         "pdi_waiting": [o for o in pdi_open if o["status"] == "sent"],
-        "pdi_drafts": [o for o in pdi_open if o["status"] == "draft"],
+        "pdi_drafts": [o for o in pdi_open if not o["sent_at"]],  # incl. booked by phone but list not sent
         "test_drives": test_drives,
         "arrivals": arrivals,
         "eu_control": eu,

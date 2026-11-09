@@ -161,7 +161,7 @@ vin_source 'registry'), `004_spot_capacity` (multi-car spots), `005_sub_zones` (
 `storage_spots` view), `006_service_and_condition` (condition, last_service_date/km, reg.
 numbers normalized), `007_soft_delete` (deleted_at/by/reason), `008_finn_link` (finn_code),
 `009_test_drives` (test_drives table), `010_login_and_privacy`, `011_pdi_orders`,
-`012_system_settings`, `013_delete_spots`, `014_storage_care`.
+`012_system_settings`, `013_delete_spots`, `014_storage_care`, `015_void_storage_checks`.
 **New schema changes = a new numbered file. Never edit an applied migration.**
 
 Frontend routes: `#/` dashboard, `#/intake`, `#/inspections/:id`, `#/vehicles`,
@@ -318,7 +318,10 @@ warning offers "Use this VIN".
   admins edit). **No e-mail addresses are built into code or migrations** (the user's rule).
   RBV's address and the user's test address are added in Settings. During testing the
   test address is the default; switch to RBV when going live.
-- **RBV's reply** (date/time) is entered **manually** by staff ("Enter PDI date"). RBV can't
+- **RBV's reply** (date/time) is entered **manually** by staff ("Enter PDI date"). It is
+  available on any open order, including unsent ones (dates are often agreed in person or by
+  phone). A booked order that isn't sent shows a warning, and Today lists it under "not sent
+  yet". RBV can't
   reach the server (local network; the user is unsure whether the companies' networks are
   connected). Automatic reply reading (IMAP) or a booking link are possible later.
 - **Reminders are on the dashboard only** (the user's choice): "PDI tomorrow – make the car
@@ -370,6 +373,12 @@ sheets (long-term storage, periodic checklist, 12V battery form).
   spot, battery part number, arrival voltage), the arrival check, a periodic grid (max 6
   checks per table), MG's 12V battery form, remarks, and a signature/stamp box. "Only 12V
   battery form" prints that part alone (warranty claims).
+- **Checks are never deleted** (they are warranty evidence). An admin can **cancel** one with
+  a reason (`POST /storage-checks/{id}/void`, migration 015). A cancelled check:
+  - no longer counts in the schedule (the next due date is recalculated)
+  - stays in the report struck through ("ANNULLERT"), with a section "Annullerte kontroller"
+    (who, when, why)
+  - is logged as `storage_check_voided`
 - **Printing:** with a dialog open, only the dialog prints; otherwise the page prints without
   topbar, footer and `.no-print` elements.
 
@@ -459,6 +468,8 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.13.2 | "Enter PDI date" available before the order is sent |
+| 0.13.1 | Storage checks can be cancelled by an admin with a reason (kept struck through in the report) |
 | 0.13.0 | **Storage maintenance** for new cars (MG SI-GI2022102501): arrival + monthly/3/6-month checks, 12V/SOC/tyre rules, Today reminders, printable report; dealer number setting |
 | 0.12.2 | Fix: System page and PDI card printed "[object HTMLElement]" / "null" (native `append` again) |
 | 0.12.1 | Storage spots can be renamed and deleted (cars moved to another spot first) |
