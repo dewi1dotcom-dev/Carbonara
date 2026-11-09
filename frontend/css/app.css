@@ -406,3 +406,14 @@ dialog::backdrop { background: rgb(15 23 42 / .6); }
   .actions .btn.big { flex: 1; }
   .head-side { align-items: flex-start; }
 }
+
+/* ---------------------------------------------------------------- test drive */
+.td-row { align-items: flex-start; gap: .75rem; }
+.td-row .list-main { flex: 1; min-width: 0; }
+.td-row > .btn, .td-row > .row-actions { align-self: center; }
+.td-row .row-actions { display: flex; gap: .5rem; flex-wrap: wrap; justify-content: flex-end; }
+.td-items { color: var(--warn); margin-top: .15rem; }
+.td-license { width: 160px; align-items: center; justify-content: center; }
+.td-banner { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
+button.list-card { width: 100%; text-align: left; font: inherit; color: inherit; cursor: pointer; }
+button.list-card:disabled { opacity: .55; cursor: not-allowed; }

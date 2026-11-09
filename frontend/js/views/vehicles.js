@@ -45,7 +45,8 @@ export function vehicleCard(v, extra = null) {
         badge(regStatus(v.registered_marked_at, v.registration_status_code, v.registration_status)),
         eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null,
         svc && svc.cls !== 'good' ? badge(svc) : null,
-        v.finn_code ? h('span', { class: 'badge finn' }, 'finn.no') : null)),
+        v.finn_code ? h('span', { class: 'badge finn' }, 'finn.no') : null,
+        v.test_drive_id ? h('span', { class: 'badge warn' }, 'On test drive') : null)),
     h('div', { class: 'list-meta' },
       [v.registration_number, v.color, v.location_code && `Spot ${v.location_code}`,
         v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`, extra].filter(Boolean).join(' · ')));
@@ -69,6 +70,8 @@ const EVENT_LABELS = {
   registry_mismatch_resolved: 'Checked against Statens vegvesen',
   deleted: 'Deleted',
   restored: 'Restored from Recently deleted',
+  test_drive_out: 'Out on test drive',
+  test_drive_returned: 'Back from test drive',
 };
 
 const FIELD_LABELS = {
@@ -85,6 +88,12 @@ function eventDetail(e) {
   const d = e.data || {};
   switch (e.event_type) {
     case 'placed_in_storage': return `Spot ${d.location_code}`;
+    case 'test_drive_out':
+      return [d.removed?.length && `Taken out: ${d.removed.join(', ')}`, d.added?.length && `Put in: ${d.added.join(', ')}`,
+        d.odometer_out != null && fmtKm(d.odometer_out), d.note].filter(Boolean).join(' · ');
+    case 'test_drive_returned':
+      return [d.km_driven != null && `${fmtKm(d.km_driven)} driven`,
+        d.items_checked === false && 'Items not all back', d.note].filter(Boolean).join(' · ');
     case 'arrival_inspection_completed': return `${fmtKm(d.odometer_km)}, ${d.damage_count} damage(s)`;
     case 'vehicle_created':
     case 'arrival_inspection_started': return d.vin_source ? `VIN via ${d.vin_source}` : '';
@@ -607,6 +616,22 @@ function registryCard(v, rerender) {
   return card;
 }
 
+/** Out on a test drive: who has it and since when; otherwise a start button. */
+function testDriveBanner(v) {
+  const d = v.active_test_drive;
+  if (!d) {
+    return h('div', { class: 'actions' },
+      h('a', { class: 'btn', href: `#/test-drive/new/${v.id}` }, '🔑 Start test drive'));
+  }
+  return h('div', { class: 'card notice warn td-banner' },
+    h('div', {},
+      h('strong', {}, 'Out on test drive'), ` since ${fmtDate(d.started_at)} — ${d.customer_name}, `,
+      h('a', { href: `tel:${d.customer_phone}` }, d.customer_phone),
+      d.removed_items.length ? h('div', { class: 'small' }, `Taken out: ${d.removed_items.join(', ')}`) : null,
+      d.added_items.length ? h('div', { class: 'small' }, `Put in: ${d.added_items.join(', ')}`) : null),
+    h('a', { class: 'btn', href: '#/test-drive' }, 'Go to Test drive'));
+}
+
 export async function vehicleView(el, [id]) {
   const v = await api.get(`/vehicles/${id}`);
   const rerender = async () => {
@@ -629,6 +654,7 @@ export async function vehicleView(el, [id]) {
         // Visual hint: the car is advertised (on the website, via finn.no)
         v.finn_code ? finnLink(v.finn_code, 'finn.no ↗') : null)),
     duplicateNotice(v.possible_duplicates),
+    testDriveBanner(v),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
     registryCard(v, rerender),

@@ -485,8 +485,9 @@ def label_lines(image: Image.Image, items: list[dict], max_anchors: int = 4) -> 
     return out
 
 
-def scene_text(rgb: Image.Image, dense: bool = False) -> list[dict]:
-    """Every text box in the photo: [{text, score, height, width, cx, cy, ux, uy}]."""
+def scene_text(rgb: Image.Image, dense: bool = False, log_text: bool = True) -> list[dict]:
+    """Every text box in the photo: [{text, score, height, width, cx, cy, ux, uy}].
+    log_text=False for personal documents (driving licences): keep it out of the logs."""
     import numpy as np
 
     arr = np.ascontiguousarray(np.asarray(rgb.convert("RGB"))[:, :, ::-1])  # RGB -> BGR
@@ -502,7 +503,8 @@ def scene_text(rgb: Image.Image, dense: bool = False) -> list[dict]:
         items.append({"text": str(text), "score": float(score), "height": float(height),
                       "width": float(width), "cx": float(cx), "cy": float(cy),
                       "ux": float(direction[0] / norm), "uy": float(direction[1] / norm)})
-    log.info("scene text: %s", [(i["text"], round(i["score"], 2)) for i in items])
+    if log_text:
+        log.info("scene text: %s", [(i["text"], round(i["score"], 2)) for i in items])
     return items
 
 

@@ -7,7 +7,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .db import pool
 from .migrate import run_migrations
-from .routers import admin, inspections, vehicles, vin
+from .routers import admin, inspections, testdrives, vehicles, vin
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -23,7 +23,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Carbonara", version=settings.version, lifespan=lifespan)
 
-for module in (admin, vin, inspections, vehicles):
+for module in (admin, vin, inspections, vehicles, testdrives):
     app.include_router(module.router, prefix="/api")
 
 

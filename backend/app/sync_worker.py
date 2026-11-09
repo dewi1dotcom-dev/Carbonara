@@ -8,7 +8,9 @@ Run with:  python -m app.sync_worker
 2. Once a day, data retention:
    - cars off site with no activity for RETENTION_YEARS -> Recently deleted;
    - cars in Recently deleted for more than TRASH_DAYS -> removed for good,
-     including their photo files.
+     including their photo files;
+   - test drive customer details (name, phone, licence photo) in the trash
+     for more than TRASH_DAYS -> wiped for good.
 """
 
 import logging
@@ -18,7 +20,8 @@ import psycopg
 from psycopg.rows import dict_row
 
 from . import photostore, vegvesen
-from .common import RETENTION_DUE_SQL, purge_vehicle, soft_delete_vehicle
+from .common import (RETENTION_DUE_SQL, TEST_DRIVE_PURGE_DUE_SQL, purge_test_drive_customer, purge_vehicle,
+                     soft_delete_vehicle)
 from .config import settings
 from .migrate import run_migrations
 
@@ -51,6 +54,17 @@ def housekeeping() -> None:
         for row in photos:
             photostore.remove(row)
         log.info("Removed vehicle %s (VIN %s) for good, %d photo(s)", car["id"], car["vin"], len(photos))
+
+    # Test drive customer details (name, phone, licence photo) in the trash too long.
+    with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+        drives = conn.execute(TEST_DRIVE_PURGE_DUE_SQL, (settings.trash_days,)).fetchall()
+    for drive in drives:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+            photo = purge_test_drive_customer(conn, drive["id"])
+            conn.commit()
+        if photo:
+            photostore.remove(photo)
+        log.info("Test drive %s (vehicle %s): customer details deleted for good", drive["id"], drive["vehicle_id"])
 
 
 def run_once(max_vehicles: int = 50) -> int:

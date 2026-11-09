@@ -156,10 +156,14 @@ def purge_vehicle(conn, vehicle_id: int) -> list:
     call photostore.remove() on them once the transaction has committed."""
     photos = conn.execute(
         """SELECT p.file_key, p.original_ext FROM inspection_photos p
-             JOIN inspections i ON i.id = p.inspection_id WHERE i.vehicle_id = %s""",
-        (vehicle_id,),
+             JOIN inspections i ON i.id = p.inspection_id WHERE i.vehicle_id = %s
+           UNION ALL
+           SELECT license_file_key, license_ext FROM test_drives
+            WHERE vehicle_id = %s AND license_file_key IS NOT NULL""",
+        (vehicle_id, vehicle_id),
     ).fetchall()
     for stmt in (
+        "DELETE FROM test_drives WHERE vehicle_id = %s",
         "DELETE FROM damages WHERE vehicle_id = %s",
         "DELETE FROM vehicle_events WHERE vehicle_id = %s",
         "DELETE FROM inspection_photos WHERE inspection_id IN (SELECT id FROM inspections WHERE vehicle_id = %s)",
@@ -171,6 +175,30 @@ def purge_vehicle(conn, vehicle_id: int) -> list:
     ):
         conn.execute(stmt, (vehicle_id,))
     return photos
+
+
+def purge_test_drive_customer(conn, drive_id: int) -> dict | None:
+    """Wipe a test drive's customer details for good (name, phone, licence
+    photo). Returns the licence photo row ({file_key, original_ext}) or None;
+    call photostore.remove() on it once the transaction has committed."""
+    row = conn.execute(
+        """UPDATE test_drives t
+              SET customer_name = NULL, customer_phone = NULL,
+                  license_file_key = NULL, license_ext = NULL, license_mime = NULL,
+                  customer_purged_at = now()
+             FROM (SELECT id, license_file_key, license_ext FROM test_drives WHERE id = %s FOR UPDATE) prev
+            WHERE t.id = prev.id
+        RETURNING prev.license_file_key AS file_key, prev.license_ext AS original_ext""",
+        (drive_id,),
+    ).fetchone()
+    return row if row and row["file_key"] else None
+
+
+# Returned test drives whose customer details have been in the trash for TRASH_DAYS.
+TEST_DRIVE_PURGE_DUE_SQL = """
+    SELECT id, vehicle_id FROM test_drives
+     WHERE customer_purged_at IS NULL
+       AND customer_trashed_at < now() - make_interval(days => %s)"""
 
 
 # Cars that have left (off site) with no activity for RETENTION_YEARS. Activity

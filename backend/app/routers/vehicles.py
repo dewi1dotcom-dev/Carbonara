@@ -87,7 +87,8 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, limit: 
                   r.sync_status AS registry_status, r.eu_control_due,
                   r.registration_status,
                   coalesce(r.first_registered, r.first_registered_norway) AS first_registered,
-                  r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code
+                  r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code,
+                  (SELECT t.id FROM test_drives t WHERE t.vehicle_id = v.id AND t.status = 'out') AS test_drive_id
              FROM vehicles v
              LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
              LEFT JOIN storage_spots l ON l.id = a.location_id
@@ -96,6 +97,8 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, limit: 
               AND (%(status)s::text IS NULL OR v.status = %(status)s)
               AND (%(term)s::text IS NULL
                    OR v.vin ILIKE %(term)s OR v.make ILIKE %(term)s OR v.model ILIKE %(term)s
+                   OR v.variant ILIKE %(term)s OR v.color ILIKE %(term)s
+                   OR concat_ws(' ', v.make, v.model, v.variant) ILIKE %(term)s
                    OR v.registration_number ILIKE %(regterm)s OR l.code ILIKE %(term)s)
             ORDER BY v.updated_at DESC
             LIMIT %(limit)s""",
@@ -160,6 +163,11 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         details = vegvesen.details(raw)
         values = vegvesen.vehicle_values(raw)
         mismatches = vegvesen.mismatch_list(vehicle, raw, kept)
+    test_drive = conn.execute(
+        """SELECT id, started_at, customer_name, customer_phone, removed_items, added_items
+             FROM test_drives WHERE vehicle_id = %s AND status = 'out'""",
+        (vehicle_id,),
+    ).fetchone()
     marked_by = vehicle["registered_marked_by"] and conn.execute(
         "SELECT name FROM staff WHERE id = %s", (vehicle["registered_marked_by"],)
     ).fetchone()
@@ -168,6 +176,7 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "registered_marked_by_name": marked_by["name"] if marked_by else None,
         "vin_info": vinlib.describe(vehicle["vin"]),
         "current_location": location,
+        "active_test_drive": test_drive,
         "inspections": inspections,
         "open_damages": open_damages,
         "events": events,
@@ -196,6 +205,8 @@ def delete_vehicle(vehicle_id: int, staff_id: Optional[int] = None, conn=Depends
     if not vehicle:
         raise not_found("Vehicle")
     check_staff(conn, staff_id)
+    if conn.execute("SELECT 1 FROM test_drives WHERE vehicle_id = %s AND status = 'out'", (vehicle_id,)).fetchone():
+        raise conflict("The car is out on a test drive. Register it as returned first.")
     soft_delete_vehicle(conn, vehicle_id, reason="manual", staff_id=staff_id)
     log.info("Vehicle %s (VIN %s) moved to Recently deleted", vehicle_id, vehicle["vin"])
 

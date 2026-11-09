@@ -165,3 +165,12 @@ class RepairIn(_Clean):
 class CompleteIn(BaseModel):
     location_id: int
     staff_id: Optional[int] = None
+
+
+class TestDriveReturnIn(_Clean):
+    """The car is back from a test drive. `items_checked`: staff confirmed that
+    everything taken out / put in for the drive is back as it was."""
+    staff_id: Optional[int] = None
+    odometer_in: Optional[int] = Field(None, ge=0, le=2_000_000)
+    items_checked: bool = False
+    return_note: Optional[str] = Field(None, max_length=500)

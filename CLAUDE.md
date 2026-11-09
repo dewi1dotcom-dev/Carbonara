@@ -127,21 +127,23 @@ backend/
                         plate parsing, recognize_all
   app/photostore.py     original + 1600px + 400px JPEG
   app/sync_worker.py    registry re-sync loop + housekeeping() once every 24 h
-  app/routers/          vehicles.py, inspections.py, vin.py, admin.py
+  app/routers/          vehicles.py, inspections.py, vin.py, admin.py, testdrives.py
   migrations/           001…008 (see below)
 frontend/               no build step; plain ES modules
   index.html, css/app.css, js/app.js (hash router), js/ui.js (helpers), js/diagram.js
-  js/views/             dashboard, intake, inspection, vehicles, storage, settings
+  js/views/             dashboard, intake, inspection, vehicles, storage, testdrive, settings
 ```
 
 Migrations: `001_initial`, `002_vegvesen_registry`, `003_registry_confirm` (kept_values,
 vin_source 'registry'), `004_spot_capacity` (multi-car spots), `005_sub_zones` (parent_id +
 `storage_spots` view), `006_service_and_condition` (condition, last_service_date/km, reg.
-numbers normalized), `007_soft_delete` (deleted_at/by/reason), `008_finn_link` (finn_code).
+numbers normalized), `007_soft_delete` (deleted_at/by/reason), `008_finn_link` (finn_code),
+`009_test_drives` (test_drives table).
 **New schema changes = a new numbered file. Never edit an applied migration.**
 
 Frontend routes: `#/` dashboard, `#/intake`, `#/inspections/:id`, `#/vehicles`,
-`#/vehicles/:id`, `#/vehicles/deleted`, `#/storage`, `#/storage/:id|off-site`, `#/settings`.
+`#/vehicles/:id`, `#/vehicles/deleted`, `#/storage`, `#/storage/:id|off-site`,
+`#/test-drive`, `#/test-drive/new/:vehicleId` (start form with the car preselected), `#/settings`.
 
 ## Domain rules (the nuance)
 
@@ -200,6 +202,29 @@ warning offers "Use this VIN".
 - **Retention:** off-site cars with no activity for `RETENTION_YEARS` (5) are soft-deleted
   automatically by the worker's daily `housekeeping()`.
 - Starting an arrival for a VIN that sits in the trash purges the old record first.
+
+**Test drives** (`routers/testdrives.py`, `views/testdrive.js`):
+- Starting a drive needs the car, the customer's name and phone (8–15 digits, optional +) and
+  a **driving licence photo**. Optional: items taken out of the car (presets; the spare
+  **winter/summer wheels** are the most common), items put in (e.g. trade plates), an
+  odometer reading and a note. It is one multipart POST.
+- One active drive per car (partial unique index). A car that is out can't be deleted. The
+  car's storage spot and status don't change during a drive.
+- On return, staff tick every item back in place, or write a note about what's missing.
+  Customer details then move to the **trash** (`customer_trashed_at`), are shown under
+  "Returned — customer details in the trash" (for toll and speeding fines), and are wiped
+  after `TRASH_DAYS` by the worker (`purge_test_drive_customer`). They can also be deleted
+  right away.
+- **Name from the licence** (`licenselib.py`, `POST /test-drives/read-license`):
+  - The OCR finds the EU-format field labels `1.` (surname) and `2.` (given names), taking
+    the text in the same box or the next box on the line. It tries 0°/90°/270°/180°.
+  - The name is filled in as "Given Surname"; confidence is high only when both fields are
+    read at ≥ 0.85. A name the staff typed is never overwritten.
+  - The photo is only read in memory. OCR text from licences is **not logged**
+    (`scene_text(log_text=False)`).
+- **Personal data never goes into `vehicle_events`.** The history only logs items, km and
+  notes. Licence photos are served with `Cache-Control: no-store`. `purge_vehicle` also
+  removes a car's test drives and licence files.
 
 **finn.no:** crawling finn.no is prohibited (robots.txt and terms). Staff paste the ad link or
 FINN code (option C). The validator extracts 6–12 digits, and the link is
@@ -269,6 +294,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.9.0 | New/used + service tracking; reg. nos without spaces; soft delete + Recently deleted; 5-year retention |
 | 0.9.3 | Duplicate warnings (reg. no / VIN distance 1); finn.no link (manual code); fix: service fields appear at once at arrival |
 | 0.9.4 | Dates shown as Norwegian standard `dd.mm.yyyy` (+ `HH:mm`); frontend served with `Cache-Control: no-cache` |
+| 0.10.0 | **Test drive** page: start (customer, licence photo, items out/in), cars out now, return with item check; customer name auto-filled from the licence photo (OCR); customer details trashed on return and wiped after 30 days; vehicle search also matches variant/colour |
 
 **Next / ideas (not started):**
 - FINN import with image checkboxes. Blocked on official FINN API access or an ad-system feed.
