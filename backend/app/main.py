@@ -1,7 +1,10 @@
 import logging
+import re
 from contextlib import asynccontextmanager
+from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -37,6 +40,38 @@ def health():
 @app.get("/api/version", tags=["meta"])
 def version():
     return {"version": settings.version, "build_time": settings.build_time or None}
+
+
+# --------------------------------------------------------------------------- #
+# Frontend. JS/CSS are served under a per-build path (/v/<build>/js/app.js) so a
+# browser can never run old code after a deploy: some (Opera Touch) kept a
+# cached app.js despite revalidation headers. ES-module imports are relative,
+# so every module loaded by app.js gets the same build path.
+# --------------------------------------------------------------------------- #
+BUILD_TAG = re.sub(r"[^0-9A-Za-z.-]", "", f"{settings.version}-{settings.build_time or 'dev'}") or "dev"
+_FRONTEND = Path(settings.frontend_dir).resolve()
+
+
+def _index_html() -> str:
+    html = (_FRONTEND / "index.html").read_text(encoding="utf-8")
+    return (html.replace('src="/js/app.js"', f'src="/v/{BUILD_TAG}/js/app.js"')
+                .replace('href="/css/app.css"', f'href="/v/{BUILD_TAG}/css/app.css"'))
+
+
+@app.get("/", include_in_schema=False)
+@app.get("/index.html", include_in_schema=False)
+def index():
+    return HTMLResponse(_index_html(), headers={"Cache-Control": "no-cache"})
+
+
+@app.get("/v/{tag}/{path:path}", include_in_schema=False)
+def versioned_asset(tag: str, path: str):
+    """Any build tag serves the current files; the URL only has to change per build."""
+    file = (_FRONTEND / path).resolve()
+    if not file.is_relative_to(_FRONTEND) or not file.is_file():
+        raise HTTPException(404, "Not found")
+    cache = "public, max-age=31536000, immutable" if tag == BUILD_TAG else "no-cache"
+    return FileResponse(file, headers={"Cache-Control": cache})
 
 
 class FrontendFiles(StaticFiles):

@@ -19,10 +19,14 @@ formats are Norwegian.
 - The user deploys by pulling in **Portainer** and redeploying the stack, then says
   "up and running". After that, verify against the live server (see *Testing*), then report
   in a short table: what passed, what still needs a browser check.
-- The user reports UI bugs with screenshots. From 0.9.4 on, the frontend is served with
-  `Cache-Control: no-cache` (`FrontendFiles` in `main.py`), so a normal reload picks up a
-  new deploy. If a screenshot shows old UI, first compare the footer version with
-  `/api/version`.
+- The user reports UI bugs with screenshots. Staff use Chrome and **Opera Touch** on phones.
+  - **Cache-busting (0.10.2):** `main.py` serves `index.html` itself (no-cache) and
+    rewrites `/js/app.js` and `/css/app.css` to `/v/<BUILD_TAG>/…` (immutable). Every
+    deploy therefore gets new URLs, and relative ES-module imports inherit the build path.
+  - Opera Touch kept a stale `app.js` even with `no-cache` (the result was "Not found" for
+    a new route).
+  - **Keep all frontend imports relative,** and reference JS/CSS from `index.html` only.
+  - If a screenshot shows old UI, compare the footer version with `/api/version`.
 - Explain in plain language. The user is the dealership's own IT person, not a full-time developer.
 
 ## SECURITY — the Vegvesen API key
@@ -170,6 +174,7 @@ label-line strips (recognition-only, using long lines found as rulers) → zoom 
 **Statens vegvesen API:** `GET {VEGVESEN_API_URL}?understellsnummer=<VIN>` or
 `?kjennemerke=<REGNR>` with header `SVV-Authorization: Apikey <key>`.
 - Prefer `kodeNavn` over `kodeBeskrivelse` (colour etc.).
+- Many SVV fields are **lists**, e.g. `plasseringUnderstellsnummer` (LJ77892 has two: Instrumentpanel and Kupé - gulv høyre side). Don't take only `[0]` when all of them matter.
 - Lookup happens at arrival (by VIN or reg. no). Mismatches with typed values need a
   confirmation prompt; the user picks per field (`accept_fields`, `kept_values`).
 - The worker re-syncs registered cars every `VEGVESEN_SYNC_DAYS`.
@@ -301,6 +306,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.9.4 | Dates shown as Norwegian standard `dd.mm.yyyy` (+ `HH:mm`); frontend served with `Cache-Control: no-cache` |
 | 0.10.0 | **Test drive** page: start (customer, licence photo, items out/in), cars out now, return with item check; customer name auto-filled from the licence photo (OCR); customer details trashed on return and wiped after 30 days; vehicle search also matches variant/colour |
 | 0.10.1 | Licence names: spaces the OCR dropped are restored from the gaps in the photo (middle names, double surnames) |
+| 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 
 **Next / ideas (not started):**
 - FINN import with image checkboxes. Blocked on official FINN API access or an ad-system feed.

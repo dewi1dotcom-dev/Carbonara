@@ -188,7 +188,11 @@ def overview(item: dict | None) -> dict:
     return {
         # Machine-readable status, e.g. REGISTRERT / AVREGISTRERT / VRAKET.
         "status_code": dig(item, "registrering", "registreringsstatus", "kodeVerdi"),
-        "vin_location": _text(dig(body, "plasseringUnderstellsnummer", 0)),
+        # A car can have the VIN in several places (e.g. "Instrumentpanel" and
+        # "Kupé - gulv høyre side"): show them all, not just the first.
+        "vin_location": ", ".join(
+            t for t in (_text(p) for p in (body.get("plasseringUnderstellsnummer") or [])) if t
+        ) or None,
     }
 
 
