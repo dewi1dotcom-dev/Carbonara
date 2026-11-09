@@ -39,5 +39,20 @@ def version():
     return {"version": settings.version, "build_time": settings.build_time or None}
 
 
+class FrontendFiles(StaticFiles):
+    """Static frontend that browsers must revalidate on every load.
+
+    Without a Cache-Control header browsers cache JS/CSS heuristically, so
+    after a redeploy they kept running old code until a hard refresh.
+    "no-cache" still allows caching, but the browser checks the ETag first
+    (a cheap 304 when nothing changed).
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
+
+
 # Frontend (must be mounted last so /api routes win).
-app.mount("/", StaticFiles(directory=settings.frontend_dir, html=True), name="frontend")
+app.mount("/", FrontendFiles(directory=settings.frontend_dir, html=True), name="frontend")

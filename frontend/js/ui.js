@@ -152,21 +152,33 @@ export function viewPhoto(id, title = 'Photo') {
 
 // ---------------------------------------------------------------- formatting
 
-// All dates/times are shown in Norwegian, 24-hour, Oslo time, regardless of
-// the device's language settings: "00:48, søndag 8. november 2026".
+// All dates/times are shown in Norwegian standard, 24-hour, Oslo time,
+// regardless of the device's language settings: "08.11.2026 00:48".
+// (The header clock keeps the long form: "søndag 8. november 2026".)
 const TZ = 'Europe/Oslo';
 const fmtTime = new Intl.DateTimeFormat('nb-NO', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 const fmtLongDate = new Intl.DateTimeFormat('nb-NO', {
   timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
 });
-const fmtDay = new Intl.DateTimeFormat('nb-NO', { timeZone: TZ, day: 'numeric', month: 'long', year: 'numeric' });
+const fmtParts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
 
-/** With time: "00:48, søndag 8. november 2026". Date only: "8. november 2026". */
+/** dd.mm.yyyy in Oslo time, built from parts so no locale can change the order. */
+function fmtDay(d) {
+  const p = Object.fromEntries(fmtParts.formatToParts(d).map(({ type, value }) => [type, value]));
+  return `${p.day}.${p.month}.${p.year}`;
+}
+
+/** With time: "08.11.2026 00:48". Date only: "08.11.2026". */
 export function fmtDate(iso, withTime = true) {
   if (!iso) return '–';
+  // A bare date ("2027-03-27") is a calendar day, not a moment: format it as-is.
+  if (typeof iso === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+    const [y, m, d] = iso.split('-');
+    return `${d}.${m}.${y}`;
+  }
   const d = iso instanceof Date ? iso : new Date(iso);
   if (Number.isNaN(d.getTime())) return String(iso);
-  return withTime ? `${fmtTime.format(d)}, ${fmtLongDate.format(d)}` : fmtDay.format(d);
+  return withTime ? `${fmtDay(d)} ${fmtTime.format(d)}` : fmtDay(d);
 }
 
 /** Today's date in Oslo as [year, month, day]. */
