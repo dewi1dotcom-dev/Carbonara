@@ -46,6 +46,10 @@ export async function todayView(el) {
     block('🔧', 'PDI today', d.pdi_today.map(pdiRow), { cls: 'info' }),
     block('⏰', 'PDI date passed – mark as done?', d.pdi_overdue.map((o) =>
       row(`#/vehicles/${o.vehicle_id}`, carText(o), `was ${fmtDate(o.pdi_at)}`)), { cls: 'bad' }),
+    block('🔋', 'Storage checks due (new cars)', d.storage_due.map((s) =>
+      row(`#/vehicles/${s.id}`, carText(s), s.kind === 'arrival' ? 'arrival check missing'
+        : `${s.title} · ${s.in_days < 0 ? `${-s.in_days} d overdue` : s.in_days === 0 ? 'today' : `in ${s.in_days} d`}`,
+      s.in_days < 0 || s.kind === 'arrival' ? 'bad' : '')), { cls: d.storage_due.some((s) => s.in_days < 0) ? 'bad' : '' }),
     block('🔑', 'Out on test drive', d.test_drives.map((t) =>
       row('#/test-drive', carText(t), `${t.customer_name} · ${since(t.started_at)}`))),
     block('📋', 'Arrivals in progress', d.arrivals.map((i) =>

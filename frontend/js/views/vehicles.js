@@ -1,5 +1,6 @@
 import { PANEL_LABELS } from '../diagram.js';
 import { pdiCard } from './pdi.js';
+import { storageCard } from './storagecare.js';
 import {
   api, append, badge, busy, CONDITION, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   regStatus, showError, spotLabel, STATUS,
@@ -78,6 +79,7 @@ const EVENT_LABELS = {
   pdi_booking_cleared: 'PDI date removed',
   pdi_done: 'PDI done',
   pdi_cancelled: 'PDI order cancelled',
+  storage_check: 'Storage check',
 };
 
 const FIELD_LABELS = {
@@ -100,6 +102,10 @@ function eventDetail(e) {
       const [day, time] = String(d.pdi_at || '').split(' ');
       return day ? `${fmtDate(day, false)} ${time || ''}`.trim() : '';
     }
+    case 'storage_check':
+      return [d.kind === 'arrival' ? 'Arrival check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
+        d.v12 != null && `12V ${d.v12} V`, d.battery_action && d.battery_action !== 'none' && `battery ${d.battery_action}`,
+        d.problems ? `Not OK: ${d.problems}` : null].filter(Boolean).join(' · ');
     case 'test_drive_out':
       return [d.removed?.length && `Taken out: ${d.removed.join(', ')}`, d.added?.length && `Put in: ${d.added.join(', ')}`,
         d.odometer_out != null && fmtKm(d.odometer_out), d.note].filter(Boolean).join(' · ');
@@ -645,8 +651,9 @@ function testDriveBanner(v) {
 }
 
 export async function vehicleView(el, [id]) {
-  const [v, pdiData, pdiOpts] = await Promise.all([
-    api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options')]);
+  const [v, pdiData, pdiOpts, care] = await Promise.all([
+    api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options'),
+    api.get(`/vehicles/${id}/storage-care`)]);
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -671,6 +678,7 @@ export async function vehicleView(el, [id]) {
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
     pdiCard(v, pdiData, pdiOpts, rerender),
+    storageCard(v, care, rerender),
     registryCard(v, rerender),
     h('section', { class: 'card' },
       h('h2', {}, `Known damage (${v.open_damages.length})`),

@@ -63,10 +63,13 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("smtp_user", "Username", "E-mail"),
     Setting("smtp_password", "Password", "E-mail", secret=True, help="Gmail: an app password, not the normal password."),
     Setting("smtp_from", "Sender", "E-mail", help='e.g. Moss AutoCenter <post@example.no>'),
-    # Privacy notice (test drives)
-    Setting("privacy_company", "Company name", "Privacy notice", default="Moss AutoCenter"),
-    Setting("privacy_contact", "Contact for customers", "Privacy notice",
-            help="E-mail and/or phone shown to test drive customers."),
+    # Company (privacy notice, PDI e-mails, storage reports)
+    Setting("privacy_company", "Company name", "Company", default="Moss AutoCenter",
+            help="Shown on the privacy notice, PDI e-mails and storage reports."),
+    Setting("dealer_number", "Dealer number (Forh. nr.)", "Company",
+            help="Printed on the storage maintenance report."),
+    Setting("privacy_contact", "Contact for customers", "Company",
+            help="E-mail and/or phone shown to test drive customers on the privacy notice."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),

@@ -6,6 +6,7 @@ import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
 import { settingsView } from './views/settings.js';
 import { storageSpotView, storageView } from './views/storage.js';
+import { storageReportView } from './views/storagecare.js';
 import { systemView } from './views/system.js';
 import { testDriveView } from './views/testdrive.js';
 import { deletedView, vehiclesView, vehicleView } from './views/vehicles.js';
@@ -17,6 +18,7 @@ const routes = [
   [/^#\/inspections\/(\d+)$/, inspectionView, 'arrivals'],
   [/^#\/vehicles$/, vehiclesView, 'vehicles'],
   [/^#\/vehicles\/deleted$/, deletedView, 'vehicles'],
+  [/^#\/vehicles\/(\d+)\/storage-report$/, storageReportView, 'vehicles'],
   [/^#\/vehicles\/(\d+)$/, vehicleView, 'vehicles'],
   [/^#\/storage$/, storageView, 'storage'],
   [/^#\/storage\/(\d+|off-site)$/, storageSpotView, 'storage'],

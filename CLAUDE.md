@@ -147,7 +147,8 @@ backend/
   app/mailer.py         SMTP sending (PDI orders)
   app/auth.py           PIN login, sessions, require_staff / require_admin
   app/routers/          vehicles.py, inspections.py, vin.py, admin.py, testdrives.py, session.py (login),
-                        pdi.py, dashboard.py, system.py (super-admin settings)
+                        pdi.py, dashboard.py, system.py (super-admin settings), storage_care.py
+  app/storagecare.py    MG storage programme: checklist items, schedule
   migrations/           001…008 (see below)
 frontend/               no build step; plain ES modules
   index.html, css/app.css, js/app.js (hash router), js/ui.js (helpers), js/diagram.js
@@ -160,12 +161,13 @@ vin_source 'registry'), `004_spot_capacity` (multi-car spots), `005_sub_zones` (
 `storage_spots` view), `006_service_and_condition` (condition, last_service_date/km, reg.
 numbers normalized), `007_soft_delete` (deleted_at/by/reason), `008_finn_link` (finn_code),
 `009_test_drives` (test_drives table), `010_login_and_privacy`, `011_pdi_orders`,
-`012_system_settings`, `013_delete_spots`.
+`012_system_settings`, `013_delete_spots`, `014_storage_care`.
 **New schema changes = a new numbered file. Never edit an applied migration.**
 
 Frontend routes: `#/` dashboard, `#/intake`, `#/inspections/:id`, `#/vehicles`,
 `#/vehicles/:id`, `#/vehicles/deleted`, `#/storage`, `#/storage/:id|off-site`,
-`#/test-drive`, `#/test-drive/new/:vehicleId` (start form with the car preselected), `#/settings`.
+`#/test-drive`, `#/test-drive/new/:vehicleId` (start form with the car preselected), `#/settings`,
+`#/system` (super-admins), `#/arrivals`, `#/vehicles/:id/storage-report` (printable).
 
 ## Domain rules (the nuance)
 
@@ -343,6 +345,34 @@ warning offers "Use this VIN".
 - **The SVV key can now live in the DB** (entered on the System page) instead of the env.
   It still must never be committed to git.
 
+**Storage maintenance for new cars (0.13.0)** (`storagecare.py`, `routers/storage_care.py`,
+`views/storagecare.js`, migration 014). Source: MG bulletin **SI-GI2022102501** plus MG's
+sheets (long-term storage, periodic checklist, 12V battery form).
+- **Applies to all factory-new cars** (`condition = 'new'`) in storage, until the PDI is done
+  (the user's choice: MG's list for all makes).
+- **Schedule:** the arrival check, then periodic check *n* due *start + n months*. Every 6th
+  is a 6-month check and every 3rd a 3-month check; larger checks include the smaller items.
+  `start` = arrival check date, else first storage placement.
+- **Items are per fuel type** (`ITEMS`; Norwegian labels, also printed): HV-battery steps for
+  BEV/PHEV/FCEV, no "start the engine" for pure electric. Unknown fuel shows all items, with
+  N/A allowed.
+- **Rules (server-side):**
+  - Every item must be answered OK / Not OK / N/A.
+  - Tyres: one value plus "all four within 2.6–2.8" (the user's choice).
+  - 12V below 12.5 V or tester not "Good" → action charged/replaced is required, plus the
+    voltage after charging.
+  - SOC below 30 % → "charged to ≥ 50 %" is required.
+  - Anything not OK → remarks are required. The check is signed with the logged-in staff
+    member and the time.
+- **Reminders:** "Storage checks due" on Today (due ≤ 3 days, or overdue).
+- **Printable report:** `#/vehicles/:id/storage-report`, in Norwegian A4. It has a header
+  (company, **dealer number** from System → Company, VIN, model, colour, arrival, reg. date,
+  spot, battery part number, arrival voltage), the arrival check, a periodic grid (max 6
+  checks per table), MG's 12V battery form, remarks, and a signature/stamp box. "Only 12V
+  battery form" prints that part alone (warranty claims).
+- **Printing:** with a dialog open, only the dialog prints; otherwise the page prints without
+  topbar, footer and `.no-print` elements.
+
 **Today board (0.12.0)** (`routers/dashboard.py`, `views/today.js`): the start page `#/`.
 - Today/tomorrow: PDI tomorrow (warn), PDI today, PDI date passed, out on test drive,
   arrivals in progress.
@@ -429,6 +459,7 @@ the scratchpad and use `git commit -F <file>`. Commit title format:
 | 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
 | 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
 | 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
+| 0.13.0 | **Storage maintenance** for new cars (MG SI-GI2022102501): arrival + monthly/3/6-month checks, 12V/SOC/tyre rules, Today reminders, printable report; dealer number setting |
 | 0.12.2 | Fix: System page and PDI card printed "[object HTMLElement]" / "null" (native `append` again) |
 | 0.12.1 | Storage spots can be renamed and deleted (cars moved to another spot first) |
 | 0.12.0 | **PDI orders** to RBV (items, tyres, editable lists, e-mail via SMTP or e-mail app, manual booking date); **Today board** as start page; Arrivals moved to `#/arrivals`; **System page** (super-admin) to change server settings incl. SVV key and SMTP; no built-in e-mail addresses |
