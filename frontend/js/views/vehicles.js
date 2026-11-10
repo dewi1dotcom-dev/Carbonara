@@ -98,6 +98,7 @@ const EVENT_LABELS = {
   pdi_booked: 'PDI booked',
   pdi_booking_cleared: 'PDI date removed',
   pdi_done: 'PDI done',
+  pdi_prepared: 'Prepared for PDI',
   pdi_cancelled: 'PDI order cancelled',
   storage_check: 'Storage check',
   storage_check_voided: 'Storage check cancelled',
@@ -136,6 +137,9 @@ function eventDetail(e) {
         d.trade_plates && `Trade plates: ${d.trade_plates}`, d.odometer_out != null && fmtKm(d.odometer_out), d.note]
         .filter(Boolean).join(' · ');
     case 'trade_plates_moved': return d.trade_plates || '';
+    case 'pdi_prepared':
+      return [d.trade_plates && `Trade plates: ${d.trade_plates}`, d.moved_to && `Moved to ${d.moved_to}`, d.note,
+        d.wheels_location && `Winter wheels: ${d.wheels_location}`].filter(Boolean).join(' · ');
     case 'test_drive_returned':
       return [d.km_driven != null && `${fmtKm(d.km_driven)} driven`,
         d.items_checked === false && 'Items not all back', d.note].filter(Boolean).join(' · ');

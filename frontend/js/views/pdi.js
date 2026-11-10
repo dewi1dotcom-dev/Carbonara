@@ -3,8 +3,11 @@
 // Also the banner at the top of the vehicle page and the PDI page (#/pdi).
 import { tr } from '../i18n.js';
 import {
-  api, append, boardBlock, boardRow, busy, carText, dateInput, fmtDate, h, openDialog, session, showError, timeInput, toast,
+  api, append, boardBlock, boardRow, busy, carText, dateInput, fmtDate, h, openDialog, session, showError, spotLabel,
+  timeInput, toast,
 } from '../ui.js';
+
+const WHEELS_AT_DEALER = ['in_stock', 'sales_ordered']; // the dealer has the winter wheels
 
 /** "Sent 10.11.2026 14:00 to rbv@…" or "Printed / PDF 10.11.2026 14:00". */
 const sentText = (o, withTime = true) => (o.sent_via === 'print'
@@ -91,6 +94,10 @@ export function pdiCard(v, data, opts, rerender) {
           : `Sent ${fmtDate(o.sent_at)} to ${o.sent_to}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}${o.sent_via === 'mail_app' ? ' (e-mail app)' : ''}`) : null),
       o.changed_since_sent ? h('div', { class: 'notice warn small' }, 'Changed since it was sent — send it again so the workshop has the latest order.') : null,
       o.status === 'booked' && !o.sent_at ? h('div', { class: 'notice warn small' }, 'PDI date is set, but the order list has not been sent to the workshop yet.') : null,
+      o.prepared_at ? h('div', { class: 'notice small' },
+        h('strong', {}, `✓ Prepared for the PDI ${fmtDate(o.prepared_at)}${o.prepared_by_name ? ` by ${o.prepared_by_name}` : ''}`),
+        [o.prep_plate_name && `Trade plates: ${o.prep_plate_name}`, o.location_code && `Spot ${o.location_code}`, o.prep_note,
+          o.prep_wheels_location && `Winter wheels: ${o.prep_wheels_location}`].filter(Boolean).map((t) => h('div', {}, t))) : null,
       lines.length ? h('ul', {}, lines.map((l) => h('li', {}, l))) : h('p', { class: 'muted' }, 'Nothing ordered yet.'),
       o.other ? h('p', {}, h('strong', {}, 'Other: '), o.other) : null,
       o.note ? h('p', { class: 'muted' }, `Note: ${o.note}`) : null,
@@ -103,6 +110,8 @@ export function pdiCard(v, data, opts, rerender) {
           // Always available: the date may be agreed with the workshop in person or by phone.
           h('button', { class: o.status === 'sent' ? 'btn primary' : 'btn', type: 'button', onClick: () => bookingDialog(o, rerender) },
             o.status === 'booked' ? 'Change PDI date' : 'Enter PDI date'),
+          o.status === 'booked' ? h('button', { class: o.prepared_at ? 'btn' : 'btn primary', type: 'button', onClick: () => prepDialog(o, rerender) },
+            o.prepared_at ? 'Edit preparation' : 'Prepare for PDI') : null,
           o.status === 'booked' ? h('button', { class: 'btn', type: 'button', onClick: () => doneOrder(o, rerender) }, '✓ PDI done') : null)));
   }
   const done = data.history.filter((x) => x.status === 'done');
@@ -215,6 +224,96 @@ function pdiSheet(o, opts) {
       h('div', {}, 'Dato')));
 }
 
+/** "Did you give it to the workshop?" as an in-app Yes/No, with the PDI date
+ *  and time if the workshop already gave one. onYes(booking | null). */
+function givenDialog(question, o, onYes) {
+  const [d0, t0] = (o.pdi_local || '').split('T');
+  const date = dateInput({ id: 'given-date', value: d0 || '' });
+  const time = timeInput({ id: 'given-time', value: (t0 || '').slice(0, 5) || '08:00' });
+  const yes = h('button', { class: 'btn primary', type: 'submit' }, 'Yes');
+  const form = h('form', {},
+    h('p', {}, question),
+    h('h3', {}, 'PDI date (optional)'),
+    h('p', { class: 'muted small' }, 'Fill in if the workshop has already given a date and time.'),
+    h('div', { class: 'grid' },
+      h('div', { class: 'field' }, h('label', { for: 'given-date' }, 'Date'), date),
+      h('div', { class: 'field' }, h('label', { for: 'given-time' }, 'Time'), time)),
+    h('div', { class: 'actions' },
+      h('button', { class: 'btn', type: 'button', onClick: () => close() }, 'No'),
+      yes));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(yes, async () => {
+      await onYes(date.value ? { date: date.value, time: time.value || '08:00' } : null);
+      close();
+    });
+  });
+  const { close } = openDialog('Order given to the workshop?', form);
+}
+
+/** Get the car ready the day before the PDI: trade plates, where the car is
+ *  (spot + short message), and where the winter wheels are if the dealer has them. */
+export async function prepDialog(o, done) {
+  let plates, spots;
+  try {
+    [plates, spots] = await Promise.all([api.get('/trade-plates'), api.get('/storage-locations?available_only=true')]);
+  } catch (e) { showError(e); return; }
+  const carName = (p) => p.registration_number || [p.make, p.model].filter(Boolean).join(' ');
+
+  const plateSel = h('select', { id: 'prep-plate' }, h('option', { value: '' }, 'No trade plates'),
+    plates.map((p) => h('option', { value: p.id }, p.drive_id ? `${p.name} – on ${carName(p)} (test drive)` : p.name)));
+  plateSel.value = o.prep_plate_id ? String(o.prep_plate_id) : '';
+  const plateHint = h('div', { class: 'small td-items' });
+  const showPlateHint = () => {
+    const p = plates.find((x) => String(x.id) === plateSel.value);
+    plateHint.textContent = p?.drive_id ? `${p.name} are on ${carName(p)} (out on a test drive) right now.` : '';
+  };
+  plateSel.addEventListener('change', showPlateHint);
+  showPlateHint();
+
+  // The car's current spot first (it may be full, so not in the "available" list).
+  const spotSel = h('select', { id: 'prep-spot' },
+    o.location_id ? null : h('option', { value: '' }, 'Choose a spot…'),
+    o.location_id && !spots.some((l) => l.id === o.location_id) ? h('option', { value: o.location_id }, o.location_code) : null,
+    spots.map((l) => h('option', { value: l.id }, spotLabel(l))));
+  spotSel.value = o.location_id ? String(o.location_id) : '';
+  const note = h('input', { type: 'text', id: 'prep-note', maxlength: 300, value: o.prep_note ?? '',
+    placeholder: 'e.g. Keys in the key cabinet' });
+  const wheelsOn = WHEELS_AT_DEALER.includes(o.tyres?.mode);
+  const wheels = h('input', { type: 'text', id: 'prep-wheels', maxlength: 200, value: o.prep_wheels_location ?? '',
+    placeholder: 'e.g. Tyre storage, shelf 3 (or: not delivered yet)' });
+
+  const save = h('button', { class: 'btn primary', type: 'submit' }, '✓ Mark as prepared');
+  const form = h('form', {},
+    h('p', {}, h('strong', {}, carText(o)), o.pdi_at ? ` · PDI ${fmtDate(o.pdi_at)}` : ''),
+    h('div', { class: 'field' }, h('label', { for: 'prep-plate' }, 'Trade plates'), plateSel, plateHint),
+    h('div', { class: 'grid' },
+      h('div', { class: 'field' }, h('label', { for: 'prep-spot' }, 'Where is the car?'), spotSel),
+      h('div', { class: 'field' }, h('label', { for: 'prep-note' }, 'Message (optional)'), note)),
+    h('p', { class: 'muted small' }, 'Choosing another spot moves the car there.'),
+    wheelsOn ? h('div', { class: 'field' },
+      h('label', { for: 'prep-wheels' }, 'Where are the winter wheels?'), wheels,
+      h('div', { class: 'muted small' }, o.tyres.mode === 'in_stock' ? 'Winter wheels in stock at the dealer.' : 'Winter wheels ordered by sales.')) : null,
+    h('div', { class: 'actions' }, save));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    if (wheelsOn && !wheels.value.trim()) { toast('Write where the winter wheels are (or that they have not arrived)', 'error'); wheels.focus(); return; }
+    busy(save, async () => {
+      await api.post(`/pdi/${o.id}/prepare`, {
+        trade_plate_id: plateSel.value ? Number(plateSel.value) : null,
+        location_id: spotSel.value ? Number(spotSel.value) : null,
+        note: note.value,
+        wheels_location: wheelsOn ? wheels.value : null,
+      });
+      close();
+      toast('Car marked as prepared for the PDI', 'success');
+      window.dispatchEvent(new Event('carbonara:pdi-changed')); // updates the notification bar
+      await done();
+    });
+  });
+  const { close } = openDialog('Prepare for PDI', form);
+}
+
 /** Send the order to the workshop: by e-mail, or printed / saved as a PDF. */
 function sendDialog(o, opts, done) {
   const hasRecipients = opts.recipients.length > 0;
@@ -231,8 +330,13 @@ function sendDialog(o, opts, done) {
   };
   recipient.addEventListener('change', load);
 
-  const record = async (via) => {
+  // booking: {date, time} when the workshop already gave a date (from givenDialog).
+  const record = async (via, booking = null) => {
     await api.post(`/pdi/${o.id}/send`, { recipient_id: via === 'print' ? null : Number(recipient.value), via });
+    if (booking) {
+      await api.post(`/pdi/${o.id}/booking`, booking);
+      window.dispatchEvent(new Event('carbonara:pdi-changed'));
+    }
     close();
     toast(via === 'smtp' ? `Sent to ${mail?.to ?? 'the workshop'}` : via === 'print' ? 'Marked as given to the workshop' : 'Marked as sent', 'success');
     await done();
@@ -244,9 +348,7 @@ function sendDialog(o, opts, done) {
     onClick: () => {
       if (!mail) return;
       location.href = `mailto:${mail.to}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`;
-      setTimeout(() => {
-        if (confirm('Did you send the e-mail from your e-mail app?')) record('mail_app').catch(showError);
-      }, 800);
+      setTimeout(() => givenDialog('Did you send the e-mail from your e-mail app?', o, (b) => record('mail_app', b)), 800);
     },
   }, 'Open in e-mail app');
   const copyBtn = h('button', {
@@ -270,16 +372,17 @@ function sendDialog(o, opts, done) {
     class: 'btn primary', type: 'button',
     onClick: () => {
       window.print();
-      setTimeout(() => {
-        if (confirm('Did you give the order to the workshop (printed or as a PDF)?')) record('print').catch(showError);
-      }, 500);
+      setTimeout(() => givenDialog('Did you give the order to the workshop (printed or as a PDF)?', o, (b) => record('print', b)), 500);
     },
   }, '🖨 Print / save as PDF');
   const printPanel = h('div', {},
     h('p', { class: 'muted small no-print' }, 'Print the order for the workshop, or choose “Save as PDF” in the print window to send or store it as a file.'),
     pdiSheet(o, opts),
     h('div', { class: 'actions no-print' },
-      h('button', { class: 'btn', type: 'button', onClick: (e) => busy(e.currentTarget, () => record('print')) }, 'Already given – mark as sent'),
+      h('button', {
+        class: 'btn', type: 'button',
+        onClick: () => givenDialog('Did you give the order to the workshop (printed or as a PDF)?', o, (b) => record('print', b)),
+      }, 'Already given – mark as sent'),
       printBtn));
 
   // E-mail or print: one panel at a time.
@@ -323,6 +426,7 @@ function bookingDialog(o, done) {
       await api.post(`/pdi/${o.id}/booking`, { date: date.value, time: time.value });
       close();
       toast('PDI date saved', 'success');
+      window.dispatchEvent(new Event('carbonara:pdi-changed'));
       await done();
     });
   });

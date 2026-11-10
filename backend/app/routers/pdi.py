@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, field_validator
 
 from .. import mailer
 from ..auth import require_admin
-from ..common import bad_request, conflict, log_event, not_found
+from ..common import bad_request, conflict, log_event, not_found, place_in_location
 from ..config import settings
 from ..db import get_conn
 
@@ -89,14 +89,18 @@ ORDER_SELECT = """
            cb.name AS created_by_name, sb.name AS sent_by_name, bb.name AS booked_by_name, db.name AS done_by_name,
            (o.sent_at IS NOT NULL AND o.updated_at > o.sent_at + interval '2 seconds') AS changed_since_sent,
            v.vin, v.make, v.model, v.model_year, v.color, v.registration_number, v.condition, v.status AS vehicle_status,
-           (SELECT l.code FROM storage_assignments a JOIN storage_spots l ON l.id = a.location_id
-             WHERE a.vehicle_id = v.id AND a.removed_at IS NULL) AS location_code
+           loc.id AS location_id, loc.code AS location_code,
+           pp.name AS prep_plate_name, pb.name AS prepared_by_name
       FROM pdi_orders o
       JOIN vehicles v ON v.id = o.vehicle_id
+      LEFT JOIN LATERAL (SELECT l.id, l.code FROM storage_assignments a JOIN storage_spots l ON l.id = a.location_id
+                          WHERE a.vehicle_id = v.id AND a.removed_at IS NULL LIMIT 1) loc ON true
+      LEFT JOIN trade_plates pp ON pp.id = o.prep_plate_id
       LEFT JOIN staff cb ON cb.id = o.created_by
       LEFT JOIN staff sb ON sb.id = o.sent_by
       LEFT JOIN staff bb ON bb.id = o.booked_by
-      LEFT JOIN staff db ON db.id = o.done_by"""
+      LEFT JOIN staff db ON db.id = o.done_by
+      LEFT JOIN staff pb ON pb.id = o.prepared_by"""
 
 
 # PDIs booked or done in the current week (Monday–Sunday, Oslo time).
@@ -319,6 +323,85 @@ def mark_done(order_id: int, request: Request, conn=Depends(get_conn)):
     conn.execute("UPDATE pdi_orders SET status = 'done', done_at = now(), done_by = %s WHERE id = %s",
                  (_me(request), order_id))
     log_event(conn, row["vehicle_id"], "pdi_done", staff_id=_me(request))
+    return _order(conn, order_id)
+
+
+# --------------------------------------------------------------------------- #
+# preparing the car the day before the PDI
+# --------------------------------------------------------------------------- #
+
+class PrepareIn(BaseModel):
+    trade_plate_id: Optional[int] = None
+    location_id: Optional[int] = None   # storage spot; a different one moves the car
+    note: Optional[str] = Field(None, max_length=300)
+    wheels_location: Optional[str] = Field(None, max_length=200)
+
+
+WHEELS_AT_DEALER = ("in_stock", "sales_ordered")  # the dealer has the winter wheels
+
+
+def _next_workday(d: dt.date) -> dt.date:
+    d += dt.timedelta(days=1)
+    while d.weekday() >= 5:  # Saturday, Sunday
+        d += dt.timedelta(days=1)
+    return d
+
+
+@router.get("/pdi/prepare-due")
+def prepare_due(conn=Depends(get_conn)):
+    """Booked PDIs up to the next working day whose car isn't prepared yet
+    (on a Friday that includes Monday). Shown as a notification on every page."""
+    today = conn.execute("SELECT (now() AT TIME ZONE 'Europe/Oslo')::date AS d").fetchone()["d"]
+    return conn.execute(
+        ORDER_SELECT + """ WHERE o.status = 'booked' AND o.prepared_at IS NULL AND v.deleted_at IS NULL
+                             AND (o.pdi_at AT TIME ZONE 'Europe/Oslo')::date BETWEEN %s AND %s
+                           ORDER BY o.pdi_at""",
+        (today, _next_workday(today)),
+    ).fetchall()
+
+
+@router.post("/pdi/{order_id}/prepare")
+def prepare(order_id: int, body: PrepareIn, request: Request, conn=Depends(get_conn)):
+    """Record the preparation: trade plates, spot (+ short message), and where
+    the winter wheels are. Choosing another spot moves the car there."""
+    row = _open_order(conn, order_id)
+    staff_id = _me(request)
+    vehicle_id = row["vehicle_id"]
+    plate = None
+    if body.trade_plate_id is not None:
+        plate = conn.execute("SELECT * FROM trade_plates WHERE id = %s AND active", (body.trade_plate_id,)).fetchone()
+        if not plate:
+            raise not_found("Trade plates")
+    moved_to = None
+    if body.location_id is not None:
+        vehicle = conn.execute("SELECT status FROM vehicles WHERE id = %s FOR UPDATE", (vehicle_id,)).fetchone()
+        current = conn.execute(
+            """SELECT l.id, l.code FROM storage_assignments a JOIN storage_spots l ON l.id = a.location_id
+                WHERE a.vehicle_id = %s AND a.removed_at IS NULL""", (vehicle_id,)).fetchone()
+        if not current or current["id"] != body.location_id:
+            if vehicle["status"] == "intake":
+                raise conflict("Finish the arrival inspection first; it places the car in storage")
+            location = place_in_location(conn, vehicle_id, body.location_id, staff_id)
+            conn.execute("UPDATE vehicles SET status = 'in_storage' WHERE id = %s", (vehicle_id,))
+            log_event(conn, vehicle_id, "moved", staff_id=staff_id, data={
+                "from": current["code"] if current else None, "to": location["code"],
+                "location_id": location["id"], "note": "PDI preparation"})
+            moved_to = location["code"]
+    note = (body.note or "").strip() or None
+    wheels = (body.wheels_location or "").strip() or None
+    if (row["tyres"] or {}).get("mode") not in WHEELS_AT_DEALER:
+        wheels = None
+    # updated_at is left alone: it drives "changed since sent", and the order
+    # list itself is unchanged.
+    conn.execute(
+        """UPDATE pdi_orders SET prep_plate_id = %s, prep_note = %s, prep_wheels_location = %s,
+                  prepared_at = now(), prepared_by = %s
+            WHERE id = %s""",
+        (plate["id"] if plate else None, note, wheels, staff_id, order_id),
+    )
+    log_event(conn, vehicle_id, "pdi_prepared", staff_id=staff_id, data={
+        "trade_plates": plate["name"] if plate else None, "moved_to": moved_to,
+        "note": note, "wheels_location": wheels})
     return _order(conn, order_id)
 
 

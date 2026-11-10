@@ -180,7 +180,7 @@ backend/
                         test drive customer purge)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives,
                         session (login/language), pdi, dashboard (Today), system, storage_care
-  migrations/           001…019
+  migrations/           001…020
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
@@ -215,6 +215,7 @@ frontend/               no build step; plain ES modules
 | 017 | `drop_zones` | zones moved into descriptions |
 | 018 | `trade_plates` | `trade_plates`; `test_drives.trade_plate_id / plate_moved_at / plate_moved_to` |
 | 019 | `pdi_print` | `pdi_orders.sent_via` also allows `'print'` |
+| 020 | `pdi_prep` | `pdi_orders.prep_plate_id / prep_note / prep_wheels_location / prepared_at / prepared_by` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -434,7 +435,26 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
 - **The PDI date** is entered **manually** ("Enter PDI date"), on any open order, even
   unsent. A booked but unsent order shows a warning and stays under "not sent yet" on Today.
   RBV can't reach the server. Reading replies (IMAP) or a booking link are possible later.
-- **Reminder:** only on Today, the day before ("make the car ready").
+- **Reminder:** on Today, the day before ("make the car ready"), with "✓ prepared" / "not
+  prepared yet" on the today/tomorrow rows.
+- **"Did you give/send it?" (0.18.0):** after printing or opening the e-mail app, an in-app
+  Yes/No dialog (`givenDialog`, not the browser's `confirm`) asks, with optional PDI date + time.
+  Yes records the send and, if a date was given, the booking.
+- **Preparing the car (0.18.0)** (`prepDialog`, `POST /pdi/{id}/prepare`): the car must be
+  ready the day before the PDI.
+  - **Notification:** a 🔔 bar under the top bar on **every page** (`#notify`, `refreshNotify()`
+    in `app.js`, `GET /pdi/prepare-due`) for booked PDIs up to the **next working day** (a
+    Friday includes Monday) that aren't prepared. Refreshed on every navigation, every 15 min
+    and on the `carbonara:pdi-changed` event. The browser Notification API isn't usable
+    (no HTTPS).
+  - **The form:** trade plates (from Settings → Trade plates; it warns if the set is out on a
+    test drive, but doesn't block); where the car is (storage spot dropdown, and **choosing
+    another spot moves the car**, logged as `moved`) plus a short message; and where the
+    winter wheels are, **required** when tyres are `in_stock` / `sales_ordered` (the dealer has
+    them).
+  - Shown on the PDI card ("✓ Prepared for the PDI …", "Prepare for PDI" / "Edit
+    preparation" on booked orders); history event `pdi_prepared`. Doesn't touch `updated_at`,
+    so it doesn't count as "changed since sent".
 - **Ready for registration and delivery (0.15.1):** after "✓ PDI done", the car shows a green
   "✓ Ready for registration and delivery" badge (vehicle header + Vehicles list) until it is
   taken off site (delivered). It is **derived** (`common.READY_SQL`: a done PDI order and status
@@ -664,6 +684,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.16.0 | **Trade plates** in Settings (named sets, one car at a time); moving plates from a car on a test drive leads straight to its return |
 | 0.16.1 | "Sync now" with Statens vegvesen on every car (header of the SVV card); auto-marks registered cars |
 | 0.17.0 | PDI order: **print or save as PDF** instead of e-mail (Norwegian order sheet) |
+| 0.18.0 | In-app Yes/No "given to the workshop?" with PDI date; **PDI preparation** (trade plates, spot + message, winter wheels) with a notification bar the working day before |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

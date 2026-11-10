@@ -486,6 +486,11 @@ a.tile:hover { border-color: var(--primary); }
 .pdi-sheet .pdi-tick { width: 4.5rem; text-align: center; }
 .pdi-sheet .pdi-lines { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 1.2rem 0 .4rem; }
 .pdi-sheet .pdi-lines div { border-bottom: 1px solid #111; padding-bottom: .2rem; font-size: .85rem; min-height: 1.8rem; }
+/* Notification bar under the top bar (cars to prepare for tomorrow's PDI). */
+#notify:empty { display: none; }
+#notify { max-width: 980px; margin: .75rem auto 0; padding: 0 16px; display: flex; flex-direction: column; gap: .5rem; }
+.notify-bar { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap;
+  padding: .6rem .9rem; border-radius: 10px; border-left: 5px solid var(--warn); background: var(--warn-bg); }
 .send-modes { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
 .pdi-mail { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: .85rem; background: var(--bg);
   border: 1px solid var(--border); border-radius: 8px; padding: .75rem; max-height: 45vh; overflow: auto; }

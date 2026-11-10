@@ -1,11 +1,13 @@
-import { api, fmtDate, h, openDialog, session, setInspectorId, showError, startClock, toast } from './ui.js';
+import {
+  api, carText, fmtDate, h, openDialog, osloTodayIso, session, setInspectorId, showError, startClock, toast,
+} from './ui.js';
 import { lang, setLang, startTranslator } from './i18n.js';
 import { changePinForm, loginView } from './views/login.js';
 import { arrivalsView } from './views/dashboard.js';
 import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
-import { pdiListView } from './views/pdi.js';
+import { pdiListView, prepDialog } from './views/pdi.js';
 import { settingsView } from './views/settings.js';
 import { storageSpotView, storageView } from './views/storage.js';
 import { storageReportView } from './views/storagecare.js';
@@ -33,6 +35,7 @@ const routes = [
 const root = document.getElementById('app');
 
 async function render() {
+  refreshNotify(); // not awaited: the page doesn't wait for the notification bar
   const hash = (location.hash || '#/').split('?')[0]; // "?…" holds page filters, not part of the route
   const match = routes.map(([re, view, nav]) => [hash.match(re), view, nav]).find(([m]) => m);
 
@@ -61,6 +64,34 @@ async function render() {
       h('a', { href: '#/' }, 'Back to Today'));
   }
 }
+
+// ---------------------------------------------------------------- notifications
+
+// Cars with a PDI by the next working day that aren't prepared yet: a bar on
+// every page; "Prepare" opens the preparation form.
+const notifyEl = document.getElementById('notify');
+const DAY_MS = 86400000;
+
+async function refreshNotify() {
+  if (!session.me) { notifyEl.replaceChildren(); return; }
+  let due;
+  try { due = await api.get('/pdi/prepare-due'); } catch { return; }
+  const today = osloTodayIso();
+  notifyEl.replaceChildren(...due.map((o) => {
+    const [day, time] = String(o.pdi_local || '').split('T');
+    const inDays = Math.round((new Date(`${day}T12:00:00`) - new Date(`${today}T12:00:00`)) / DAY_MS);
+    const hhmm = (time || '').slice(0, 5);
+    const when = inDays <= 0 ? `PDI today at ${hhmm}` : inDays === 1 ? `PDI tomorrow at ${hhmm}` : `PDI ${fmtDate(day, false)} at ${hhmm}`;
+    return h('div', { class: 'notify-bar' },
+      h('span', {}, '🔔 ', when, ': ', h('a', { href: `#/vehicles/${o.vehicle_id}` }, h('strong', {}, carText(o))), ' — ', 'prepare the car'),
+      h('button', {
+        class: 'btn primary small', type: 'button',
+        onClick: () => prepDialog(o, async () => { await refreshNotify(); await render(); }),
+      }, 'Prepare'));
+  }));
+}
+setInterval(refreshNotify, 15 * 60 * 1000); // a page left open overnight still shows it
+window.addEventListener('carbonara:pdi-changed', refreshNotify); // prepared / booked from a card
 
 // ---------------------------------------------------------------- login
 
@@ -118,6 +149,7 @@ function boot() {
       renderUser();
       document.body.classList.toggle('logged-out', !state.me);
       if (!state.me) {
+        refreshNotify(); // clears the bar
         loginView(root, state, () => { booting = null; return boot(); });
         return;
       }

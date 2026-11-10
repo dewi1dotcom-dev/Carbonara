@@ -12,8 +12,11 @@ const since = (iso) => {
 };
 const inDays = (n) => (n < 0 ? `${-n} d overdue` : n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} d`);
 
-const pdiRow = (o) => row(`#/vehicles/${o.vehicle_id}`, carText(o),
-  [o.pdi_at && clock.format(new Date(o.pdi_at)), o.location_code && `spot ${o.location_code}`].filter(Boolean).join(' · '));
+// withPrep: today/tomorrow also show whether the car is prepared (notification bar until it is).
+const pdiRow = (o, withPrep = false) => row(`#/vehicles/${o.vehicle_id}`, carText(o),
+  [o.pdi_at && clock.format(new Date(o.pdi_at)), o.location_code && `spot ${o.location_code}`,
+    withPrep && (o.prepared_at ? '✓ prepared' : 'not prepared yet')].filter(Boolean).join(' · '),
+  withPrep && !o.prepared_at ? 'bad' : '');
 
 export async function todayView(el) {
   const d = await api.get('/dashboard');
@@ -27,8 +30,8 @@ export async function todayView(el) {
       h('a', { class: 'btn primary big', href: '#/intake' }, '+ New arrival')),
 
     // ---- today & tomorrow
-    block('🔧', 'PDI tomorrow – make the car ready', d.pdi_tomorrow.map(pdiRow), { cls: 'warn' }),
-    block('🔧', 'PDI today', d.pdi_today.map(pdiRow), { cls: 'info' }),
+    block('🔧', 'PDI tomorrow – make the car ready', d.pdi_tomorrow.map((o) => pdiRow(o, true)), { cls: 'warn' }),
+    block('🔧', 'PDI today', d.pdi_today.map((o) => pdiRow(o, true)), { cls: 'info' }),
     block('⏰', 'PDI date passed – mark as done?', d.pdi_overdue.map((o) =>
       row(`#/vehicles/${o.vehicle_id}`, carText(o), `was ${fmtDate(o.pdi_at)}`)), { cls: 'bad' }),
     block('🔋', 'Storage checks due (new cars)', d.storage_due.map((s) =>
