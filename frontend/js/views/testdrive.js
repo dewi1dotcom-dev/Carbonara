@@ -9,7 +9,8 @@ import {
 
 // Most common by far: the spare set of wheels kept in the car is taken out.
 const REMOVED_PRESETS = ['Winter wheels', 'Summer wheels', 'Charging cable', 'Floor mats', 'Cargo cover / parcel shelf'];
-const ADDED_PRESETS = ['Trade plates (prøvekjennemerker)', 'Charging cable', 'Fuel / charging card', 'Child seat'];
+// Trade plates have their own picker (Settings → Trade plates), so a set can't be on two cars.
+const ADDED_PRESETS = ['Charging cable', 'Fuel / charging card', 'Child seat'];
 
 const licenseUrl = (id, variant = 'thumb') => `/api/test-drives/${id}/license/${variant}`;
 const telLink = (phone) => h('a', { href: `tel:${phone}` }, phone);
@@ -76,8 +77,15 @@ const itemsText = (d) => [
   d.items_note,
 ].filter(Boolean);
 
+/** "Trade plates P1 moved to EB12345" – the car still needs its return registered. */
+const movedText = (d) => `${d.trade_plate_name} moved to ${d.plate_moved_to_reg || d.plate_moved_to_car || 'another car'}`;
+
 export async function testDriveView(el, [preselectId]) {
-  const [data, staff] = await Promise.all([api.get('/test-drives'), api.get('/staff')]);
+  const [data, staff, plates] = await Promise.all([api.get('/test-drives'), api.get('/staff'), api.get('/trade-plates')]);
+  data.plates = plates;
+  // #/test-drive?return=<id>: the plates were just moved off that car, so its return is due now.
+  const returnId = Number(new URLSearchParams(location.hash.split('?')[1] || '').get('return')) || null;
+  if (returnId) history.replaceState(null, '', '#/test-drive');
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -100,6 +108,9 @@ export async function testDriveView(el, [preselectId]) {
         ? h('div', { class: 'list' }, data.active.map((d) => activeRow(d, staff, rerender)))
         : h('p', { class: 'empty' }, 'No cars are out on a test drive.')),
     trashCard(data, rerender));
+
+  const due = returnId && data.active.find((d) => d.id === returnId);
+  if (due) returnDialog(due, staff, rerender);
 }
 
 // ---------------------------------------------------------------- start a test drive
@@ -176,6 +187,22 @@ function startForm(v, staff, data, done, cancel) {
   const removed = itemPicker(REMOVED_PRESETS, 'Taken out of the car for the test drive');
   const added = itemPicker(ADDED_PRESETS, 'Put into the car for the test drive');
 
+  // Trade plates: a set on another car can be moved here (that car's return is then due).
+  const carName = (p) => p.registration_number || [p.make, p.model].filter(Boolean).join(' ') || 'another car';
+  const plateSel = h('select', { id: 'td-plate' }, h('option', { value: '' }, 'No trade plates'),
+    data.plates.map((p) => h('option', { value: p.id }, p.drive_id ? `${p.name} – on ${carName(p)}` : p.name)));
+  const plateHint = h('div', { class: 'small td-items' });
+  const chosenPlate = () => data.plates.find((p) => String(p.id) === plateSel.value) || null;
+  plateSel.addEventListener('change', () => {
+    const p = chosenPlate();
+    plateHint.textContent = p?.drive_id
+      ? `On ${carName(p)} (out on test drive since ${fmtDate(p.started_at)}). They will be moved to this car, and you register the return of ${carName(p)} next.`
+      : '';
+  });
+  const plateField = h('div', { class: 'field' }, h('label', { for: 'td-plate' }, 'Trade plates'),
+    data.plates.length ? plateSel : h('p', { class: 'muted small' }, 'No trade plates yet. An administrator can add them under Settings → Trade plates.'),
+    plateHint);
+
   // Driving licence photo (required).
   let licenseFile = null;
   const preview = h('div', { class: 'photo-tile needed td-license' },
@@ -232,6 +259,7 @@ function startForm(v, staff, data, done, cancel) {
       h('div', { class: 'field' }, h('label', { for: 'td-name' }, 'Name'), name, nameHint),
       h('div', { class: 'field' }, h('label', { for: 'td-phone' }, 'Phone number'), phone)),
     h('h3', {}, 'The car'),
+    plateField,
     removed.el,
     added.el,
     h('div', { class: 'grid' },
@@ -249,6 +277,9 @@ function startForm(v, staff, data, done, cancel) {
     e.preventDefault();
     if (!licenseFile) { toast('Take a photo of the driving licence first', 'error'); return; }
     if (!informed.checked) { toast('Give the customer the privacy information and tick the box', 'error'); return; }
+    const plate = chosenPlate();
+    if (plate?.drive_id && !confirm(`${plate.name} are on ${carName(plate)}, which is out on a test drive.\n\n`
+      + `Move them to ${v.registration_number || vehicleTitle(v)}? You then register the return of ${carName(plate)}.`)) return;
     busy(submit, async () => {
       const fd = new FormData();
       fd.append('vehicle_id', v.id);
@@ -261,10 +292,16 @@ function startForm(v, staff, data, done, cancel) {
       fd.append('added_items', JSON.stringify(added.value()));
       if (note.value.trim()) fd.append('items_note', note.value);
       fd.append('customer_informed', 'true');
-      await api.postForm('/test-drives', fd);
+      if (plate) {
+        fd.append('trade_plate_id', plate.id);
+        if (plate.drive_id) fd.append('move_plate', 'true');
+      }
+      const r = await api.postForm('/test-drives', fd);
       picker.remove();
       toast(`${v.registration_number || vehicleTitle(v)} is out on a test drive`, 'success');
-      if (location.hash !== '#/test-drive') location.hash = '#/test-drive';
+      // Plates moved: go straight to the return of the car they came from.
+      const target = r.moved_from_drive_id ? `#/test-drive?return=${r.moved_from_drive_id}` : '#/test-drive';
+      if (location.hash !== target) location.hash = target;
       else await done();
     });
   });
@@ -287,6 +324,8 @@ function activeRow(d, staff, done) {
       h('div', { class: 'list-meta' },
         [`Out since ${fmtDate(d.started_at)} (${duration(d.started_at)})`, d.started_by_name,
           d.odometer_out != null && fmtKm(d.odometer_out)].filter(Boolean).join(' · ')),
+      d.trade_plate_name && !d.plate_moved_at ? h('div', { class: 'small td-items' }, `Trade plates: ${d.trade_plate_name}`) : null,
+      d.plate_moved_at ? h('div', { class: 'notice warn small' }, `${movedText(d)} — register the return of this car.`) : null,
       itemsText(d).map((t) => h('div', { class: 'small td-items' }, t))),
     h('button', { class: 'btn primary', type: 'button', onClick: () => returnDialog(d, staff, done) }, 'Returned'));
 }
@@ -300,12 +339,16 @@ function returnDialog(d, staff, done) {
   const items = [
     ...d.removed_items.map((i) => `Put back in the car: ${i}`),
     ...d.added_items.map((i) => `Taken out of the car: ${i}`),
+    // Plates moved to another car are already accounted for.
+    ...(d.trade_plate_name && !d.plate_moved_at ? [`Trade plates taken off: ${d.trade_plate_name}`] : []),
   ];
   const boxes = items.map((t) => h('input', { type: 'checkbox', value: t }));
   const submit = h('button', { class: 'btn primary', type: 'submit' }, 'Register return');
 
   const form = h('form', {},
     h('p', {}, h('strong', {}, vehicleTitle(d)), ' ', d.registration_number ?? '', ' — ', d.customer_name),
+    d.plate_moved_at ? h('div', { class: 'notice warn small' },
+      `${movedText(d)} on ${fmtDate(d.plate_moved_at)}. This car can't be driven without them — register its return.`) : null,
     items.length ? h('div', { class: 'field' },
       h('label', {}, 'Check that the car is back as it was'),
       boxes.map((b) => h('label', { class: 'check' }, b, b.value))) : null,

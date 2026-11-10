@@ -25,9 +25,10 @@ def dashboard(conn=Depends(get_conn)):
         o["in_days"] = days.get(o["id"], {}).get("in_days")
 
     test_drives = conn.execute(
-        """SELECT t.id, t.vehicle_id, t.started_at, t.customer_name, v.make, v.model, v.model_year, v.registration_number
+        """SELECT t.id, t.vehicle_id, t.started_at, t.customer_name, v.make, v.model, v.model_year, v.registration_number,
+                  t.plate_moved_at
              FROM test_drives t JOIN vehicles v ON v.id = t.vehicle_id
-            WHERE t.status = 'out' AND v.deleted_at IS NULL ORDER BY t.started_at""").fetchall()
+            WHERE t.status = 'out' AND v.deleted_at IS NULL ORDER BY t.plate_moved_at NULLS LAST, t.started_at""").fetchall()
     arrivals = conn.execute(
         """SELECT i.id, i.started_at, v.vin, v.make, v.model, v.model_year, s.name AS inspector_name
              FROM inspections i JOIN vehicles v ON v.id = i.vehicle_id AND v.deleted_at IS NULL

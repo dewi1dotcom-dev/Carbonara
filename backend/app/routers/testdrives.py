@@ -10,8 +10,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from psycopg.errors import UniqueViolation
+from pydantic import BaseModel, Field
 
 from .. import licenselib, photostore
+from ..auth import require_admin
 from ..common import (bad_request, check_staff, conflict, insert_row, log_event, not_found,
                       purge_test_drive_customer)
 from ..config import settings
@@ -31,11 +33,26 @@ DRIVE_SELECT = """
            t.customer_trashed_at, t.customer_purged_at, t.customer_informed,
            t.customer_trashed_at + make_interval(days => %(trash_days)s) AS purge_at,
            so.name AS started_by_name, sr.name AS returned_by_name,
-           v.vin, v.make, v.model, v.model_year, v.color, v.registration_number, v.status AS vehicle_status
+           v.vin, v.make, v.model, v.model_year, v.color, v.registration_number, v.status AS vehicle_status,
+           t.trade_plate_id, tp.name AS trade_plate_name, t.plate_moved_at,
+           mv.id AS plate_moved_to_vehicle_id, mv.registration_number AS plate_moved_to_reg,
+           concat_ws(' ', mv.make, mv.model) AS plate_moved_to_car
       FROM test_drives t
       JOIN vehicles v ON v.id = t.vehicle_id
       LEFT JOIN staff so ON so.id = t.started_by
-      LEFT JOIN staff sr ON sr.id = t.returned_by"""
+      LEFT JOIN staff sr ON sr.id = t.returned_by
+      LEFT JOIN trade_plates tp ON tp.id = t.trade_plate_id
+      LEFT JOIN test_drives mt ON mt.id = t.plate_moved_to
+      LEFT JOIN vehicles mv ON mv.id = mt.vehicle_id"""
+
+
+class PlateIn(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+
+
+class PlatePatch(BaseModel):
+    name: Optional[str] = Field(None, min_length=1, max_length=60)
+    active: Optional[bool] = None
 
 
 def _items(raw: Optional[str], what: str) -> list[str]:
@@ -118,6 +135,63 @@ def get_test_drive(drive_id: int, conn=Depends(get_conn)):
     return _drive(conn, drive_id)
 
 
+# --------------------------------------------------------------------------- #
+# trade plates (prøvekjennemerker)
+# --------------------------------------------------------------------------- #
+
+PLATE_SELECT = """
+    SELECT p.id, p.name, p.active,
+           t.id AS drive_id, t.vehicle_id, t.started_at,
+           v.registration_number, v.make, v.model, v.model_year
+      FROM trade_plates p
+      LEFT JOIN test_drives t ON t.trade_plate_id = p.id AND t.status = 'out' AND t.plate_moved_at IS NULL
+      LEFT JOIN vehicles v ON v.id = t.vehicle_id"""
+
+
+def _plate_name(raw: str) -> str:
+    name = " ".join((raw or "").split())
+    if not name:
+        raise bad_request("Give the trade plates a name")
+    return name
+
+
+@router.get("/trade-plates")
+def list_plates(include_inactive: bool = False, conn=Depends(get_conn)):
+    """Trade plates, and which car each set is on now (drive_id is null when free)."""
+    return conn.execute(PLATE_SELECT + " WHERE (p.active OR %s) ORDER BY p.active DESC, lower(p.name)",
+                        (include_inactive,)).fetchall()
+
+
+@router.post("/trade-plates", status_code=201)
+def add_plate(body: PlateIn, conn=Depends(get_conn), _admin=Depends(require_admin)):
+    name = _plate_name(body.name)
+    try:
+        row = conn.execute("INSERT INTO trade_plates (name) VALUES (%s) RETURNING id", (name,)).fetchone()
+    except UniqueViolation:
+        raise conflict(f"{name} already exists")
+    return conn.execute(PLATE_SELECT + " WHERE p.id = %s", (row["id"],)).fetchone()
+
+
+@router.patch("/trade-plates/{plate_id}")
+def patch_plate(plate_id: int, body: PlatePatch, conn=Depends(get_conn), _admin=Depends(require_admin)):
+    """Rename (e.g. when a plate is replaced), remove or restore a set of plates."""
+    plate = conn.execute("SELECT * FROM trade_plates WHERE id = %s FOR UPDATE", (plate_id,)).fetchone()
+    if not plate:
+        raise not_found("Trade plates")
+    name = _plate_name(body.name) if body.name is not None else plate["name"]
+    active = plate["active"] if body.active is None else body.active
+    if not active and conn.execute(
+            "SELECT 1 FROM test_drives WHERE trade_plate_id = %s AND status = 'out' AND plate_moved_at IS NULL",
+            (plate_id,)).fetchone():
+        raise conflict("These trade plates are on a car out on a test drive; register the return first")
+    try:
+        conn.execute("UPDATE trade_plates SET name = %s, active = %s, updated_at = now() WHERE id = %s",
+                     (name, active, plate_id))
+    except UniqueViolation:
+        raise conflict(f"{name} already exists")
+    return conn.execute(PLATE_SELECT + " WHERE p.id = %s", (plate_id,)).fetchone()
+
+
 @router.post("/test-drives", status_code=201)
 def start_test_drive(
     vehicle_id: int = Form(...),
@@ -130,6 +204,8 @@ def start_test_drive(
     added_items: Optional[str] = Form(None),
     items_note: Optional[str] = Form(None),
     customer_informed: bool = Form(False),
+    trade_plate_id: Optional[int] = Form(None),
+    move_plate: bool = Form(False),
     conn=Depends(get_conn),
 ):
     # GDPR art. 13: the customer must be told what we store, why and for how long.
@@ -148,6 +224,25 @@ def start_test_drive(
                            (vehicle_id,)).fetchone()
     if not vehicle:
         raise not_found("Vehicle")
+    if conn.execute("SELECT 1 FROM test_drives WHERE vehicle_id = %s AND status = 'out'", (vehicle_id,)).fetchone():
+        raise conflict("This car is already out on a test drive")
+
+    # Trade plates: one car at a time. If the set is on another car, it is only
+    # moved when staff confirmed it (move_plate); that car then needs its return.
+    plate, prev = None, None
+    if trade_plate_id is not None:
+        plate = conn.execute("SELECT * FROM trade_plates WHERE id = %s FOR UPDATE", (trade_plate_id,)).fetchone()
+        if not plate or not plate["active"]:
+            raise not_found("Trade plates")
+        prev = conn.execute(
+            """SELECT t.id, t.vehicle_id, v.registration_number, concat_ws(' ', v.make, v.model) AS car
+                 FROM test_drives t JOIN vehicles v ON v.id = t.vehicle_id
+                WHERE t.trade_plate_id = %s AND t.status = 'out' AND t.plate_moved_at IS NULL FOR UPDATE OF t""",
+            (trade_plate_id,)).fetchone()
+        if prev and not move_plate:
+            raise conflict(f"{plate['name']} are on {prev['registration_number'] or prev['car']}; move them to this car?")
+        if prev:  # frees the plates before the new drive takes them (one-plate index)
+            conn.execute("UPDATE test_drives SET plate_moved_at = now() WHERE id = %s", (prev["id"],))
 
     meta = _read_image(license)
     try:
@@ -157,18 +252,25 @@ def start_test_drive(
             "customer_name": name, "customer_phone": phone,
             "license_file_key": meta["file_key"], "license_ext": meta["original_ext"],
             "license_mime": meta["mime_type"], "customer_informed": True,
+            "trade_plate_id": trade_plate_id,
         })
     except UniqueViolation:
         photostore.remove(meta)
-        raise conflict("This car is already out on a test drive")
+        raise conflict("This car or these trade plates were just taken by someone else; reload and try again")
     except Exception:
         photostore.remove(meta)
         raise
+    plate_name = plate["name"] if plate else None
+    if prev:
+        conn.execute("UPDATE test_drives SET plate_moved_to = %s WHERE id = %s", (row["id"], prev["id"]))
+        log_event(conn, prev["vehicle_id"], "trade_plates_moved", staff_id=staff_id,
+                  data={"test_drive_id": prev["id"], "trade_plates": plate_name, "to_vehicle_id": vehicle_id})
     # The car's history keeps the drive, but never the customer's details.
     log_event(conn, vehicle_id, "test_drive_out", staff_id=staff_id,
               data={"test_drive_id": row["id"], "odometer_out": odometer_out,
-                    "removed": removed, "added": added, "note": note})
-    return _drive(conn, row["id"])
+                    "removed": removed, "added": added, "note": note, "trade_plates": plate_name})
+    # moved_from_drive_id: the car the plates came from, whose return is due now.
+    return {**_drive(conn, row["id"]), "moved_from_drive_id": prev["id"] if prev else None}
 
 
 def _log_access(conn, request: Request, drive_id: int, action: str) -> None:
@@ -217,7 +319,8 @@ def return_test_drive(drive_id: int, body: TestDriveReturnIn, conn=Depends(get_c
         raise conflict("This test drive is already returned")
     if body.odometer_in is not None and drive["odometer_out"] is not None and body.odometer_in < drive["odometer_out"]:
         raise bad_request(f"Odometer in ({body.odometer_in}) is lower than when the car left ({drive['odometer_out']})")
-    if (drive["removed_items"] or drive["added_items"]) and not body.items_checked and not body.return_note:
+    plates_on_car = drive["trade_plate_id"] is not None and drive["plate_moved_at"] is None
+    if (drive["removed_items"] or drive["added_items"] or plates_on_car) and not body.items_checked and not body.return_note:
         raise bad_request("Confirm that the items are back in place, or write a note about what is missing")
     conn.execute(
         """UPDATE test_drives

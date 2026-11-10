@@ -249,6 +249,19 @@ const NO = {
   'On test drive': 'På prøvekjøring', 'Go to Test drive': 'Gå til Prøvekjøring', '🔒 Privacy notice for customers': '🔒 Personvernerklæring for kunder', '🖨 Print': '🖨 Skriv ut',
   'The customer privacy notice has no contact details yet. A system admin can add them on the System page → Company.': 'Personvernerklæringen mangler kontaktinformasjon. En systemadministrator kan legge den inn under System → Firma.',
   'Winter wheels': 'Vinterhjul', 'Summer wheels': 'Sommerhjul', 'Charging cable': 'Ladekabel', 'Floor mats': 'Gulvmatter', 'Cargo cover / parcel shelf': 'Bagasjeromstrekk / hattehylle',
+  // trade plates
+  'Trade plates': 'Prøvekjennemerker', 'No trade plates': 'Ingen prøvekjennemerker', 'No trade plates yet.': 'Ingen prøvekjennemerker ennå.',
+  'No trade plates yet. An administrator can add them under Settings → Trade plates.': 'Ingen prøvekjennemerker ennå. En administrator kan legge dem til under Innstillinger → Prøvekjennemerker.',
+  'Name, e.g. Plates 1 (P 12345)': 'Navn, f.eks. Prøveskilt 1 (P 12345)', '– free': '– ledig',
+  'The trade plates chosen when a test drive starts. A set can only be on one car at a time. Rename a set when a plate is replaced.':
+    'Prøvekjennemerkene som velges når en prøvekjøring starter. Et sett kan bare stå på én bil om gangen. Gi settet nytt navn når et skilt byttes.',
+  'The trade plates chosen when a test drive starts. Only an administrator can change this list.':
+    'Prøvekjennemerkene som velges når en prøvekjøring starter. Bare en administrator kan endre denne listen.',
+  'Trade plates moved to another car': 'Prøvekjennemerker flyttet til en annen bil',
+  'trade plates moved to another car – register the return': 'prøvekjennemerker flyttet til en annen bil – registrer innlevering',
+  'Give the trade plates a name': 'Gi prøvekjennemerkene et navn',
+  'These trade plates are on a car out on a test drive; register the return first': 'Disse prøvekjennemerkene står på en bil som er ute på prøvekjøring; registrer innlevering først',
+  'This car or these trade plates were just taken by someone else; reload and try again': 'Denne bilen eller disse prøvekjennemerkene ble akkurat tatt av noen andre; last inn på nytt og prøv igjen',
   'Trade plates (prøvekjennemerker)': 'Prøvekjennemerker', 'Fuel / charging card': 'Drivstoff- / ladekort', 'Child seat': 'Barnesete', 'e.g. 912 34 567': 'f.eks. 912 34 567',
   // ---- PDI (nybilklargjøring)
   'PDI order': 'Bestilling av nybilklargjøring', 'No PDI order.': 'Ingen bestilling av nybilklargjøring.', 'Create PDI order': 'Opprett bestilling',
@@ -455,6 +468,19 @@ const NO_PATTERNS = [
   ['Opened licence photo — {}', 'Åpnet førerkortbilde — {1}'], ['Deleted customer details — {}', 'Slettet kundeopplysninger — {1}'],
   ["Delete {}'s details and licence photo for good now? This cannot be undone.", 'Slette opplysningene og førerkortbildet til {1} for godt nå? Dette kan ikke angres.'],
   [' since {} — {}, ', ' siden {1} — {2}, '],
+  // trade plates
+  ['Trade plates: {}', 'Prøvekjennemerker: {1}'], ['Trade plates taken off: {}', 'Prøvekjennemerker tatt av: {1}'],
+  ['{} – on {}', '{1} – på {2}'], ['– on {} (test drive)', '– på {1} (prøvekjøring)'], ['New name for {}', 'Nytt navn for {1}'],
+  ['{} moved to {}', '{1} flyttet til {2}'],
+  ['{} moved to {} — register the return of this car.', '{1} flyttet til {2} — registrer innlevering av denne bilen.'],
+  ["{} moved to {} on {}. This car can't be driven without them — register its return.",
+    '{1} flyttet til {2} {3}. Denne bilen kan ikke kjøres uten dem — registrer innleveringen.'],
+  ['Trade plates {} moved to another car {} — register the return.', 'Prøvekjennemerker {1} flyttet til en annen bil {2} — registrer innlevering.'],
+  ['On {} (out on test drive since {}). They will be moved to this car, and you register the return of {} next.',
+    'På {1} (ute på prøvekjøring siden {2}). De flyttes til denne bilen, og deretter registrerer du innlevering av {3}.'],
+  ['{} are on {}, which is out on a test drive.\n\nMove them to {}? You then register the return of {}.',
+    '{1} står på {2}, som er ute på prøvekjøring.\n\nFlytte dem til {3}? Deretter registrerer du innlevering av {4}.'],
+  ['{} are on {}; move them to this car?', '{1} står på {2}; flytte dem til denne bilen?'],
   // PDI
   ['Sent {} to {} by {} (e-mail app)', 'Sendt {1} til {2} av {3} (e-postprogram)'], ['Sent {} to {} by {}', 'Sendt {1} til {2} av {3}'], ['Sent {} to {} (e-mail app)', 'Sendt {1} til {2} (e-postprogram)'],
   ['Sent {} to {}', 'Sendt {1} til {2}'], ['Sent to {}', 'Sendt til {1}'], ['PDI done {} ({})', 'Nybilklargjøring utført {1} ({2})'], ['PDI done {}', 'Nybilklargjøring utført {1}'],

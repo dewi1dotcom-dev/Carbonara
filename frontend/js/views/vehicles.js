@@ -93,6 +93,7 @@ const EVENT_LABELS = {
   restored: 'Restored from Recently deleted',
   test_drive_out: 'Out on test drive',
   test_drive_returned: 'Back from test drive',
+  trade_plates_moved: 'Trade plates moved to another car',
   pdi_order_sent: 'PDI order sent',
   pdi_booked: 'PDI booked',
   pdi_booking_cleared: 'PDI date removed',
@@ -131,7 +132,9 @@ function eventDetail(e) {
         d.performed_at && `from ${fmtDate(d.performed_at)}`, d.reason].filter(Boolean).join(' · ');
     case 'test_drive_out':
       return [d.removed?.length && `Taken out: ${d.removed.join(', ')}`, d.added?.length && `Put in: ${d.added.join(', ')}`,
-        d.odometer_out != null && fmtKm(d.odometer_out), d.note].filter(Boolean).join(' · ');
+        d.trade_plates && `Trade plates: ${d.trade_plates}`, d.odometer_out != null && fmtKm(d.odometer_out), d.note]
+        .filter(Boolean).join(' · ');
+    case 'trade_plates_moved': return d.trade_plates || '';
     case 'test_drive_returned':
       return [d.km_driven != null && `${fmtKm(d.km_driven)} driven`,
         d.items_checked === false && 'Items not all back', d.note].filter(Boolean).join(' · ');
@@ -666,8 +669,14 @@ function testDriveBanner(v) {
       h('strong', {}, 'Out on test drive'), ` since ${fmtDate(d.started_at)} — ${d.customer_name}, `,
       h('a', { href: `tel:${d.customer_phone}` }, d.customer_phone),
       d.removed_items.length ? h('div', { class: 'small' }, `Taken out: ${d.removed_items.join(', ')}`) : null,
-      d.added_items.length ? h('div', { class: 'small' }, `Put in: ${d.added_items.join(', ')}`) : null),
-    h('a', { class: 'btn', href: '#/test-drive' }, 'Go to Test drive'));
+      d.added_items.length ? h('div', { class: 'small' }, `Put in: ${d.added_items.join(', ')}`) : null,
+      d.trade_plate_name && !d.plate_moved_at ? h('div', { class: 'small' }, `Trade plates: ${d.trade_plate_name}`) : null,
+      // The plates went to another car: this one is back and its return is due.
+      d.plate_moved_at ? h('div', { class: 'small strong' },
+        `Trade plates ${d.trade_plate_name} moved to another car ${fmtDate(d.plate_moved_at)} — register the return.`) : null),
+    d.plate_moved_at
+      ? h('a', { class: 'btn primary', href: `#/test-drive?return=${d.id}` }, 'Register return')
+      : h('a', { class: 'btn', href: '#/test-drive' }, 'Go to Test drive'));
 }
 
 export async function vehicleView(el, [id]) {

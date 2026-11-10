@@ -180,7 +180,7 @@ backend/
                         test drive customer purge)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives,
                         session (login/language), pdi, dashboard (Today), system, storage_care
-  migrations/           001…017
+  migrations/           001…018
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
@@ -213,6 +213,7 @@ frontend/               no build step; plain ES modules
 | 015 | `void_storage_checks` | cancelling checks |
 | 016 | `language` | `staff.language`; Skvettlapper / Nybilklargjøring |
 | 017 | `drop_zones` | zones moved into descriptions |
+| 018 | `trade_plates` | `trade_plates`; `test_drives.trade_plate_id / plate_moved_at / plate_moved_to` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -327,6 +328,18 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   move to the **trash** (`customer_trashed_at`) and show under "Returned — customer details
   in the trash" (for toll and speeding fines). The worker wipes them after `trash_days`;
   "Delete now" wipes them at once.
+- **Trade plates (0.16.0)** (`trade_plates`, Settings → Trade plates, `/trade-plates`):
+  - Admins add sets with a free name, rename them (e.g. when a plate is replaced) and
+    remove/restore them (not while on a car). Stored as `test_drives.trade_plate_id`, not
+    as an "added item" (the old free-text preset is gone).
+  - **One car at a time:** unique index on `trade_plate_id` for drives that are out and not
+    moved. If the chosen set is on another car, the start form asks to move it
+    (`move_plate=true`). The old drive gets `plate_moved_at` / `plate_moved_to`, a
+    `trade_plates_moved` event, and the response's `moved_from_drive_id` sends staff to
+    `#/test-drive?return=<id>`, which opens that car's return dialog.
+  - A drive whose plates were moved shows "register the return" on the Test drive page, the
+    vehicle banner ("Register return" button) and Today. Its return doesn't need the plates
+    ticked; a drive with plates still on needs "Trade plates taken off" ticked (or a note).
 - **Name from the licence** (`licenselib.py`, `POST /test-drives/read-license`):
   - The OCR reads EU-format field labels `1.` (surname) and `2.` (given names) and tries
     0°/90°/270°/180°. It fills in "Given Surname" and never overwrites a typed name.
@@ -636,6 +649,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.14.6 | Today board: details always on their own line under the car |
 | 0.15.0 | **PDI page** (`#/pdi`, from the "PDIs this week" tile); PDI banner on the vehicle page and badge in the Vehicles list; storage "Arrival check" renamed **First storage check** and made a required step of the arrival inspection for factory-new cars |
 | 0.15.1 | "Ready for registration and delivery" after the PDI is done (badge, Vehicles filter, Today tile) |
+| 0.16.0 | **Trade plates** in Settings (named sets, one car at a time); moving plates from a car on a test drive leads straight to its return |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

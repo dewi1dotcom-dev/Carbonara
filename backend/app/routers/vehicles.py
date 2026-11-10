@@ -172,8 +172,10 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         values = vegvesen.vehicle_values(raw)
         mismatches = vegvesen.mismatch_list(vehicle, raw, kept)
     test_drive = conn.execute(
-        """SELECT id, started_at, customer_name, customer_phone, removed_items, added_items
-             FROM test_drives WHERE vehicle_id = %s AND status = 'out'""",
+        """SELECT t.id, t.started_at, t.customer_name, t.customer_phone, t.removed_items, t.added_items,
+                  tp.name AS trade_plate_name, t.plate_moved_at
+             FROM test_drives t LEFT JOIN trade_plates tp ON tp.id = t.trade_plate_id
+            WHERE t.vehicle_id = %s AND t.status = 'out'""",
         (vehicle_id,),
     ).fetchone()
     marked_by = vehicle["registered_marked_by"] and conn.execute(

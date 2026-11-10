@@ -6,8 +6,50 @@ export async function settingsView(el) {
   const registryBox = h('div');
   const retentionBox = h('div');
   const pdiBox = h('div');
-  el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), staffBox, locBox, pdiBox, registryBox, retentionBox);
-  await Promise.all([renderStaff(), renderLocations(), renderPdiLists(), renderRegistry(), renderRetention()]);
+  const plateBox = h('div');
+  el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), staffBox, locBox, plateBox, pdiBox, registryBox, retentionBox);
+  await Promise.all([renderStaff(), renderLocations(), renderPlates(), renderPdiLists(), renderRegistry(), renderRetention()]);
+
+  // Trade plates (prøvekjennemerker) for test drives. Named freely, so a set can
+  // be renamed when a plate is replaced. A set is on at most one car at a time.
+  async function renderPlates() {
+    const plates = await api.get('/trade-plates?include_inactive=true');
+    const admin = !!session.me?.is_admin;
+    const patch = async (p, body) => {
+      try { await api.patch(`/trade-plates/${p.id}`, body); await renderPlates(); } catch (e) { showError(e); }
+    };
+    const where = (p) => (p.drive_id
+      ? h('a', { href: `#/vehicles/${p.vehicle_id}`, class: 'small' },
+        ` – on ${p.registration_number || [p.make, p.model].filter(Boolean).join(' ')} (test drive)`)
+      : h('span', { class: 'muted small' }, p.active ? ' – free' : ' (removed)'));
+    const name = h('input', { type: 'text', placeholder: 'Name, e.g. Plates 1 (P 12345)', required: true, maxlength: 60 });
+    const addBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Add');
+    const form = h('form', { class: 'inline-form' }, name, addBtn);
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      busy(addBtn, async () => { await api.post('/trade-plates', { name: name.value }); await renderPlates(); });
+    });
+    plateBox.replaceChildren(h('section', { class: 'card' },
+      h('h2', {}, 'Trade plates'),
+      h('p', { class: 'muted small' }, admin
+        ? 'The trade plates chosen when a test drive starts. A set can only be on one car at a time. Rename a set when a plate is replaced.'
+        : 'The trade plates chosen when a test drive starts. Only an administrator can change this list.'),
+      plates.length
+        ? h('ul', { class: 'plain rows list-edit' }, plates.map((p) => h('li', { class: p.active ? '' : 'inactive' },
+          h('span', {}, p.name, where(p)),
+          admin ? h('span', { class: 'row-actions' },
+            h('button', {
+              class: 'link', type: 'button',
+              onClick: () => {
+                const n = prompt(`New name for ${p.name}`, p.name);
+                if (n != null && n.trim() && n.trim() !== p.name) patch(p, { name: n.trim() });
+              },
+            }, 'Rename'),
+            h('button', { class: 'link', type: 'button', onClick: () => patch(p, { active: !p.active }) }, p.active ? 'Remove' : 'Restore'))
+            : null)))
+        : h('p', { class: 'empty' }, 'No trade plates yet.'),
+      admin ? form : null));
+  }
 
   // PDI order lists: items the customer can order, tyre companies, e-mail recipients.
   async function renderPdiLists() {
