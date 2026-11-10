@@ -1,9 +1,13 @@
 # CLAUDE.md — Carbonara
 
-Vehicle lifecycle system for the car dealership **Moss AutoCenter** (Norway). Part 1 is in
-production: arrival inspection → storage, Statens vegvesen (SVV) registry data, VIN and plate
-OCR, service tracking and data retention. The UI is in English; dates, times and number
-formats are Norwegian.
+Vehicle lifecycle system for the car dealership **Moss AutoCenter** (Moss, Norway), in daily
+use. It covers:
+- **New cars:** arrival inspection → storage, Statens vegvesen (SVV) registry data, VIN and
+  plate OCR, MG storage maintenance, and PDI orders to the workshop.
+- **All cars:** service tracking, test drives, and data retention / GDPR.
+
+The interface is in **English and Norwegian** (per user). Dates, times and numbers always use
+Norwegian formats.
 
 > **Keep this file current.** Update it at every big milestone, meaning a minor version
 > bump (0.x.0), a new migration, a new subsystem or a changed workflow. Add the milestone
@@ -13,34 +17,42 @@ formats are Norwegian.
 
 ## Working with the user
 
-- The user's own Carbonara account is **Supern** (system admin). "Andy" is a different person
-  (a regular admin).
-
+- **Who the user is:** the dealership's own IT person, not a full-time developer. Explain in
+  plain language, and report results in a short table (what passed, what still needs a
+  browser check).
+- **Accounts:**
+  - The user's own Carbonara account is **Supern** (system admin).
+  - "Andy" is a different person. The user called Andy a regular admin, but Andy had
+    admin = false at the last check. This was flagged and not answered.
+  - Enrique and Jonna are staff (no PINs at the last check).
 - **Commit and push only when the user says so** ("commit and push"). Never commit on your own.
-- Every change bumps `VERSION` (patch for fixes and small features, minor for larger ones).
-  The footer shows version + build time, and the user checks it after redeploying.
-- The user deploys by pulling in **Portainer** and redeploying the stack, then says
-  "up and running". After that, verify against the live server (see *Testing*), then report
-  in a short table: what passed, what still needs a browser check.
-- The user reports UI bugs with screenshots. Staff use Chrome and **Opera Touch** on phones.
-  - **Cache-busting (0.10.2):** `main.py` serves `index.html` itself (no-cache) and
-    rewrites `/js/app.js` and `/css/app.css` to `/v/<BUILD_TAG>/…` (immutable). Every
-    deploy therefore gets new URLs, and relative ES-module imports inherit the build path.
-  - Opera Touch kept a stale `app.js` even with `no-cache` (the result was "Not found" for
-    a new route).
-  - **Keep all frontend imports relative,** and reference JS/CSS from `index.html` only.
-  - If a screenshot shows old UI, compare the footer version with `/api/version`.
-- Explain in plain language. The user is the dealership's own IT person, not a full-time developer.
+- **Every change bumps `VERSION`:** patch for fixes and small features, minor for larger ones.
+  The footer shows the version and build time, and the user checks it after redeploying.
+- **Deploying:** the user pulls in **Portainer** and redeploys the stack, then says "up and
+  running" / "server is up". After that, verify against the live server (see *Testing*).
+- **Bug reports:** the user sends UI bugs as screenshots. Staff use Chrome and **Opera Touch**
+  on phones.
+- **Standing rules from the user (don't break them without asking):**
+  - Dates are always **dd.mm.yyyy** and times **24-hour**, everywhere, for display and input.
+  - **No Norwegian in the English version and vice versa.** All new UI text needs both
+    languages (see *Language*).
+  - **No e-mail addresses built into code or migrations.** They are entered in Settings.
+  - The full licence photo is kept (no masking); see *Login & GDPR*.
 
 ## SECURITY — the Vegvesen API key
 
-The real SVV key must **never** be committed. It belongs only in the server's `.env` or in
-the Portainer stack environment as `VEGVESEN_API_KEY`. `.env.example` keeps it empty.
-**Before every commit, run** (the regex matches the real key but not this line itself):
+The real SVV key must **never** be committed. It lives in the server environment
+(`VEGVESEN_API_KEY` in `.env` / the Portainer stack) and/or in the DB via the System page.
+`.env.example` keeps it empty. **Before every commit, run** this check. It finds any
+UUID-shaped value (the SVV key's format) without containing any part of the real key:
 
 ```powershell
-git grep --cached -nE "ca4ae1c6-?dcbb"   # must print nothing (exit code 1 = clean)
+git grep -nE "[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}" -- .
+# must print nothing (exit code 1 = clean)
 ```
+
+**Never write any part of a real key, password or PIN into a file,** not even in a check
+like the one above. Never write staff PINs (e.g. the Claude test account's) into any file.
 
 ---
 
@@ -49,27 +61,38 @@ git grep --cached -nE "ca4ae1c6-?dcbb"   # must print nothing (exit code 1 = cle
 | Thing | Value |
 |---|---|
 | Server | `192.168.10.45`, Ubuntu + Docker, managed via Portainer |
-| App URL | `http://192.168.10.45:8080` (port **8080**; 8000 on the host is taken by Portainer) |
+| App URL | `http://192.168.10.45:8080` (port **8080**; 8000 on the host is taken by Portainer). **No HTTPS yet.** |
 | Repo | GitHub, branch `main` (git user `dewi1dotcom-dev`) |
-| Containers | `db` (postgres:16), `app` (uvicorn on container port 8000 → host `APP_PORT`, default 8080), `worker` (`python -m app.sync_worker`) |
-| Photos | `./data/photos` mounted at `/data/photos` in **both** `app` and `worker` (the worker deletes photo files during retention) |
+| Containers | `db` (postgres:16), `app` (uvicorn on container port 8000 → host `APP_PORT`), `worker` (`python -m app.sync_worker`) |
+| Photos | `./data/photos` mounted at `/data/photos` in **both** `app` and `worker` (the worker deletes files during retention) |
 | Timezone | `TZ=Europe/Oslo` on all containers |
 
-Environment variables (see `.env.example` and `docker-compose.yml`): `POSTGRES_PASSWORD`,
-`APP_PORT=8080`, `MAX_UPLOAD_MB=30`, `VEGVESEN_API_KEY`, `VEGVESEN_API_URL`,
-`VEGVESEN_AUTH_HEADER=SVV-Authorization`, `VEGVESEN_AUTH_SCHEME=Apikey`,
-`VEGVESEN_SYNC_DAYS=7`, `TRASH_DAYS=30`, `RETENTION_YEARS=5`, `PRIVACY_COMPANY=Moss AutoCenter`,
-`PRIVACY_CONTACT=` (shown to test drive customers), `SMTP_HOST/PORT/USER/PASSWORD/FROM/SECURITY`
-(outgoing e-mail; empty host = use the staff's own e-mail app).
+**Environment variables** (`.env.example`, `docker-compose.yml`):
+- **Server:** `POSTGRES_PASSWORD`, `APP_PORT=8080`, `MAX_UPLOAD_MB=30`.
+- **Fallbacks for System page settings** (a value saved on the System page wins):
+  - `VEGVESEN_API_KEY/_URL/_AUTH_HEADER/_AUTH_SCHEME/_SYNC_DAYS`
+  - `TRASH_DAYS=30`, `RETENTION_YEARS=5`
+  - `PRIVACY_COMPANY`, `PRIVACY_CONTACT` (phone), `PRIVACY_EMAIL`, `PRIVACY_ADDRESS`
+  - The dealer number is set on the System page only.
+  - `SMTP_HOST/PORT/USER/PASSWORD/FROM/SECURITY` (empty host = staff send from their own
+    e-mail app)
+
+**Cache-busting (0.10.2):** `main.py` serves `index.html` itself (no-cache) and rewrites
+`/js/app.js` and `/css/app.css` to `/v/<BUILD_TAG>/…` (immutable), so every deploy gets new
+URLs.
+- Opera Touch kept a stale `app.js` even with `no-cache` (the result was "Not found" for a new
+  route).
+- **Keep all frontend imports relative,** and reference JS/CSS only from `index.html`.
+- If a screenshot shows old UI, compare the footer version with `/api/version`.
 
 ## Build
 
-The dev machine is Windows 10 with **PowerShell 5.1**. Docker and Node are **not**
-installed locally, so the real build happens on the server.
+The dev machine is Windows 10 with **PowerShell 5.1**. **Docker, Node and Python 3 are not
+installed** (only OpenOffice's Python 2.7), so code can't be run locally. The build happens on
+the server:
 
 ```bash
-# On the server (or anywhere with Docker)
-cp .env.example .env              # set POSTGRES_PASSWORD (+ VEGVESEN_API_KEY)
+cp .env.example .env              # set POSTGRES_PASSWORD
 docker compose up -d --build
 docker compose logs -f app        # wait for "Application startup complete"
 ```
@@ -77,53 +100,56 @@ docker compose logs -f app        # wait for "Application startup complete"
 Dockerfile notes. These were learned the hard way, so don't undo them:
 - `pip install -r backend/requirements.txt`, **then**
   `pip install --no-deps rapidocr-onnxruntime==1.3.24`, then an import check
-  (`import rapidocr_onnxruntime, cv2, onnxruntime`) that fails the build early.
-  RapidOCR's own dependency list pulls in the GUI `opencv-python` and numpy 2.
+  (`import rapidocr_onnxruntime, cv2, onnxruntime`) that fails the build early. RapidOCR's
+  own dependency list pulls in the GUI `opencv-python` and numpy 2.
 - **numpy must stay at 1.26.4 (< 2).** Use `opencv-python-headless`, never `opencv-python`.
 - System packages: `tesseract-ocr libzbar0 libdmtx0b`.
-- `BUILD_TIME` is stamped in ISO UTC at build time; `VERSION` is copied in. Both are served at `/api/version`.
+- `BUILD_TIME` is stamped in ISO UTC at build time; `VERSION` is copied in. Both are served at
+  `/api/version`.
+
+**PowerShell pitfalls:**
+- `R` is an alias (Invoke-History), so don't name helper functions `R`.
+- In double-quoted strings, escape `` ` `` and `$`; multi-line replacements are safer with the
+  Edit tool.
+- Use `curl.exe`, not the `curl` alias.
+- Files must be written as UTF-8 without BOM (`New-Object Text.UTF8Encoding $false`).
 
 ## Testing
 
-There is no automated test suite yet. Verification has two parts.
-
-**1. Local static checks (before handing over a change):**
-
-```powershell
-cd backend; python -m py_compile app/main.py app/common.py app/schemas.py app/vinlib.py app/vegvesen.py app/sync_worker.py app/routers/*.py; if ($?) { "compiles" }
-cd backend; python -c "from app.config import settings; print(settings.version)"
-```
-Python and Node may both be missing on the dev PC (Python was gone as of 0.9.4). If
-`python` is not found, say so and rely on careful reading plus the live checks. JS cannot be
-syntax-checked locally because Node isn't installed. Re-read edited JS carefully,
-especially calls to `append` / `replaceChildren` (see pitfalls).
-
-**2. Live checks after the user redeploys.** From 0.11.0 every `/api` route except
-`/api/health`, `/api/version` and `/api/auth/*` needs a login cookie. For authenticated checks,
-log in with a test account the user has given you (`POST /api/auth/login`, keep the cookie
-via `curl.exe -c/-b`), or ask the user to test in the browser. Never ask for a real staff
-member's PIN.
-- The user created a staff account **"Claude"** (staff id 5, admin) for these checks. The PIN
-  was given in chat; never write it into the repo. If it doesn't work, ask the user.
-- Use a cookie jar in the scratchpad. After testing a wrong PIN, log in correctly once to
-  reset the failure counter.
+There is no automated test suite. Verification has two parts:
+1. **Careful reading before handing over.** Nothing can be run locally. Re-read edited JS
+   for the `append` pitfall, quote balance and imports.
+2. **Live checks after the user redeploys.**
+   - Every `/api` route except `/api/health`, `/api/version` and `/api/auth/*` needs a login
+     cookie.
+   - The user made a staff account **"Claude"** (staff id 5, admin, not system admin) for
+     this. The PIN was given in chat. Never write it into the repo; if it doesn't work, ask
+     the user.
 
 ```powershell
-Invoke-RestMethod http://192.168.10.45:8080/api/version      # {version, build_time}
-Invoke-RestMethod http://192.168.10.45:8080/api/health
-Invoke-RestMethod "http://192.168.10.45:8080/api/vehicles?q=LJ%2077892"
-Invoke-RestMethod http://192.168.10.45:8080/api/vin/JF1BS9LC2KG171677   # decode + "similar" duplicates
-Invoke-RestMethod http://192.168.10.45:8080/api/retention
-# OCR on a photo (use curl.exe, not the PowerShell curl alias):
-curl.exe -s -F "file=@C:\path\photo.png;type=image/png" http://192.168.10.45:8080/api/vin/recognize
+$b='http://192.168.10.45:8080'; $jar='<scratchpad>\cookies.txt'
+'{"staff_id":5,"pin":"<PIN>"}' | Out-File -Encoding ascii "$env:TEMP\login.json"
+curl.exe -s -c $jar -H "Content-Type: application/json" --data-binary "@$env:TEMP\login.json" "$b/api/auth/login"
+Remove-Item "$env:TEMP\login.json"                      # don't leave the PIN on disk
+(Invoke-RestMethod "$b/api/version").version
+curl.exe -s -b $jar "$b/api/dashboard"
+curl.exe -s -b $jar "$b/api/vehicles?q=LJ%2077892"
+curl.exe -s -b $jar "$b/api/vin/JF1BS9LC2KG171677"      # decode + "similar" duplicates
+curl.exe -s -b $jar -F "file=@C:\path\photo.png;type=image/png" "$b/api/vin/recognize"
+curl.exe -s -b $jar -F "file=@C:\path\licence.png;type=image/png" "$b/api/test-drives/read-license"
 ```
 
-The OCR regression set was 35 user photos (VIN plates, windscreen VINs, door labels, plates
-and a personalised Tesla plate), and the result was **34 of 35**. The one miss, a tiny Subaru
-door label, is accepted. Those photos lived in a session temp folder and are gone. Ask the
-user for them again before changing `vinlib.py`, and re-run the whole set after any OCR change.
-
-Don't write test data to the live database without asking, because it is production data.
+- After testing a wrong PIN, log in correctly once to reset the failure counter.
+- **Production data:** don't write test data without asking. If something must be created to
+  test it (e.g. a storage spot), use an obvious name like `ZZ-CLAUDE-TEST` and delete it
+  afterwards.
+- **Reference results:**
+  - The OCR regression set was 35 user photos; the result was **34 of 35** (the miss, a tiny
+    Subaru door label, is accepted).
+  - The user's licence must read as "Anders Strang Thorkildsen".
+  - The Norsk Biltransport transport sheet must give VIN `LSJWS4090SZ716243` via the QR code.
+  - These photos lived in session temp folders and are gone. Ask for them again before
+    changing `vinlib.py` or `licenselib.py`.
 
 ---
 
@@ -131,44 +157,79 @@ Don't write test data to the live database without asking, because it is product
 
 ```
 backend/
-  app/main.py           FastAPI app, static frontend, /api/health, /api/version
-  app/config.py         settings from env (version, build_time, vegvesen_*, trash_days, retention_years)
+  app/main.py           FastAPI app; serves index.html + /v/<build>/ assets; includes routers
+                        (all except session behind require_staff); /api/health, /api/version
+  app/config.py         Settings: fixed env values + the SETTINGS registry of System-page
+                        settings (DB app_settings > env > default, cached 20 s)
   app/db.py             psycopg3 ConnectionPool, dict_row; get_conn = one transaction per request
-  app/migrate.py        applies backend/migrations/NNN_*.sql in order on startup
-  app/common.py         shared helpers: errors, patch_fields/update_row, log_event, place_in_location,
-                        similar_vehicles, soft_delete_vehicle, purge_vehicle, RETENTION_DUE_SQL,
-                        add_years, service_due (SERVICE_WINDOW_DAYS=31)
-  app/schemas.py        Pydantic models (VehicleDetails, IntakeIn, MoveIn, RepairIn, LocationIn/Patch…)
-  app/vegvesen.py       SVV fetch/extract/compare/resolve, sync_vehicle, due_vehicle_ids_sql
+  app/migrate.py        applies backend/migrations/NNN_*.sql in filename order (tracked by name)
+  app/auth.py           PIN hashing (scrypt), sessions, require_staff / require_admin /
+                        require_superadmin, STAFF_PUBLIC
+  app/common.py         errors, patch_fields/update_row/insert_row, log_event, place_in_location,
+                        similar_vehicles, soft_delete_vehicle, purge_vehicle,
+                        purge_test_drive_customer, RETENTION_DUE_SQL, service_due
+  app/schemas.py        Pydantic models
+  app/vegvesen.py       SVV fetch/extract/overview/details/compare/resolve, sync_vehicle
   app/vinlib.py         VIN rules (ISO 3779/3780), WMI table, check digit, RapidOCR + Tesseract,
-                        plate parsing, recognize_all
-  app/photostore.py     original + 1600px + 400px JPEG
-  app/sync_worker.py    registry re-sync loop + housekeeping() once every 24 h
+                        barcodes (zbar/libdmtx), plate parsing, recognize_all, scene_text
+  app/licenselib.py     name from a driving licence photo (fields 1./2., restores dropped spaces)
+  app/storagecare.py    MG storage programme: checklist ITEMS, schedule (next_check)
   app/mailer.py         SMTP sending (PDI orders)
-  app/auth.py           PIN login, sessions, require_staff / require_admin
-  app/routers/          vehicles.py, inspections.py, vin.py, admin.py, testdrives.py, session.py (login),
-                        pdi.py, dashboard.py, system.py (system admin settings), storage_care.py
-  app/storagecare.py    MG storage programme: checklist items, schedule
-  migrations/           001…008 (see below)
+  app/photostore.py     original + 1600px + 400px JPEG
+  app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
+                        test drive customer purge)
+  app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives,
+                        session (login/language), pdi, dashboard (Today), system, storage_care
+  migrations/           001…017
 frontend/               no build step; plain ES modules
-  index.html, css/app.css, js/app.js (hash router), js/ui.js (helpers), js/diagram.js
-  js/views/             today (start page), dashboard (= arrivals list), intake, inspection, vehicles,
-                        pdi (card on vehicle page), storage, testdrive, login, settings
+  index.html, css/app.css
+  js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
+  js/ui.js              h(), append(), api, fmtDate, dateInput/timeInput, badges, shared helpers
+  js/i18n.js            English/Norwegian translator + dictionary
+  js/diagram.js         car damage diagram
+  js/views/             today (start page), dashboard (= arrivals list), intake, inspection,
+                        vehicles, pdi (card), storagecare (card + report), storage, testdrive,
+                        login, settings, system
 ```
 
-Migrations: `001_initial`, `002_vegvesen_registry`, `003_registry_confirm` (kept_values,
-vin_source 'registry'), `004_spot_capacity` (multi-car spots), `005_sub_zones` (parent_id +
-`storage_spots` view), `006_service_and_condition` (condition, last_service_date/km, reg.
-numbers normalized), `007_soft_delete` (deleted_at/by/reason), `008_finn_link` (finn_code),
-`009_test_drives` (test_drives table), `010_login_and_privacy`, `011_pdi_orders`,
-`012_system_settings`, `013_delete_spots`, `014_storage_care`, `015_void_storage_checks`,
-`016_language`, `017_drop_zones`.
-**New schema changes = a new numbered file. Never edit an applied migration.**
+**Migrations:**
 
-Frontend routes: `#/` dashboard, `#/intake`, `#/inspections/:id`, `#/vehicles`,
-`#/vehicles/:id`, `#/vehicles/deleted`, `#/storage`, `#/storage/:id|off-site`,
-`#/test-drive`, `#/test-drive/new/:vehicleId` (start form with the car preselected), `#/settings`,
-`#/system` (system admins), `#/arrivals`, `#/vehicles/:id/storage-report` (printable).
+| # | Name | What it adds |
+|---|---|---|
+| 001 | `initial` | base schema |
+| 002 | `vegvesen_registry` | registry data |
+| 003 | `registry_confirm` | `kept_values`, vin_source 'registry' |
+| 004 | `spot_capacity` | multi-car spots |
+| 005 | `sub_zones` | `parent_id` + `storage_spots` view |
+| 006 | `service_and_condition` | condition, last service; reg. nos normalised |
+| 007 | `soft_delete` | soft delete |
+| 008 | `finn_link` | finn.no code |
+| 009 | `test_drives` | test drives |
+| 010 | `login_and_privacy` | PINs, sessions, access log, `customer_informed` |
+| 011 | `pdi_orders` | PDI orders + `pdi_lists` |
+| 012 | `system_settings` | `app_settings`, `is_superadmin` |
+| 013 | `delete_spots` | deleted spots, `storage_spots.deleted` |
+| 014 | `storage_care` | `storage_checks` |
+| 015 | `void_storage_checks` | cancelling checks |
+| 016 | `language` | `staff.language`; Skvettlapper / Nybilklargjøring |
+| 017 | `drop_zones` | zones moved into descriptions |
+
+**New schema changes = a new numbered file. Never change what an applied migration does**
+(the runner tracks by file name; comment-only edits are harmless).
+
+**Frontend routes:**
+- **Main pages:** `#/` Today · `#/arrivals` · `#/intake` · `#/inspections/:id`.
+- **Vehicles:**
+  - `#/vehicles` — filters are kept in the hash, e.g. `#/vehicles?q=…&status=…&condition=new`
+  - `#/vehicles/:id`
+  - `#/vehicles/:id/storage-report` (printable)
+  - `#/vehicles/deleted`
+- **Storage:** `#/storage` · `#/storage/:id|off-site`.
+- **Test drives:** `#/test-drive` · `#/test-drive/new/:vehicleId` (start form with the car
+  preselected).
+- **Admin:** `#/settings` · `#/system` (system admins only).
+
+---
 
 ## Domain rules (the nuance)
 
@@ -181,30 +242,33 @@ plates exist and are offered as "custom".
 - Position 1 is never `0`. Position 10 (model year) is never U/Z/0. Positions 14–17 are digits.
 - The check digit (position 9) is **mandatory only** when position 1 is 1–5 (North America) or
   `L` (China). Elsewhere a mismatch is just a warning.
-- Check-digit repair (a single look-alike swap) is only attempted where the check digit is mandatory.
+- Check-digit repair (a single look-alike swap) is only attempted where the check digit is
+  mandatory.
 - Make comes from the WMI table and model year from position 10 (`describe()`).
 
-**OCR pipeline** (`vinlib.recognize_all`): RapidOCR passes run in this order: normal →
-label-line strips (recognition-only, using long lines found as rulers) → zoom → rotated
-±35°. Tesseract is the fallback.
-- Plates: at most 2 letter→digit fixes; 6 digits with a leading 1 → drop the 1. Reject lines
-  that contain lowercase letters.
+**OCR pipeline** (`vinlib.recognize_all`):
+- **Order:** barcodes first (zbar, then libdmtx). Then RapidOCR passes: normal → label-line
+  strips (recognition only, using long lines as rulers) → zoom → rotated ±35°. Tesseract is
+  the fallback.
+- **Plates:** at most 2 letter→digit fixes; 6 digits with a leading 1 → drop the 1. Reject
+  lines with lowercase letters.
 - A single high-confidence VIN is auto-filled at arrival.
-- Engines share a re-entrant lock (RLock), because one engine is built from inside another.
+- Engines share a re-entrant lock (RLock).
+- Raw barcode text is returned in `text` as `[barcode] …`.
 
 **Transport sheets (factory-new cars):** Norsk Biltransport puts a delivery sheet in each new
-car. It has a big printed VIN, model ("MGS5"), dealer and a **QR code**. zbar decodes the QR
-first (VIN, source `barcode`, high confidence, ~0.4 s), and the arrival screen auto-fills it.
-From 0.10.4 the raw barcode text is included in `text` (`[barcode] …`) to see what else the
-QR holds.
+car. It has a printed VIN, model ("MGS5"), dealer and a **QR code that contains only the
+VIN**. The QR gives the VIN with high confidence in ~0.4 s.
 
-**Statens vegvesen API:** `GET {VEGVESEN_API_URL}?understellsnummer=<VIN>` or
-`?kjennemerke=<REGNR>` with header `SVV-Authorization: Apikey <key>`.
+**Statens vegvesen API:** `GET {url}?understellsnummer=<VIN>` or `?kjennemerke=<REGNR>`, with
+header `SVV-Authorization: Apikey <key>`.
 - Prefer `kodeNavn` over `kodeBeskrivelse` (colour etc.).
-- Many SVV fields are **lists**, e.g. `plasseringUnderstellsnummer` (LJ77892 has two: Instrumentpanel and Kupé - gulv høyre side). Don't take only `[0]` when all of them matter.
+- Many SVV fields are **lists**, e.g. `plasseringUnderstellsnummer` (LJ77892 has two:
+  Instrumentpanel and Kupé - gulv høyre side). Don't take only `[0]` when all of them matter.
 - Lookup happens at arrival (by VIN or reg. no). Mismatches with typed values need a
-  confirmation prompt; the user picks per field (`accept_fields`, `kept_values`).
-- The worker re-syncs registered cars every `VEGVESEN_SYNC_DAYS`.
+  per-field confirmation (`accept_fields`, `kept_values`).
+- The worker re-syncs registered cars every `vegvesen_sync_days`.
+- New cars aren't in the registry until registered; "not found" is normal for them.
 
 **Status badges:** EU-kontroll and registration show amber within 60 days and **red from 1 day
 before** the deadline. Service: green / amber (± 31 days) / red.
@@ -214,334 +278,346 @@ before** the deadline. Service: green / amber (± 31 days) / red.
 - New car → first registration + 1 year.
 - Used car without history → next registration anniversary.
 - At arrival, choosing *Used* reveals the last service date + km fields immediately
-  (`serviceSlot` redraw). *New* needs no service history.
+  (`serviceSlot` redraw).
 
-**Storage spots: rename & delete (0.12.1, migration 013):**
+**Storage spots:**
+- **Capacity:** spots have a `capacity` (several cars per spot) and optional **sub-zones**
+  (`parent_id`). **The user likes the sub-zone layout; keep it.**
+- `place_in_location` locks the spot and checks capacity and sub-zone rules. "Off site" means
+  not on a spot.
+- **Zones are not used (0.14.2):** old zone values were moved into the description, and
+  zones are never shown. In Settings, the description and capacity are edited in place.
+  Lists and pickers are flat.
 - **Rename:** any staff (`PATCH code`).
-- **Delete:** admins only, `DELETE /storage-locations/{id}?move_to=`. A spot with cars (its
-  own or in its sub-zones) needs `move_to`. Each car is moved with `place_in_location`
-  (capacity is checked) and logged as `moved` with the note "Spot X deleted".
-- **Never-used spots** are deleted for good. Spots with assignment history get `deleted_at`
-  (and become inactive), so history keeps its reference.
-- `storage_spots.deleted` hides them everywhere, and the unique code index ignores deleted
-  spots, so their codes can be reused.
+- **Delete:** admins only, `DELETE /storage-locations/{id}?move_to=`.
+  - A spot with cars (its own or in its sub-zones) needs `move_to`.
+  - Each car is moved with `place_in_location` and logged as `moved`, with the note "Spot X
+    deleted".
+  - Never-used spots are deleted for good. Spots with history get `deleted_at`;
+    `storage_spots.deleted` hides them, and their code can be reused.
 
-**Storage:** spots have a `capacity` (several cars per spot) and optional **sub-zones** (`parent_id`).
-**Zones are not used (0.14.2, migration 017):**
-- The user's choice: spots + sub-zones + description are enough.
-- Old zone values were moved into the description, and the column is now always NULL. It is
-  kept in the DB and API but never shown.
-- In Settings, the description is edited in place (like capacity). Lists and pickers are flat
-  (no zone grouping). **The user likes the sub-zone layout; keep it as is.**
-`place_in_location` locks the spot and checks capacity and sub-zone rules. "Off-site" means not
-on a spot.
-
-**Duplicates** (`common.similar_vehicles`): the same reg. no, or a VIN at Hamming distance 1
-(computed in SQL with `generate_series`). These **warn, never block**. On the arrival screen the
-warning offers "Use this VIN".
+**Duplicates** (`common.similar_vehicles`): the same reg. no, or a VIN at Hamming distance 1.
+These **warn, never block** ("Use this VIN" on the arrival screen).
 
 **Deletion & retention:**
-- Delete is a **soft delete**: `deleted_at`, `deleted_by`, `deleted_reason`
-  `'manual'|'retention'`, and the storage assignment ends. Deleted cars are excluded from every
-  list, the registry sync and the duplicate checks.
-- **Recently deleted** keeps cars for `TRASH_DAYS` (30). Restore goes back to the old spot if
-  there's room, otherwise off-site.
-- After that, `purge_vehicle` removes all rows and the photo files. Commit before deleting the files.
-- **Retention:** off-site cars with no activity for `RETENTION_YEARS` (5) are soft-deleted
+- Delete is a **soft delete** (`deleted_at/by/reason` 'manual'|'retention'), and the storage
+  assignment ends. Deleted cars are excluded everywhere.
+- **Recently deleted** keeps cars for `trash_days` (30). Restore goes back to the old spot if
+  there's room, otherwise off site.
+- After that, `purge_vehicle` removes all rows (including test drives, PDI orders and storage
+  checks) and the photo files. Commit before deleting the files.
+- **Retention:** off-site cars with no activity for `retention_years` (5) are soft-deleted
   automatically by the worker's daily `housekeeping()`.
 - Starting an arrival for a VIN that sits in the trash purges the old record first.
+- A car that is out on a test drive can't be deleted.
+
+**Vehicles list:**
+- **Search** covers VIN, make, model, variant, colour, reg. no (spaces ignored) and spot.
+- **Filters:** status, and **New/used** (factory new / used / not chosen).
+- A result count shows above the list.
 
 **Test drives** (`routers/testdrives.py`, `views/testdrive.js`):
-- Starting a drive needs the car, the customer's name and phone (8–15 digits, optional +) and
-  a **driving licence photo**. Optional: items taken out of the car (presets; the spare
-  **winter/summer wheels** are the most common), items put in (e.g. trade plates), an
-  odometer reading and a note. It is one multipart POST.
-- One active drive per car (partial unique index). A car that is out can't be deleted. The
-  car's storage spot and status don't change during a drive.
-- On return, staff tick every item back in place, or write a note about what's missing.
-  Customer details then move to the **trash** (`customer_trashed_at`), are shown under
-  "Returned — customer details in the trash" (for toll and speeding fines), and are wiped
-  after `TRASH_DAYS` by the worker (`purge_test_drive_customer`). They can also be deleted
-  right away.
+- **Start:** car, customer name + phone (8–15 digits, optional +), **driving licence photo**,
+  and the **"customer has been given the privacy information"** checkbox (required).
+  - Optional: items taken out (presets; the spare **winter/summer wheels** are the most
+    common) and put in (e.g. trade plates), odometer, note.
+  - It is one multipart POST. One active drive per car; spot and status don't change.
+- **Return:** every item ticked back, or a note about what's missing. Customer details then
+  move to the **trash** (`customer_trashed_at`) and show under "Returned — customer details
+  in the trash" (for toll and speeding fines). The worker wipes them after `trash_days`;
+  "Delete now" wipes them at once.
 - **Name from the licence** (`licenselib.py`, `POST /test-drives/read-license`):
-  - The OCR finds the EU-format field labels `1.` (surname) and `2.` (given names), taking
-    the text in the same box or the next box on the line. It tries 0°/90°/270°/180°.
-  - The name is filled in as "Given Surname"; confidence is high only when both fields are
-    read at ≥ 0.85. A name the staff typed is never overwritten.
-  - The OCR model often **drops spaces** ("ANDERS STRANG" → "ANDERSSTRANG"). `_respace`
-    straightens the box and finds ink column runs (one per letter). A gap ≥ max(0.45 ×
-    median letter width, 2.2 × median letter gap) counts as a space. It is only used if the
-    letters are unchanged, and it never cuts off a single letter. Test photo: user's own
-    licence (THORKILDSEN / ANDERS STRANG); ask for it again if needed.
-  - The photo is only read in memory. OCR text from licences is **not logged**
+  - The OCR reads EU-format field labels `1.` (surname) and `2.` (given names) and tries
+    0°/90°/270°/180°. It fills in "Given Surname" and never overwrites a typed name.
+  - The OCR model often **drops spaces** ("ANDERS STRANG" → "ANDERSSTRANG"). `_respace` finds
+    ink column runs in the straightened box. A gap ≥ max(0.45 × median letter width, 2.2 ×
+    median letter gap) counts as a space. It is only used if the letters are unchanged, and
+    it never cuts off a single letter.
+  - The photo is read in memory only, and licence OCR text is **not logged**
     (`scene_text(log_text=False)`).
-- **Personal data never goes into `vehicle_events`.** The history only logs items, km and
-  notes. Licence photos are served with `Cache-Control: no-store`. `purge_vehicle` also
-  removes a car's test drives and licence files.
+- **Personal data never goes into `vehicle_events`.** Licence photos are served with
+  `Cache-Control: no-store`.
+- **Access log:** `test_drive_access_log` records opening a licence photo in full and
+  "Delete now". It's shown via "Access log" on returned drives.
+- **Privacy notice (GDPR art. 13):** `privacyDialog`, Norwegian, printable.
+  - It shows company, then phone / e-mail / postal address on separate lines (System →
+    Company).
+  - It ends with signature / date / name-in-capitals lines.
+  - If no contact is set, it shows a red "missing" line and the Test drive page shows a
+    reminder.
 
-**Login & GDPR (0.11.0)** (`auth.py`, `routers/session.py`, `views/login.js`, migration 010):
-- **Login:** a personal **PIN** (4–8 digits) per staff member, hashed with scrypt.
+**Login & GDPR (0.11.0)** (`auth.py`, `routers/session.py`, `views/login.js`):
+- **Login:** a personal **PIN** (4–8 digits, scrypt).
   - 5 wrong attempts lock the account for 15 min.
-  - A login creates a session: a random token in the HttpOnly cookie `carbonara_session`,
-    lasting 30 days. The DB only keeps its SHA-256.
-- **Route protection:** every router except `session` is included with
-  `dependencies=[Depends(require_staff)]`. Admin-only routes (staff create/patch/PIN) add
-  `require_admin`.
-- **First start:** while no active staff member has a PIN, the login screen runs **setup**,
-  and the first person becomes admin. Admins then set PINs in Settings. Resetting a PIN also
-  unlocks the account and logs out that person's devices.
-- **PIN hashes never leave the server:** staff queries use `STAFF_PUBLIC`; never
-  `SELECT * FROM staff` in a response.
-- Staff pickers default to the logged-in user (`setInspectorId(me.id)` in `boot()`).
+  - A login creates a session: an HttpOnly cookie `carbonara_session` lasting 30 days. Only
+    the token's SHA-256 is stored.
+- **Route protection:** routers are included with `dependencies=[Depends(require_staff)]`.
+  Admin-only routes add `require_admin`; System routes use `require_superadmin`.
+- **First start:** while nobody has a PIN, the login screen runs **setup**, and that person
+  becomes admin + system admin. Admins then set PINs in Settings. A reset also unlocks the
+  account and logs out that person's devices.
+- **PIN hashes never leave the server:** use `STAFF_PUBLIC`; never `SELECT * FROM staff` in a
+  response.
+- Staff pickers default to the logged-in user (`setInspectorId(me.id)`).
 - **HTTPS is NOT set up** (the user chose to skip it for now), so the cookie has
-  `secure=False`. When HTTPS comes, set `secure=True`.
-- **Privacy for test drive customers (art. 13):**
-  - A Norwegian notice (`privacyDialog` in `testdrive.js`, printable) shows `PRIVACY_COMPANY`
-    and `PRIVACY_CONTACT` from the env.
-  - Starting a drive requires `customer_informed`.
+  `secure=False`.
 - **Full licence photo is kept on purpose (user's decision, 2026-11-09).** It includes field
-  4d, the national identity number (fødselsnummer). The reason: identifying the driver
-  securely to the police, Statens vegvesen, toll companies and insurers for fines, damage or
-  theft (personopplysningsloven § 12). The notice tells the customer this. Do **not** add
-  masking unless the user asks.
-- **Access log:** `test_drive_access_log` records opening a licence photo in full (not
-  thumbnails) and "Delete now". It's shown via "Access log" on returned drives.
+  4d, the national identity number (fødselsnummer), for secure identification to the police,
+  SVV, toll companies and insurers (personopplysningsloven § 12). The notice says so. Do
+  **not** mask it unless the user asks.
 
-**PDI orders (0.12.0)** (`routers/pdi.py`, `views/pdi.js`, `mailer.py`, migration 011):
-- New cars get a PDI (Pre Delivery Inspection) at **RBV – Rygge Bilverksted**, a separate firm
-  in the same building. The salesperson registers what the customer ordered on the car's
-  **PDI order** card:
-  - items from the list, some with a choice (floor mats: Gummi/Tekstil)
-  - "Other" free text
+**Roles:**
+- **Staff:** everything day-to-day.
+- **Admin:** staff/PINs, PDI lists, deleting spots, cancelling storage checks.
+- **System admin** (`is_superadmin`; always also admin): the System page, and granting or
+  removing system admin. Only a system admin can change another system admin.
+- **The word "super-admin" must not appear in UI text;** it is "System admin" /
+  "Systemadministrator".
+
+**System page (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`, `views/system.js`):
+- **Groups:**
+  - **Statens vegvesen:** key 🔒, sync days, URL, auth header/scheme, call pause
+  - **E-mail (SMTP):** password 🔒
+  - **Company:** company name, dealer number, customer phone, e-mail, postal address
+  - **Data retention**
+- **Where a value comes from:** `settings.<name>` = DB `app_settings`, else env `NAME`, else
+  default. Cached 20 s per process (the worker too). **Always read settings at call time;
+  never copy them into module constants.**
+- **To add a setting:** one `Setting(...)` line, then use `settings.<name>`. Also add the
+  Norwegian label/help to `i18n.js`.
+- **Secrets** are write-only (the API returns the last 4 characters). The log records who
+  changed which key, never the value.
+
+**PDI = nybilklargjøring (0.12.0)** (`routers/pdi.py`, `views/pdi.js`, `mailer.py`):
+- **Who and what:** new cars get a PDI at **RBV – Rygge Bilverksted**, a separate firm in the
+  same building. The salesperson fills in the car's **PDI order** card:
+  - items from the list (some with a choice, e.g. Gulvmatter: Gummi/Tekstil)
+  - "Other"
   - winter tyres: none / in stock / ordered by sales (+ expected date) / RBV orders (+ tyre
     company)
-- **Status:** draft → sent → booked (`pdi_at`) → done, or cancelled. There is one open order
-  per car. Editing after sending shows "changed since sent".
-- **E-mail to RBV:** plain text in Norwegian (`compose()`), with car info and the order.
-  - Sent by SMTP if `SMTP_*` is set (it isn't yet).
-  - Otherwise via **"Open in e-mail app"** (mailto) plus a "did you send it?" confirmation;
-    `sent_via = mail_app`.
-- **Recipients, items and tyre companies** are editable lists in Settings (`pdi_lists`;
-  admins edit). **No e-mail addresses are built into code or migrations** (the user's rule).
-  RBV's address and the user's test address are added in Settings. During testing the
-  test address is the default; switch to RBV when going live.
-- **RBV's reply** (date/time) is entered **manually** by staff ("Enter PDI date"). It is
-  available on any open order, including unsent ones (dates are often agreed in person or by
-  phone). A booked order that isn't sent shows a warning, and Today lists it under "not sent
-  yet". RBV can't
-  reach the server (local network; the user is unsure whether the companies' networks are
-  connected). Automatic reply reading (IMAP) or a booking link are possible later.
-- **Reminders are on the dashboard only** (the user's choice): "PDI tomorrow – make the car
-  ready".
-
-**System page & system admin (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`,
-`views/system.js`, migration 012):
-- **What can be changed:** server settings, edited at `#/system` (system admins only; the nav
-  link is hidden for others). This covers the SVV API key/URL/sync days, SMTP, the privacy
-  notice company/contact, and retention days/years.
-- **Where a value comes from:** `settings.<name>` = the value saved in `app_settings` (DB),
-  else the env var `NAME`, else the default.
-  - Cached for 20 s per process, so the worker picks changes up too.
-  - Always read settings at call time; never copy them into module constants.
-- **To add a setting:** add one `Setting(...)` line to `SETTINGS`, then use `settings.<name>`.
-- **Secrets** (`secret=True`) are write-only: the API only returns the last 4 characters. The
-  log records who changed which key, never the value.
-- **System admin:**
-  - `staff.is_superadmin`. The person doing first-time setup becomes system admin. Migration
-    012 made **Supern** (the user's own account) system admin, with a fallback to the
-    lowest-id admin. **Andy is a regular admin.**
-  - Only system admins can grant or remove system admin, or change another system admin. A
-    system admin is always an admin.
-- **The SVV key can now live in the DB** (entered on the System page) instead of the env.
-  It still must never be committed to git.
+  - a note
+- **Status:** draft → sent → booked (`pdi_at`) → done, or cancelled. One open order per car.
+  Editing after sending shows "changed since sent".
+- **E-mail to RBV** (Norwegian, `compose()`):
+  - Subject: "Bestilling av nybilklargjøring – …"; it asks RBV to reply with a date and time.
+  - Sent by SMTP if configured (it isn't yet). Otherwise via **"Open in e-mail app"**
+    (mailto) plus a "did you send it?" confirmation, or "Copy text".
+- **Lists in Settings** (`pdi_lists`, admins): items, tyre companies (NorgesDekk, Drivalia)
+  and recipients (one is the default). During testing the user's own address is the
+  default; switch to RBV when going live.
+- **The PDI date** is entered **manually** ("Enter PDI date"), on any open order, even
+  unsent. A booked but unsent order shows a warning and stays under "not sent yet" on Today.
+  RBV can't reach the server. Reading replies (IMAP) or a booking link are possible later.
+- **Reminder:** only on Today, the day before ("make the car ready").
 
 **Storage maintenance for new cars (0.13.0)** (`storagecare.py`, `routers/storage_care.py`,
-`views/storagecare.js`, migration 014). Source: MG bulletin **SI-GI2022102501** plus MG's
-sheets (long-term storage, periodic checklist, 12V battery form).
+`views/storagecare.js`). Source: MG bulletin **SI-GI2022102501** plus MG's sheets (long-term
+storage, periodic checklist, 12V battery form).
 - **Applies to all factory-new cars** (`condition = 'new'`) in storage, until the PDI is done
   (the user's choice: MG's list for all makes).
 - **Schedule:** the arrival check, then periodic check *n* due *start + n months*. Every 6th
   is a 6-month check and every 3rd a 3-month check; larger checks include the smaller items.
-  `start` = arrival check date, else first storage placement.
-- **Items are per fuel type** (`ITEMS`; Norwegian labels, also printed): HV-battery steps for
-  BEV/PHEV/FCEV, no "start the engine" for pure electric. Unknown fuel shows all items, with
+  `start` = arrival check date, else first placement.
+- **Items per fuel type** (`ITEMS`, Norwegian labels, also printed): HV-battery steps for
+  BEV/PHEV/FCEV; no "start the engine" for pure electric. Unknown fuel shows all items, with
   N/A allowed.
 - **Rules (server-side):**
-  - Every item must be answered OK / Not OK / N/A.
-  - Tyres: one value plus "all four within 2.6–2.8" (the user's choice).
-  - 12V below 12.5 V or tester not "Good" → action charged/replaced is required, plus the
-    voltage after charging.
-  - SOC below 30 % → "charged to ≥ 50 %" is required.
-  - Anything not OK → remarks are required. The check is signed with the logged-in staff
-    member and the time.
+  - Every item OK / Not OK / N/A.
+  - Tyres: one value plus "all four within 2.6–2.8".
+  - 12V below 12.5 V or tester not "Good" → charged/replaced is required, plus the voltage
+    after charging.
+  - SOC below 30 % → "charged to ≥ 50 %".
+  - Anything not OK → remarks are required. Each check is signed with the staff member and
+    the time.
+- **Checks are never deleted** (warranty evidence). An admin can **cancel** one with a reason
+  (`/storage-checks/{id}/void`). A cancelled check leaves the schedule but stays in the
+  report struck through ("ANNULLERT"), plus the section "Annullerte kontroller".
 - **Reminders:** "Storage checks due" on Today (due ≤ 3 days, or overdue).
-- **Printable report:** `#/vehicles/:id/storage-report`, in Norwegian A4. It has a header
-  (company, **dealer number** from System → Company, VIN, model, colour, arrival, reg. date,
-  spot, battery part number, arrival voltage), the arrival check, a periodic grid (max 6
-  checks per table), MG's 12V battery form, remarks, and a signature/stamp box. "Only 12V
-  battery form" prints that part alone (warranty claims).
-- **Checks are never deleted** (they are warranty evidence). An admin can **cancel** one with
-  a reason (`POST /storage-checks/{id}/void`, migration 015). A cancelled check:
-  - no longer counts in the schedule (the next due date is recalculated)
-  - stays in the report struck through ("ANNULLERT"), with a section "Annullerte kontroller"
-    (who, when, why)
-  - is logged as `storage_check_voided`
-- **Printing:** `@page { margin: 0 }` stops the browser printing its header/footer (title,
-  date, URL, page number). Printed documents (`dialog`, `.report`) get 15 mm padding instead,
-  and dialogs print black on white even in the dark theme. The privacy notice ends with
-  signature / date / name lines.
-- With a dialog open, only the dialog prints; otherwise the page prints without
-  topbar, footer and `.no-print` elements.
+- **Printable report** `#/vehicles/:id/storage-report` (Norwegian A4):
+  - a header with company, **dealer number**, VIN, model, colour, arrival, reg. date, spot,
+    battery part no. and arrival voltage
+  - the arrival check, a periodic grid (max 6 per table), MG's 12V battery form, remarks, and
+    a signature/stamp box
+  - "Only 12V battery form" prints that part alone (warranty claims)
 
-**Today board (0.12.0)** (`routers/dashboard.py`, `views/today.js`): the start page `#/`.
-- Today/tomorrow: PDI tomorrow (warn), PDI today, PDI date passed, out on test drive,
-  arrivals in progress.
-- Needs attention: PDI orders waiting for reply, unsent drafts, EU-kontroll ≤ 60 days,
+**Printing:**
+- `@page { size: A4; margin: 0 }`: the browser prints no header/footer (title, date, URL,
+  page no.). Documents (`dialog`, `.report`) get 15 mm padding instead.
+- Dialogs print black on white even in the dark theme.
+- With a dialog open, only the dialog prints. Otherwise the page prints without the topbar,
+  footer and `.no-print` elements.
+
+**Today board (0.12.0)** (`routers/dashboard.py`, `views/today.js`): the start page `#/`, one
+`/api/dashboard` call.
+- **Today/tomorrow:** PDI tomorrow (warn), PDI today, PDI date passed, storage checks due,
+  out on test drive, arrivals in progress.
+- **Needs attention:** PDI orders waiting for reply, unsent orders, EU-kontroll ≤ 60 days,
   service ≤ 31 days, SVV differences.
-- Then upcoming PDIs and number tiles.
-- The old arrivals start page moved to `#/arrivals` (`arrivalsView` in `dashboard.js`).
-- One `/api/dashboard` call. Attention lists only cover cars that aren't off site.
+- **Then:** upcoming PDIs and number tiles. Attention lists only cover cars that aren't off
+  site.
 
-**finn.no:** crawling finn.no is prohibited (robots.txt and terms). Staff paste the ad link or
-FINN code (option C). The validator extracts 6–12 digits, and the link is
-`https://www.finn.no/mobility/item/{code}`. The dealer's FINN org id is `1324692627`. A future
-"Fetch from FINN" import needs the official FINN API (option A) or a feed from their ad
-system (option B).
+**finn.no:**
+- Crawling is prohibited (robots.txt and terms). Staff paste the ad link or FINN code; the
+  validator extracts 6–12 digits.
+- Link: `https://www.finn.no/mobility/item/{code}`. Dealer FINN org id: `1324692627`.
+- A future "Fetch from FINN" needs the official FINN API or an ad-system feed.
 
-**Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`, migration 016).
-- **The rule:** no Norwegian words in the English version, and no English in the Norwegian
-  version.
-- **How it's chosen:** per user (`staff.language`, default `en`), switched under their name
-  at the top (`POST /api/auth/language`), and saved in localStorage too. Before login it
+**Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
+- **The rule:** no Norwegian in the English version, no English in the Norwegian one.
+- **How it's chosen:** per user (`staff.language`, default `en` for existing accounts),
+  switched under their name at the top (`POST /api/auth/language`), and also stored in
+  localStorage. When the saved language differs, `boot()` reloads once. Before login it
   follows the device, with a switch on the login screen.
-- **How it works:** the code is written in English. `startTranslator()` translates every text
-  node and the placeholder/title/aria-label attributes as they are rendered (a
-  MutationObserver), and `confirm`/`prompt`/`alert` are wrapped.
+- **How it works:** the code is written **in English**. `startTranslator()` translates text
+  nodes and the placeholder/title/aria-label attributes as they render (a MutationObserver),
+  and wraps `confirm`/`prompt`/`alert`.
   - `NO` holds exact texts. `NO_PATTERNS` holds texts with values: `{}` = any text,
     `{n}` = a number, and `{1t}` in the target also translates that part.
-  - Patterns are tried **most specific first** (most fixed text), so "started {} by {}"
-    wins over "started {}".
-  - Leading icons and trailing arrows ("📝 …", "… →") are stripped for the lookup and put
-    back, so dictionary keys are written without them.
-  - Server messages (English) are translated the same way when they reach the page.
-  - `EN` translates the few Norwegian texts Carbonara uses itself (storage checklist labels,
-    battery results, winter-tyre options) when English is chosen. Use `tr()` when such a
-    text is joined into a longer string.
+  - Patterns are tried most specific first.
+  - Leading icons and trailing arrows are stripped for the lookup and put back, so keys are
+    written without them.
+  - Server messages (English) are translated the same way.
+  - `EN` translates the Norwegian texts Carbonara uses itself (storage checklist, battery
+    results, winter-tyre options) when English is chosen. Use `tr()` when such a text is
+    joined into a longer string.
 - **Not translated (the user's choices):**
-  - **documents are always Norwegian:** the PDI e-mail, the customer privacy notice and the
-    storage report. They are marked `translate="no"`.
-  - **Statens vegvesen data** is shown as it comes.
-  - **PDI items** are one name each, as written in Settings.
-  - `.mono` / `.vin` (VINs, plates, codes) and input values are also skipped.
-- **Adding UI text:** write it in English, then add the Norwegian to `NO`, or a pattern if it
-  contains a value. Check the page in both languages.
-- **Norwegian terms:** PDI = **nybilklargjøring**; Arrival inspection = **Mottakskontroll**;
-  storage Arrival check = **Ankomstkontroll**; Vehicles = Biler; Off site = Ikke på lager;
-  System admin = **Systemadministrator**.
-- **The role formerly called "super-admin" is "System admin" in all text** (the user's
-  wording). The code name `is_superadmin` is unchanged.
+  - documents, which are always Norwegian and marked `translate="no"` (PDI e-mail preview,
+    privacy notice, storage report)
+  - Statens vegvesen data
+  - PDI item names (one name each)
+  - `.mono` / `.vin` elements and input values
+- **Adding UI text:** write it in English, then add the Norwegian to `NO` (or a pattern if it
+  contains a value). Missing entries show up as English in the Norwegian version; the user
+  reports them with screenshots.
+- **Norwegian terms:**
 
-**Dates & times: ALWAYS dd.mm.yyyy and 24-hour HH:MM, everywhere, unless the user says
-otherwise.** This is a standing rule from the user, and it covers both display and input.
-- **Display:** everything goes through `fmtDate` in `ui.js` (`dd.mm.yyyy`, or
-  `dd.mm.yyyy HH:mm` for timestamps). Bare ISO dates are formatted as-is, with no timezone
-  shift. Only the live header clock uses the long form ("søndag 8. november 2026").
-- **Input:** never use `<input type="date|time">`. They follow the device language
-  (mm/dd/yyyy and AM/PM on English phones). Use `dateInput()` / `timeInput()` from `ui.js`
-  instead (0.13.3).
-  - They show `dd.mm.åååå` / `tt:mm`, accept loose typing ("9.11.26", "09112026", "800").
-  - The date field has a 📅 button that opens the native calendar.
-  - `.value` is ISO, like the native inputs, and `.id`, `.disabled` and change/input events
-    work the same. Invalid input never fires `change` to listeners.
-- **Today:** use `osloTodayIso()`, never `new Date().toISOString()` (that is UTC, so it's
-  the wrong day just after midnight).
-- **Numbers:** Norwegian format, e.g. `fmtKm` → "119 782 km". Decimals in reports use a
-  comma ("12,59 V").
+  | English | Norwegian |
+  |---|---|
+  | PDI | **nybilklargjøring** |
+  | Arrival inspection | **Mottakskontroll** |
+  | storage Arrival check | **Ankomstkontroll** |
+  | Vehicles | Biler |
+  | Storage | Lager |
+  | Off site | Ikke på lager |
+  | System admin | **Systemadministrator** |
+  | Sub-zone | Undersone |
+  | Mudflaps | **Skvettlapper** (not "Sprutlapper") |
+
+**Dates, times & numbers (standing rule):**
+- **Display:** always through `fmtDate` in `ui.js` (`dd.mm.yyyy`, or `dd.mm.yyyy HH:mm`).
+  Bare ISO dates are formatted as-is, with no timezone shift. Only the header clock and the
+  Today weekday use a long form, in the user's language.
+- **Input:** **never** `<input type="date|time">` (they show mm/dd/yyyy and AM/PM on English
+  devices). Use `dateInput()` / `timeInput()` from `ui.js`.
+  - Placeholders are `dd.mm.yyyy` / `hh:mm` (`dd.mm.åååå` / `tt:mm` in Norwegian), and loose
+    typing is accepted.
+  - A 📅 button opens the native calendar.
+  - `.value` is ISO, and `.id`, `.disabled` and change/input events work like native inputs.
+    Invalid input never fires `change` to listeners.
+- **Today:** `osloTodayIso()`, never `new Date().toISOString()` (that is UTC).
+- **Numbers:** Norwegian format (`fmtKm` → "119 782 km"; decimals with a comma in reports).
 
 ---
 
 ## Code style
 
 **General:** keep it simple and dependency-light. No frontend framework, no build step, no
-ORM. Match the style of the surrounding code. Comments explain *why*, not what.
+ORM. Match the surrounding code. Comments explain *why*.
 
 **Python (backend):**
-- Python 3.12, 4-space indent, double quotes, f-strings, type hints on helpers. Lines up to ~110.
-- **Plain SQL with psycopg3**: `%s` parameters, and `psycopg.sql` for identifiers. Never format
-  user input into SQL. Rows are dicts (`dict_row`).
-- One transaction per request via the `get_conn` dependency. Call `conn.commit()` explicitly
-  only before side effects outside the database (e.g. deleting files).
-- Shared logic belongs in `common.py`. Raise errors with `not_found()`, `conflict()` (409) and
-  `bad_request()` (422).
-- PATCH endpoints use `patch_fields(model)` + `update_row()`, so only sent fields change.
-- Write every meaningful change to history with `log_event(conn, vehicle_id, type, data)`.
-  It stores JSONB with `default=str`, so dates are fine.
-- Validation and normalization go in Pydantic validators in `schemas.py` (e.g. reg. no →
-  uppercase alphanumerics, `finn_code` extraction).
+- Python 3.12, 4-space indent, double quotes, f-strings, type hints on helpers. Lines up to
+  ~110.
+- **Plain SQL with psycopg3:** `%s` parameters, and `psycopg.sql` for identifiers. Never format
+  user input into SQL.
+- One transaction per request (`get_conn`). Call `conn.commit()` explicitly only before side
+  effects outside the DB (deleting files), or to keep a counter when the request then fails
+  (wrong PIN).
+- Shared logic goes in `common.py`. Raise errors with `not_found()`, `conflict()` (409) and
+  `bad_request()` (422). Error messages are English; add their Norwegian to `i18n.js`.
+- PATCH endpoints use `patch_fields(model)` + `update_row()`.
+- Write every meaningful change to history with `log_event()` (JSONB, `default=str`), never
+  with personal data.
 
 **JavaScript (frontend):**
 - ES modules, 2-space indent, single quotes, semicolons, `const`/arrow functions, async/await.
-- Build DOM with `h(tag, attrs, ...children)` from `ui.js`. Put shared helpers in `ui.js`
-  (badges, `fmtDate`, `duplicateNotice`, `finnLink`, `spotLabel`…).
-- **Pitfall:** the native `append()` / `replaceChildren()` print arrays and `null` as text
-  ("null[object HTMLElement]"). Use `el.replaceChildren(...list.filter(Boolean))` or the
-  `append()` helper from `ui.js`. This bug has shipped **four** times (last: 0.12.1
-  System page). **Before handing over a new view, grep it for `.append(` and
-  `.replaceChildren(`, and check that no argument can be an array or null.**
-- `ul.rows li` is a flex row (label left, buttons right). Sentences mixing text and links
-  inside it must be wrapped in one `<span>`, or they split into columns (0.10.3 fix).
-- A card that is built once must redraw its dependent parts when inputs change, using a slot
-  element + a render function (see `serviceSlot` in `inspection.js`).
-- User-facing text is English. Dates use the `nb-NO` locale.
+- Build DOM with `h(tag, attrs, ...children)` from `ui.js`; shared helpers go in `ui.js`.
+- **Pitfall #1:** the native `append()` / `replaceChildren()` print arrays and `null` as text
+  ("null[object HTMLElement]"). Use the `append()` helper, or
+  `el.replaceChildren(...list.filter(Boolean))`. This has shipped **four** times. **Grep
+  every new view for `.append(` / `.replaceChildren(` before handing over.**
+- `ul.rows li` is a flex row (label left, buttons right). Wrap sentences mixing text and links
+  in one `<span>`, or they split into columns.
+- A card built once must redraw dependent parts through a slot element + render function (see
+  `serviceSlot` in `inspection.js`).
+- **UI text is written in English**, and every new text gets a Norwegian entry in
+  `i18n.js`. Date/time input uses `dateInput()`/`timeInput()`.
 
-**CSS:** one file, `frontend/css/app.css`. Reuse existing classes (`card`, `notice warn`,
-`badge`, `grid`, `mono`, `reg-big`…) before adding new ones. Mobile/tablet first; it's used
-on phones in the yard.
+**CSS:** one file, `frontend/css/app.css`.
+- Reuse classes (`card`, `notice warn`, `badge`, `grid`, `mono`, `reg-big`…).
+- Mobile first; it's used on phones in the yard.
+- Global form fields are `width: 100%`. Inside flex rows, override with a more specific
+  selector (see `.toolbar input[type=search]`).
 
-**Git (PowerShell 5.1):** quoted multi-line `-m` messages break. Write the message to a file in
-the scratchpad and use `git commit -F <file>`. Commit title format:
-`<Short summary of changes> (vX.Y.Z)`, then a body grouped by feature. End with the
-`Co-Authored-By` trailer.
+**Git (PowerShell 5.1):** write the commit message to a file in the scratchpad and use
+`git commit -F <file>`.
+- Title: `<Short summary> (vX.Y.Z)`, then a body grouped by feature.
+- End with the `Co-Authored-By` trailer.
+- Run the API key check first.
 
 ---
+
+## Open items waiting on the user
+
+- **Customer contact:** fill in **E-mail for customers** and **Postal address** on System →
+  Company (the phone 69269840 is set).
+- **SMTP:** not set up; PDI e-mails go via the e-mail app until it is.
+- **PDI recipients:** when going live, add RBV and make it the default instead of the test
+  address.
+- **Test storage check:** a test monthly storage check exists on the MG S5 EV
+  (LSJWS4090SZ716243, 09.11.2026 23:13). It should be cancelled ("Test"), which moves the next
+  check to 09.12.2026.
+- **Andy's admin status:** unconfirmed (see *Working with the user*).
 
 ## Milestones
 
 | Version | Milestone |
 |---|---|
 | initial | Arrival inspection → storage; default port moved to 8080 |
-| 0.2.0 | Version footer; SVV API key hint in settings (key replaceable via env) |
-| 0.3.0 | SVV field mapping fixed (`kodeNavn`); overview card with EU-kontroll/registration badges; "All vehicle data" section; Norwegian 24 h time + live clock |
+| 0.2.0 | Version footer; SVV API key hint in settings |
+| 0.3.0 | SVV field mapping (`kodeNavn`); overview card with EU-kontroll/registration badges; "All vehicle data"; Norwegian 24 h time + live clock |
 | 0.4.0 | SVV lookup at arrival with mismatch confirmation; edit/move/off-site; damage repair with undo |
 | 0.5.0 | Storage menu; multi-car spots with capacity |
 | 0.6.0 | Sub-zones inside spots; big reg. no in vehicle header |
-| 0.7.0–0.7.8 | OCR: tilted VINs + plates; RapidOCR replaces Tesseract (0/13 → 34/35); numpy/headless OpenCV build fix; door labels; ISO VIN rules, check-digit repair, make/year from VIN; auto-fill a single confident VIN |
+| 0.7.0–0.7.8 | OCR: RapidOCR replaces Tesseract (0/13 → 34/35); numpy/headless OpenCV build fix; door labels; ISO VIN rules, check-digit repair, make/year from VIN; auto-fill a single confident VIN |
 | 0.9.0 | New/used + service tracking; reg. nos without spaces; soft delete + Recently deleted; 5-year retention |
-| 0.9.3 | Duplicate warnings (reg. no / VIN distance 1); finn.no link (manual code); fix: service fields appear at once at arrival |
-| 0.9.4 | Dates shown as Norwegian standard `dd.mm.yyyy` (+ `HH:mm`); frontend served with `Cache-Control: no-cache` |
-| 0.10.0 | **Test drive** page: start (customer, licence photo, items out/in), cars out now, return with item check; customer name auto-filled from the licence photo (OCR); customer details trashed on return and wiped after 30 days; vehicle search also matches variant/colour |
-| 0.10.1 | Licence names: spaces the OCR dropped are restored from the gaps in the photo (middle names, double surnames) |
-| 0.10.2 | Per-build JS/CSS URLs (`/v/<build>/…`) so no browser can run stale code (Opera Touch "Not found" fix); VIN location shows **all** of SVV's `plasseringUnderstellsnummer` entries, not just the first |
-| 0.10.3 | Settings → Data retention: "Recently deleted" sentence no longer split into columns |
-| 0.10.4 | Transport-sheet QR verified (VIN via barcode); raw barcode text returned for troubleshooting |
-| 0.14.5 | Customer contact on the privacy notice: phone (`privacy_contact`), e-mail (`privacy_email`) and postal address (`privacy_address`) as separate System settings / lines |
-| 0.14.4 | Printing: no browser header/footer (`@page { margin: 0 }`, documents have their own 15 mm margins), black on white; privacy notice gets signature / date / name lines |
-| 0.14.3 | Vehicles page: New/used filter (factory new / used / not chosen) next to search and status, result count; filters kept in the address (`#/vehicles?…`; the router ignores `?…`) |
-| 0.14.2 | Storage spots: zones removed (moved into description), description editable in place |
-| 0.14.1 | Translator: headings with icons and "by …" texts now translated (most specific pattern first) |
-| 0.14.0 | **English / Norwegian** per user (translator + dictionary; documents stay Norwegian); "super-admin" renamed "System admin"; Sprutlapper → Skvettlapper, PDI item → Nybilklargjøring |
-| 0.13.3 | All date/time inputs are Carbonara's own dd.mm.yyyy / 24 h fields (no more browser mm/dd/yyyy, AM/PM); km in Norwegian number format |
+| 0.9.3 | Duplicate warnings; finn.no link; service fields appear at once at arrival |
+| 0.9.4 | Dates as `dd.mm.yyyy` (+ `HH:mm`); frontend `Cache-Control: no-cache` |
+| 0.10.0 | **Test drive** page (customer, licence photo, items, return check, trash after return); name from the licence photo |
+| 0.10.1 | Licence names: dropped spaces restored from the photo |
+| 0.10.2 | Per-build JS/CSS URLs (Opera Touch "Not found" fix); all SVV VIN locations shown |
+| 0.10.3 | Settings: "Recently deleted" sentence no longer split into columns |
+| 0.10.4 | Transport-sheet QR verified; raw barcode text returned |
+| 0.11.0 | **Login** with personal PIN; all API behind login; privacy notice + "customer informed"; licence access log |
+| 0.12.0 | **PDI orders** to RBV; **Today board** as start page; Arrivals moved; **System page** (system admin settings); no built-in e-mail addresses |
+| 0.12.1 | Storage spots can be renamed and deleted (cars moved first) |
+| 0.12.2 | Fix: System page / PDI card printed "[object HTMLElement]" / "null" |
+| 0.13.0 | **Storage maintenance** for new cars (MG SI-GI2022102501) with printable report; dealer number setting |
+| 0.13.1 | Storage checks can be cancelled by an admin (struck through in the report) |
 | 0.13.2 | "Enter PDI date" available before the order is sent |
-| 0.13.1 | Storage checks can be cancelled by an admin with a reason (kept struck through in the report) |
-| 0.13.0 | **Storage maintenance** for new cars (MG SI-GI2022102501): arrival + monthly/3/6-month checks, 12V/SOC/tyre rules, Today reminders, printable report; dealer number setting |
-| 0.12.2 | Fix: System page and PDI card printed "[object HTMLElement]" / "null" (native `append` again) |
-| 0.12.1 | Storage spots can be renamed and deleted (cars moved to another spot first) |
-| 0.12.0 | **PDI orders** to RBV (items, tyres, editable lists, e-mail via SMTP or e-mail app, manual booking date); **Today board** as start page; Arrivals moved to `#/arrivals`; **System page** (system admin) to change server settings incl. SVV key and SMTP; no built-in e-mail addresses |
-| 0.11.0 | **Login** with personal PIN (first-time setup → admin; admins manage PINs); all API behind login; test drive privacy notice (NO) + "customer informed" checkbox; licence access log; `PRIVACY_COMPANY`/`PRIVACY_CONTACT` env |
+| 0.13.3 | Own dd.mm.yyyy / 24 h date & time inputs; km in Norwegian number format |
+| 0.14.0 | **English / Norwegian** per user; "super-admin" → "System admin"; Sprutlapper → Skvettlapper, PDI item → Nybilklargjøring |
+| 0.14.1 | Translator: icon headings and "by …" texts translated (most specific pattern first) |
+| 0.14.2 | Zones removed (moved into description); description editable in place |
+| 0.14.3 | Vehicles: New/used filter, result count, filters in the address; search box width fixed |
+| 0.14.4 | Printing without browser header/footer; privacy notice signature / date / name lines |
+| 0.14.5 | Customer phone, e-mail and postal address as separate settings / lines on the privacy notice |
 
 **Next / ideas (not started):**
-- HTTPS (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the cookie.
-- Encrypted, expiring backups of the DB and `data/photos`.
-- FINN import with image checkboxes. Blocked on official FINN API access or an ad-system feed.
-- Automated tests: pytest for `vinlib` (VIN rules, plate parsing, an OCR photo set) and `common.service_due`.
-- Part 2 of the lifecycle (after storage: preparation and sale) has not been defined yet.
+- **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
+  cookie.
+- **Encrypted, expiring backups** of the DB and `data/photos`.
+- **PDI replies:** read RBV's replies automatically (IMAP), or a booking link if the networks
+  are connected.
+- **FINN import** with image checkboxes (needs the FINN API or an ad-system feed).
+- **Automated tests:** pytest for `vinlib`, `licenselib`, `storagecare`, `service_due`.
+- **Part 2 of the lifecycle** (preparation and sale) has not been defined yet.
