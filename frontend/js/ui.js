@@ -420,6 +420,10 @@ export const pill = (status) => h('span', { class: `pill st-${status}` }, STATUS
 export const vehicleTitle = (v) =>
   [v.make, v.model, v.model_year && `(${v.model_year})`].filter(Boolean).join(' ') || 'Unknown vehicle';
 
+/** PDI done and the car hasn't left (server: common.READY_SQL). */
+export const readyBadge = (v) => (v.ready_for_delivery
+  ? h('span', { class: 'badge good' }, '✓ Ready for registration and delivery') : null);
+
 /** "MG ZS EV (2020) · EB82655" */
 export const carText = (c) => [vehicleTitle(c), c.registration_number].filter(Boolean).join(' · ');
 

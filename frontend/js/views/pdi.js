@@ -257,7 +257,11 @@ function bookingDialog(o, done) {
 
 async function doneOrder(o, done) {
   if (!confirm('Mark the PDI as done?')) return;
-  try { await api.post(`/pdi/${o.id}/done`); toast('PDI marked as done', 'success'); await done(); } catch (e) { showError(e); }
+  try {
+    await api.post(`/pdi/${o.id}/done`);
+    toast('PDI done – the car is ready for registration and delivery', 'success');
+    await done();
+  } catch (e) { showError(e); }
 }
 
 async function cancelOrder(o, done) {

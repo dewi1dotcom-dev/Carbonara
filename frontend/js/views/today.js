@@ -62,7 +62,8 @@ export async function todayView(el) {
       tile(n.in_storage, 'In storage', '#/storage'),
       tile(n.free_places, 'Free places', '#/storage'),
       tile(n.arrived_this_week, 'Arrived this week', '#/arrivals'),
-      tile(n.pdi_this_week, 'PDIs this week', '#/pdi')));
+      tile(n.pdi_this_week, 'PDIs this week', '#/pdi'),
+      tile(n.ready_for_delivery, 'Ready for registration and delivery', '#/vehicles?status=ready')));
 }
 
 function tile(value, label, href) {

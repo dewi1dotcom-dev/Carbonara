@@ -4,7 +4,7 @@ what needs attention, and a few numbers. One request, small queries."""
 from fastapi import APIRouter, Depends
 
 from .. import vegvesen
-from ..common import service_due
+from ..common import READY_SQL, service_due
 from ..db import get_conn
 from .pdi import ORDER_SELECT, THIS_WEEK_SQL
 from .storage_care import programme
@@ -80,7 +80,8 @@ def dashboard(conn=Depends(get_conn)):
               (SELECT count(*) FROM inspections WHERE status = 'completed'
                 AND completed_at >= date_trunc('week', now() AT TIME ZONE 'Europe/Oslo') AT TIME ZONE 'Europe/Oslo') AS arrived_this_week,
               (SELECT count(*) FROM pdi_orders o JOIN vehicles v ON v.id = o.vehicle_id
-                WHERE {THIS_WEEK_SQL} AND v.deleted_at IS NULL) AS pdi_this_week"""
+                WHERE {THIS_WEEK_SQL} AND v.deleted_at IS NULL) AS pdi_this_week,
+              (SELECT count(*) FROM vehicles v WHERE v.deleted_at IS NULL AND {READY_SQL}) AS ready_for_delivery"""
     ).fetchone()
 
     return {

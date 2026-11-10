@@ -410,6 +410,11 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   unsent. A booked but unsent order shows a warning and stays under "not sent yet" on Today.
   RBV can't reach the server. Reading replies (IMAP) or a booking link are possible later.
 - **Reminder:** only on Today, the day before ("make the car ready").
+- **Ready for registration and delivery (0.15.1):** after "✓ PDI done", the car shows a green
+  "✓ Ready for registration and delivery" badge (vehicle header + Vehicles list) until it is
+  taken off site (delivered). It is **derived** (`common.READY_SQL`: a done PDI order and status
+  ≠ off_site), not a `vehicles.status` value, because status means *where* the car is and the
+  storage counts depend on it. Vehicles filter `status=ready`; Today tile links there.
 - **Finding PDI cars (0.15.0):**
   - Vehicle page: a banner at the top while an order is open ("PDI booked dd.mm.yyyy HH:mm", or
     ordered / not sent), with "See order" (scrolls to the card) and "All PDIs".
@@ -630,6 +635,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.14.5 | Customer phone, e-mail and postal address as separate settings / lines on the privacy notice |
 | 0.14.6 | Today board: details always on their own line under the car |
 | 0.15.0 | **PDI page** (`#/pdi`, from the "PDIs this week" tile); PDI banner on the vehicle page and badge in the Vehicles list; storage "Arrival check" renamed **First storage check** and made a required step of the arrival inspection for factory-new cars |
+| 0.15.1 | "Ready for registration and delivery" after the PDI is done (badge, Vehicles filter, Today tile) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

@@ -3,14 +3,15 @@ import { pdiBanner, pdiCard } from './pdi.js';
 import { storageCard } from './storagecare.js';
 import {
   api, append, badge, busy, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
-  regStatus, showError, spotLabel, STATUS,
+  readyBadge, regStatus, showError, spotLabel, STATUS,
   toast, vehicleTitle, viewPhoto,
 } from '../ui.js';
 
 export async function vehiclesView(el) {
   const search = h('input', { type: 'search', placeholder: 'Search VIN, make, model, reg. no or spot…' });
   const statusSel = h('select', { 'aria-label': 'Status' }, h('option', { value: '' }, 'All statuses'),
-    ['intake', 'in_storage', 'off_site'].map((s) => h('option', { value: s }, STATUS[s])));
+    ['intake', 'in_storage', 'off_site'].map((s) => h('option', { value: s }, STATUS[s])),
+    h('option', { value: 'ready' }, 'Ready for registration and delivery'));
   const conditionSel = h('select', { 'aria-label': 'New or used' }, h('option', { value: '' }, 'New and used'),
     h('option', { value: 'new' }, 'Factory new cars'), h('option', { value: 'used' }, 'Used cars'),
     h('option', { value: 'unset' }, 'New/used not chosen'));
@@ -59,6 +60,7 @@ export function vehicleCard(v, extra = null) {
       h('div', { class: 'list-title' }, vehicleTitle(v), ' ', pill(v.status)),
       h('div', { class: 'vin mono' }, v.vin),
       h('div', { class: 'badges' },
+        readyBadge(v),
         badge(regStatus(v.registered_marked_at, v.registration_status_code, v.registration_status)),
         eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null,
         svc && svc.cls !== 'good' ? badge(svc) : null,
@@ -688,7 +690,7 @@ export async function vehicleView(el, [id]) {
           ? h('div', { class: 'reg-big mono' }, v.registration_number)
           : h('div', { class: 'reg-big none' }, 'No reg. no'),
         h('div', { class: 'vin mono big' }, v.vin)),
-      h('div', { class: 'head-side' }, pill(v.status),
+      h('div', { class: 'head-side' }, pill(v.status), readyBadge(v),
         // Visual hint: the car is advertised (on the website, via finn.no)
         v.finn_code ? finnLink(v.finn_code, 'finn.no ↗') : null)),
     duplicateNotice(v.possible_duplicates),

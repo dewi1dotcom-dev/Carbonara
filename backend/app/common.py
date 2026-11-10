@@ -197,6 +197,13 @@ def purge_test_drive_customer(conn, drive_id: int) -> dict | None:
 
 
 # Returned test drives whose customer details have been in the trash for TRASH_DAYS.
+# "Ready for registration and delivery": the PDI is done and the car hasn't
+# left yet. Derived, not a vehicles.status value, because status says where the
+# car is (storage counts and lists depend on it). Needs the vehicles alias "v".
+READY_SQL = """(v.status <> 'off_site'
+    AND EXISTS (SELECT 1 FROM pdi_orders rp WHERE rp.vehicle_id = v.id AND rp.status = 'done'))"""
+
+
 TEST_DRIVE_PURGE_DUE_SQL = """
     SELECT id, vehicle_id FROM test_drives
      WHERE customer_purged_at IS NULL

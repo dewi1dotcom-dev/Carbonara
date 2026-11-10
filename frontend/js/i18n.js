@@ -165,6 +165,8 @@ const NO = {
   'PDI order started – not sent to the workshop yet': 'Bestilling av nybilklargjøring påbegynt – ikke sendt til verkstedet ennå',
   'The order list has not been sent to the workshop yet.': 'Bestillingen er ikke sendt til verkstedet ennå.', 'See order': 'Se bestillingen',
   'All PDIs': 'Alle nybilklargjøringer', 'PDI ordered': 'Nybilklargjøring bestilt', 'PDI not sent': 'Bestilling ikke sendt',
+  'Ready for registration and delivery': 'Klar for registrering og levering',
+  'PDI done – the car is ready for registration and delivery': 'Nybilklargjøring utført – bilen er klar for registrering og levering',
   // ---- arrivals / intake / inspection
   'New arrival': 'Ny ankomst', 'No arrival inspections in progress.': 'Ingen pågående mottakskontroller.', 'Recently placed in storage': 'Nylig plassert på lager',
   'Nothing yet.': 'Ingenting ennå.', 'Select inspector…': 'Velg kontrollør…', 'Select staff…': 'Velg ansatt…', 'Inspector': 'Kontrollør',

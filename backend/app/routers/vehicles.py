@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 
 from .. import photostore, vegvesen, vinlib
-from ..common import (RETENTION_DUE_SQL, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
+from ..common import (READY_SQL, RETENTION_DUE_SQL, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
                       place_in_location, purge_vehicle, service_due, similar_vehicles, soft_delete_vehicle,
                       update_row)
 from ..config import settings
@@ -80,11 +80,12 @@ def registry_lookup(vin: Optional[str] = None, regnr: Optional[str] = None, conn
 def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, condition: Optional[str] = None,
                   limit: int = 100, conn=Depends(get_conn)):
     # condition: 'new' (factory new), 'used', or 'unset' (not chosen yet)
+    # status: a vehicles.status value, or 'ready' (ready for registration and delivery)
     term = f"%{q.strip()}%" if q and q.strip() else None
     # Reg. numbers are stored without spaces, so "EB 82655" must find "EB82655".
     regterm = f"%{vegvesen.normalize_regnr(q)}%" if q and vegvesen.normalize_regnr(q) else None
     rows = conn.execute(
-        """SELECT v.*, l.code AS location_code, l.zone AS location_zone,
+        f"""SELECT v.*, l.code AS location_code, l.zone AS location_zone, {READY_SQL} AS ready_for_delivery,
                   r.sync_status AS registry_status, r.eu_control_due,
                   r.registration_status,
                   coalesce(r.first_registered, r.first_registered_norway) AS first_registered,
@@ -97,7 +98,8 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
              LEFT JOIN storage_spots l ON l.id = a.location_id
              LEFT JOIN vehicle_registry r ON r.vehicle_id = v.id
             WHERE v.deleted_at IS NULL
-              AND (%(status)s::text IS NULL OR v.status = %(status)s)
+              AND (%(status)s::text IS NULL OR v.status = %(status)s
+                   OR (%(status)s = 'ready' AND {READY_SQL}))
               AND (%(condition)s::text IS NULL OR v.condition = %(condition)s
                    OR (%(condition)s = 'unset' AND v.condition IS NULL))
               AND (%(term)s::text IS NULL
@@ -116,7 +118,8 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
 
 @router.get("/vehicles/{vehicle_id}")
 def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
-    vehicle = conn.execute("SELECT * FROM vehicles WHERE id = %s AND deleted_at IS NULL", (vehicle_id,)).fetchone()
+    vehicle = conn.execute(f"SELECT v.*, {READY_SQL} AS ready_for_delivery FROM vehicles v WHERE v.id = %s AND v.deleted_at IS NULL",
+                           (vehicle_id,)).fetchone()
     if not vehicle:
         raise not_found("Vehicle")
     location = conn.execute(
