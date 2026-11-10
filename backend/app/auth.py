@@ -26,8 +26,8 @@ LOCK_MINUTES = 15
 PIN_MIN, PIN_MAX = 4, 8
 
 # Columns that are safe to send to the browser (never pin_hash).
-STAFF_PUBLIC = ("id, name, active, is_admin, is_superadmin, language, created_at, last_login_at, "
-                "(pin_hash IS NOT NULL) AS has_pin")
+STAFF_PUBLIC = ("id, name, first_name, last_name, phone, active, is_admin, is_superadmin, language, created_at, "
+                "last_login_at, (pin_hash IS NOT NULL) AS has_pin")
 
 
 def valid_pin(pin: str) -> bool:

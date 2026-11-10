@@ -425,6 +425,22 @@ export const vehicleTitle = (v) =>
 export const readyBadge = (v) => (v.ready_for_delivery
   ? h('span', { class: 'badge good' }, '✓ Ready for registration and delivery') : null);
 
+/** 'anne-lise berg' -> 'Anne-Lise Berg' (the server does the same). The rest is kept as typed. */
+export const capName = (s) => String(s ?? '').replace(/(^|[\s-])(\p{Ll})/gu, (_, sep, ch) => sep + ch.toUpperCase());
+
+/** A text input for a person's name that capitalizes as you type. */
+export function nameInput(attrs = {}) {
+  const input = h('input', { type: 'text', autocapitalize: 'words', autocomplete: 'off', ...attrs });
+  input.addEventListener('input', () => {
+    const fixed = capName(input.value);
+    if (fixed === input.value) return;
+    const pos = input.selectionStart; // same length, so the cursor can stay put
+    input.value = fixed;
+    input.setSelectionRange(pos, pos);
+  });
+  return input;
+}
+
 /** "MG ZS EV (2020) · EB82655" */
 export const carText = (c) => [vehicleTitle(c), c.registration_number].filter(Boolean).join(' · ');
 

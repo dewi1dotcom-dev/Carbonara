@@ -1,5 +1,7 @@
 import datetime as dt
 import json
+import re
+from typing import Optional
 
 from fastapi import HTTPException
 from psycopg import sql
@@ -40,6 +42,21 @@ def update_row(conn, table: str, row_id: int, fields: dict, key: str = "id"):
         sql.Identifier(key),
     )
     return conn.execute(query, [*fields.values(), row_id]).fetchone()
+
+
+def cap_name(raw: Optional[str]) -> str:
+    """'anne-lise  berg' -> 'Anne-Lise Berg': first letter, and the letter after a
+    space or '-', in uppercase; the rest is kept as typed (so 'McDonald' stays)."""
+    s = " ".join((raw or "").split())
+    return re.sub(r"(^|[\s-])(\w)", lambda m: m.group(1) + m.group(2).upper(), s)
+
+
+def clean_phone(raw: Optional[str]) -> str:
+    """Keep + and digits; Norwegian numbers have 8 digits, foreign ones more."""
+    phone = re.sub(r"[\s\-().]", "", raw or "")
+    if not re.fullmatch(r"\+?\d{8,15}", phone):
+        raise bad_request("Phone number: 8–15 digits, optionally starting with +")
+    return phone
 
 
 def check_staff(conn, staff_id) -> None:

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field
 
 from .. import auth
+from ..common import cap_name
 from ..db import get_conn
 
 log = logging.getLogger("carbonara.session")
@@ -97,7 +98,12 @@ def setup(body: SetupIn, request: Request, response: Response, conn=Depends(get_
             raise HTTPException(404, "Staff member not found")
         staff_id = staff["id"]
     elif body.name and body.name.strip():
-        staff_id = conn.execute("INSERT INTO staff (name) VALUES (%s) RETURNING id", (body.name.strip(),)).fetchone()["id"]
+        # One name field at setup: first word = first name, the rest = last name
+        # (phone is added later under Settings → Staff).
+        name = cap_name(body.name)
+        first, _, last = name.partition(" ")
+        staff_id = conn.execute("INSERT INTO staff (name, first_name, last_name) VALUES (%s, %s, %s) RETURNING id",
+                                (name, first, last or None)).fetchone()["id"]
     else:
         raise HTTPException(422, "Choose your name, or type it in")
     conn.execute("UPDATE staff SET pin_hash = %s, is_admin = true, is_superadmin = true, last_login_at = now() "

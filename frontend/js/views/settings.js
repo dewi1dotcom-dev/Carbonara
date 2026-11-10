@@ -1,4 +1,4 @@
-import { api, busy, fmtDate, h, openDialog, session, showError, spotLabel, toast } from '../ui.js';
+import { api, busy, fmtDate, h, nameInput, openDialog, session, showError, spotLabel, toast } from '../ui.js';
 
 export async function settingsView(el) {
   const staffBox = h('div');
@@ -163,13 +163,15 @@ export async function settingsView(el) {
     const staff = await api.get('/staff?include_inactive=true');
     const me = session.me;
     const admin = !!me?.is_admin;
-    const name = h('input', { type: 'text', placeholder: 'Name', required: true, maxlength: 100 });
+    const first = nameInput({ placeholder: 'First name', required: true, maxlength: 60 });
+    const last = nameInput({ placeholder: 'Last name', required: true, maxlength: 60 });
+    const phone = h('input', { type: 'tel', placeholder: 'Phone number', required: true, maxlength: 20, inputmode: 'tel', autocomplete: 'off' });
     const addBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Add');
-    const form = h('form', { class: 'inline-form' }, name, addBtn);
+    const form = h('form', { class: 'inline-form wrap' }, first, last, phone, addBtn);
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       busy(addBtn, async () => {
-        const s = await api.post('/staff', { name: name.value });
+        const s = await api.post('/staff', { first_name: first.value, last_name: last.value, phone: phone.value });
         await renderStaff();
         pinDialog(s); // a new person needs a PIN to log in
       });
@@ -177,7 +179,9 @@ export async function settingsView(el) {
     const patch = async (s, body) => {
       try { await api.patch(`/staff/${s.id}`, body); await renderStaff(); } catch (e) { showError(e); }
     };
+    const missing = (s) => [!s.last_name && 'last name', !s.phone && 'phone'].filter(Boolean);
     const actions = (s) => (!admin ? null : h('span', { class: 'row-actions' },
+      h('button', { class: 'link', type: 'button', onClick: () => editDialog(s) }, 'Edit'),
       h('button', { class: 'link', type: 'button', onClick: () => pinDialog(s) }, s.has_pin ? 'Reset PIN' : 'Set PIN'),
       s.id === me.id ? null : h('button', { class: 'link', type: 'button', onClick: () => patch(s, { is_admin: !s.is_admin }) },
         s.is_admin ? 'Remove admin' : 'Make admin'),
@@ -189,7 +193,20 @@ export async function settingsView(el) {
         },
       }, s.is_superadmin ? 'Remove system admin' : 'Make system admin'),
       s.id === me.id ? null : h('button', { class: 'link', type: 'button', onClick: () => patch(s, { active: !s.active }) },
-        s.active ? 'Deactivate' : 'Activate')));
+        s.active ? 'Deactivate' : 'Activate'),
+      // Only after deactivating. History keeps their name (see delete_staff).
+      !s.active && s.id !== me.id ? h('button', {
+        class: 'link danger', type: 'button',
+        onClick: async () => {
+          if (!confirm(`Delete ${s.name}?\n\nThey are removed from the staff list and their phone number and PIN are deleted. `
+            + 'Their name stays on the history they are part of (inspections, storage checks…). This cannot be undone.')) return;
+          try {
+            await api.del(`/staff/${s.id}`);
+            toast(`${s.name} deleted`, 'success');
+            await renderStaff();
+          } catch (e) { showError(e); }
+        },
+      }, 'Delete') : null));
 
     staffBox.replaceChildren(h('section', { class: 'card' },
       h('h2', {}, 'Staff / inspectors'),
@@ -199,10 +216,35 @@ export async function settingsView(el) {
       h('ul', { class: 'plain rows' }, staff.map((s) => h('li', { class: s.active ? '' : 'inactive' },
         h('span', {}, s.name, s.id === me?.id ? ' (you)' : '', s.active ? '' : ' (inactive)', ' ',
           s.is_superadmin ? h('span', { class: 'badge good' }, 'System admin') : s.is_admin ? h('span', { class: 'badge' }, 'Admin') : null, ' ',
-          s.active && !s.has_pin ? h('span', { class: 'badge warn' }, 'No PIN — can’t log in') : null,
+          s.active && !s.has_pin ? h('span', { class: 'badge warn' }, 'No PIN — can’t log in') : null, ' ',
+          missing(s).length ? h('span', { class: 'badge warn' }, `Missing: ${missing(s).join(', ')}`) : null,
+          s.phone ? h('span', { class: 'small block' }, h('a', { href: `tel:${s.phone}` }, s.phone)) : null,
           s.last_login_at ? h('span', { class: 'muted small block' }, `Last login ${fmtDate(s.last_login_at)}`) : null),
         actions(s)))),
       admin ? form : null));
+
+    function editDialog(s) {
+      const fn = nameInput({ id: 'ed-first', required: true, maxlength: 60, value: s.first_name ?? '' });
+      const ln = nameInput({ id: 'ed-last', required: true, maxlength: 60, value: s.last_name ?? '' });
+      const ph = h('input', { type: 'tel', id: 'ed-phone', required: true, maxlength: 20, inputmode: 'tel', value: s.phone ?? '' });
+      const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
+      const f = h('form', {},
+        h('div', { class: 'grid' },
+          h('div', { class: 'field' }, h('label', { for: 'ed-first' }, 'First name'), fn),
+          h('div', { class: 'field' }, h('label', { for: 'ed-last' }, 'Last name'), ln),
+          h('div', { class: 'field' }, h('label', { for: 'ed-phone' }, 'Phone number'), ph)),
+        h('div', { class: 'actions' }, save));
+      f.addEventListener('submit', (e) => {
+        e.preventDefault();
+        busy(save, async () => {
+          await api.patch(`/staff/${s.id}`, { first_name: fn.value, last_name: ln.value, phone: ph.value });
+          close();
+          toast('Saved', 'success');
+          await renderStaff();
+        });
+      });
+      const { close } = openDialog(`Edit ${s.name}`, f);
+    }
 
     function pinDialog(s) {
       const pin = h('input', { type: 'password', id: 'set-pin', inputmode: 'numeric', pattern: '[0-9]*', minlength: 4, maxlength: 8, required: true, autocomplete: 'new-password' });

@@ -25,11 +25,15 @@ class _Clean(BaseModel):
 
 
 class StaffIn(_Clean):
-    name: str = Field(min_length=1, max_length=100)
+    first_name: str = Field(min_length=1, max_length=60)
+    last_name: str = Field(min_length=1, max_length=60)
+    phone: str = Field(min_length=1, max_length=20)
 
 
 class StaffPatch(_Clean):
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    first_name: Optional[str] = Field(None, min_length=1, max_length=60)
+    last_name: Optional[str] = Field(None, min_length=1, max_length=60)
+    phone: Optional[str] = Field(None, min_length=1, max_length=20)
     active: Optional[bool] = None
     is_admin: Optional[bool] = None
     is_superadmin: Optional[bool] = None

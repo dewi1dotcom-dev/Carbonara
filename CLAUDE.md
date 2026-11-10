@@ -180,7 +180,7 @@ backend/
                         test drive customer purge)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives,
                         session (login/language), pdi, dashboard (Today), system, storage_care
-  migrations/           001…020
+  migrations/           001…021
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
@@ -216,6 +216,7 @@ frontend/               no build step; plain ES modules
 | 018 | `trade_plates` | `trade_plates`; `test_drives.trade_plate_id / plate_moved_at / plate_moved_to` |
 | 019 | `pdi_print` | `pdi_orders.sent_via` also allows `'print'` |
 | 020 | `pdi_prep` | `pdi_orders.prep_plate_id / prep_note / prep_wheels_location / prepared_at / prepared_by` |
+| 021 | `staff_names` | `staff.first_name / last_name / phone / deleted_at / deleted_by`; existing names split |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -385,6 +386,22 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   4d, the national identity number (fødselsnummer), for secure identification to the police,
   SVV, toll companies and insurers (personopplysningsloven § 12). The notice says so. Do
   **not** mask it unless the user asks.
+
+**Staff records (0.19.0)** (`routers/admin.py`, Settings → Staff):
+- **First name, last name, phone** (all required when adding or editing). `staff.name` is still
+  stored as "First Last" and is what every join, picker and the login list uses; don't build
+  names from the parts elsewhere. Existing staff were split (first word / rest) and show
+  "Missing: last name, phone" until edited.
+- **Auto-capitalize:** `common.cap_name` (server) and `capName` / `nameInput()` (`ui.js`,
+  while typing) uppercase the first letter and the letter after a space or "-"; the rest is
+  kept as typed ("McDonald"). Use `nameInput()` for any new person-name field.
+- Phone numbers go through `common.clean_phone` (shared with test drives): 8–15 digits,
+  optional +.
+- **Delete** (admins, only after deactivating, never yourself; a system admin only by a system
+  admin): `DELETE /staff/{id}` tries a real delete in a savepoint. If any row refers to the
+  person (`ForeignKeyViolation`), it sets `deleted_at` instead and wipes phone, PIN and rights,
+  so the name stays on the history they signed (storage checks are warranty evidence).
+  Deleted staff are never listed.
 
 **Roles:**
 - **Staff:** everything day-to-day.
@@ -685,6 +702,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.16.1 | "Sync now" with Statens vegvesen on every car (header of the SVV card); auto-marks registered cars |
 | 0.17.0 | PDI order: **print or save as PDF** instead of e-mail (Norwegian order sheet) |
 | 0.18.0 | In-app Yes/No "given to the workshop?" with PDI date; **PDI preparation** (trade plates, spot + message, winter wheels) with a notification bar the working day before |
+| 0.19.0 | Staff: first name, last name, phone; names auto-capitalized; deactivated staff can be deleted (history keeps the name) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

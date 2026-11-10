@@ -1,7 +1,7 @@
 // Login with a personal PIN. On first start (nobody has a PIN yet) the same
 // screen sets up the first administrator.
 import { lang, setLang } from '../i18n.js';
-import { api, busy, h, setInspectorId, showError } from '../ui.js';
+import { api, busy, h, nameInput, setInspectorId, showError } from '../ui.js';
 
 const LAST_USER_KEY = 'carbonara.lastLogin';
 const lastUser = () => { try { return localStorage.getItem(LAST_USER_KEY) || ''; } catch { return ''; } };
@@ -14,7 +14,7 @@ export function loginView(el, state, onDone) {
     h('option', { value: '' }, setup ? 'Choose your name…' : 'Who are you?'),
     state.staff.map((s) => h('option', { value: s.id }, s.name)));
   who.value = state.staff.some((s) => String(s.id) === lastUser()) ? lastUser() : '';
-  const newName = h('input', { type: 'text', id: 'login-name', maxlength: 100, placeholder: 'Your name' });
+  const newName = nameInput({ id: 'login-name', maxlength: 100, placeholder: 'First and last name' });
   const pin = h('input', {
     type: 'password', id: 'login-pin', inputmode: 'numeric', pattern: '[0-9]*', autocomplete: setup ? 'new-password' : 'current-password',
     minlength: 4, maxlength: 8, required: true, placeholder: '••••',

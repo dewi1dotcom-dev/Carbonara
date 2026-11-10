@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg import errors
 
 from ..auth import PIN_MAX, PIN_MIN, STAFF_PUBLIC, hash_pin, require_admin, valid_pin
-from ..common import (bad_request, conflict, insert_row, log_event, not_found, patch_fields, place_in_location,
-                      update_row)
+from ..common import (bad_request, cap_name, clean_phone, conflict, insert_row, log_event, not_found, patch_fields,
+                      place_in_location, update_row)
 from ..db import get_conn
 from ..schemas import LocationIn, LocationPatch, PinSetIn, StaffIn, StaffPatch
 
@@ -22,21 +22,68 @@ def _public_staff(conn, staff_id: int):
 
 @router.get("/staff")
 def list_staff(include_inactive: bool = False, conn=Depends(get_conn)):
-    # Never SELECT *: the PIN hash must not leave the server.
+    # Never SELECT *: the PIN hash must not leave the server. Deleted staff
+    # (kept only for the history they signed) are never listed.
     return conn.execute(
-        f"SELECT {STAFF_PUBLIC} FROM staff WHERE %s OR active ORDER BY active DESC, name", (include_inactive,)
+        f"SELECT {STAFF_PUBLIC} FROM staff WHERE deleted_at IS NULL AND (%s OR active) ORDER BY active DESC, name",
+        (include_inactive,),
     ).fetchall()
+
+
+def _names(first: str, last: str) -> dict:
+    first, last = cap_name(first), cap_name(last)
+    if not first or not last:
+        raise bad_request("First and last name are required")
+    return {"first_name": first, "last_name": last, "name": f"{first} {last}"}
 
 
 @router.post("/staff", status_code=201)
 def create_staff(body: StaffIn, conn=Depends(get_conn), _admin=Depends(require_admin)):
-    row = insert_row(conn, "staff", {"name": body.name})
+    row = insert_row(conn, "staff", {**_names(body.first_name, body.last_name), "phone": clean_phone(body.phone)})
     return _public_staff(conn, row["id"])
+
+
+@router.delete("/staff/{staff_id}")
+def delete_staff(staff_id: int, conn=Depends(get_conn), admin=Depends(require_admin)):
+    """Delete a deactivated staff member. Removed for good if nothing refers to
+    them; otherwise hidden from the list with phone and PIN wiped, and the name
+    kept on the history they are part of (inspections, storage checks…)."""
+    target = conn.execute("SELECT * FROM staff WHERE id = %s AND deleted_at IS NULL FOR UPDATE", (staff_id,)).fetchone()
+    if not target:
+        raise not_found("Staff member")
+    if target["active"]:
+        raise conflict("Deactivate the staff member before deleting them")
+    if staff_id == admin["id"]:
+        raise bad_request("You can't delete yourself")
+    if target["is_superadmin"] and not admin["is_superadmin"]:
+        raise HTTPException(403, "Only a system admin can change another system admin")
+    conn.execute("DELETE FROM sessions WHERE staff_id = %s", (staff_id,))
+    try:
+        with conn.transaction():  # savepoint: a reference anywhere makes this fail
+            conn.execute("DELETE FROM staff WHERE id = %s", (staff_id,))
+        return {"result": "removed"}
+    except errors.ForeignKeyViolation:
+        pass
+    conn.execute(
+        """UPDATE staff SET deleted_at = now(), deleted_by = %s, phone = NULL, pin_hash = NULL,
+                  pin_failures = 0, pin_locked_until = NULL, is_admin = false, is_superadmin = false
+            WHERE id = %s""",
+        (admin["id"], staff_id),
+    )
+    return {"result": "hidden"}
 
 
 @router.patch("/staff/{staff_id}")
 def patch_staff(staff_id: int, body: StaffPatch, conn=Depends(get_conn), admin=Depends(require_admin)):
-    fields = patch_fields(body, ("name", "active", "is_admin", "is_superadmin"))
+    fields = patch_fields(body, ("first_name", "last_name", "phone", "active", "is_admin", "is_superadmin"))
+    current = conn.execute("SELECT first_name, last_name FROM staff WHERE id = %s AND deleted_at IS NULL",
+                           (staff_id,)).fetchone()
+    if not current:
+        raise not_found("Staff member")
+    if "first_name" in fields or "last_name" in fields:
+        fields |= _names(fields.get("first_name", current["first_name"]), fields.get("last_name", current["last_name"]))
+    if "phone" in fields:
+        fields["phone"] = clean_phone(fields["phone"])
     if "is_superadmin" in fields and not admin["is_superadmin"]:
         raise HTTPException(403, "Only a system admin can give or remove system admin")
     target = conn.execute("SELECT is_superadmin FROM staff WHERE id = %s", (staff_id,)).fetchone()

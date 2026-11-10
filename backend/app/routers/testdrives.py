@@ -4,7 +4,6 @@ returned and are wiped for good after TRASH_DAYS (see sync_worker)."""
 
 import json
 import logging
-import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
@@ -14,7 +13,7 @@ from pydantic import BaseModel, Field
 
 from .. import licenselib, photostore
 from ..auth import require_admin
-from ..common import (bad_request, check_staff, conflict, insert_row, log_event, not_found,
+from ..common import (bad_request, check_staff, clean_phone, conflict, insert_row, log_event, not_found,
                       purge_test_drive_customer)
 from ..config import settings
 from ..db import get_conn
@@ -73,14 +72,6 @@ def _items(raw: Optional[str], what: str) -> list[str]:
         if item and item not in out:
             out.append(item)
     return out
-
-
-def _phone(raw: str) -> str:
-    """Keep + and digits; Norwegian numbers have 8 digits, foreign ones more."""
-    phone = re.sub(r"[\s\-().]", "", raw or "")
-    if not re.fullmatch(r"\+?\d{8,15}", phone):
-        raise bad_request("Phone number: 8–15 digits, optionally starting with +")
-    return phone
 
 
 def _drive(conn, drive_id: int) -> dict:
@@ -214,7 +205,7 @@ def start_test_drive(
     name = (customer_name or "").strip()
     if not 2 <= len(name) <= 120:
         raise bad_request("Customer name is required")
-    phone = _phone(customer_phone)
+    phone = clean_phone(customer_phone)
     if odometer_out is not None and not 0 <= odometer_out <= 2_000_000:
         raise bad_request("Odometer reading is not valid")
     removed, added = _items(removed_items, "Removed items"), _items(added_items, "Added items")

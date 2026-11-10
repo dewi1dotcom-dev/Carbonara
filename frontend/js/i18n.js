@@ -176,6 +176,12 @@ const NO = {
     'Skriv ut bestillingen til verkstedet, eller velg «Lagre som PDF» i utskriftsvinduet for å sende eller lagre den som fil.',
   'Did you give the order to the workshop (printed or as a PDF)?': 'Har du gitt bestillingen til verkstedet (utskrift eller PDF)?',
   'Marked as given to the workshop': 'Merket som levert til verkstedet', 'Choose who to send it to': 'Velg hvem den skal sendes til',
+  // staff
+  'First name': 'Fornavn', 'Last name': 'Etternavn', 'First and last name': 'Fornavn og etternavn', 'Saved': 'Lagret',
+  'last name': 'etternavn', 'phone': 'telefon', 'last name, phone': 'etternavn, telefon',
+  'First and last name are required': 'Fornavn og etternavn må fylles ut',
+  'Deactivate the staff member before deleting them': 'Deaktiver den ansatte før du sletter vedkommende',
+  "You can't delete yourself": 'Du kan ikke slette deg selv',
   // PDI: given? / preparation / notification
   'Yes': 'Ja', 'No': 'Nei', 'Order given to the workshop?': 'Bestilling levert til verkstedet?', 'PDI date (optional)': 'Dato for nybilklargjøring (valgfritt)',
   'Fill in if the workshop has already given a date and time.': 'Fyll ut hvis verkstedet allerede har gitt dato og klokkeslett.',
@@ -510,6 +516,9 @@ const NO_PATTERNS = [
   ['Sent {} to {} by {} (e-mail app)', 'Sendt {1} til {2} av {3} (e-postprogram)'], ['Sent {} to {} by {}', 'Sendt {1} til {2} av {3}'], ['Sent {} to {} (e-mail app)', 'Sendt {1} til {2} (e-postprogram)'],
   ['Sent {} to {}', 'Sendt {1} til {2}'], ['Sent to {}', 'Sendt til {1}'], ['PDI done {} ({})', 'Nybilklargjøring utført {1} ({2})'], ['PDI done {}', 'Nybilklargjøring utført {1}'],
   ['PDI booked {}', 'Nybilklargjøring booket {1}'],
+  ['Missing: {}', 'Mangler: {1t}'], ['Edit {}', 'Endre {1}'],
+  ['Delete {}?\n\nThey are removed from the staff list and their phone number and PIN are deleted. Their name stays on the history they are part of (inspections, storage checks…). This cannot be undone.',
+    'Slette {1}?\n\nVedkommende fjernes fra listen over ansatte, og telefonnummer og PIN-kode slettes. Navnet blir stående i historikken vedkommende er en del av (kontroller, lagerkontroller…). Dette kan ikke angres.'],
   ['PDI today at {}', 'Nybilklargjøring i dag kl. {1}'], ['PDI tomorrow at {}', 'Nybilklargjøring i morgen kl. {1}'], ['PDI {} at {}', 'Nybilklargjøring {1} kl. {2}'],
   ['✓ Prepared for the PDI {} by {}', '✓ Klargjort til nybilklargjøring {1} av {2}'], ['✓ Prepared for the PDI {}', '✓ Klargjort til nybilklargjøring {1}'],
   ['Winter wheels: {}', 'Vinterhjul: {1}'], ['Moved to {}', 'Flyttet til {1}'], ['· PDI {}', '· nybilklargjøring {1}'],
