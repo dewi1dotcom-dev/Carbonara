@@ -13,7 +13,7 @@ const since = (iso) => {
 };
 const inDays = (n) => (n < 0 ? `${-n} d overdue` : n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} d`);
 
-/** One line: the car (link) and some details on the right. */
+/** One entry: the car (link) with its details on the line below. */
 function row(href, title, meta, cls = '') {
   return h('a', { class: `today-row ${cls}`, href },
     h('span', { class: 'today-title' }, title),

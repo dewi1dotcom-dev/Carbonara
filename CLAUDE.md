@@ -611,6 +611,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.14.3 | Vehicles: New/used filter, result count, filters in the address; search box width fixed |
 | 0.14.4 | Printing without browser header/footer; privacy notice signature / date / name lines |
 | 0.14.5 | Customer phone, e-mail and postal address as separate settings / lines on the privacy notice |
+| 0.14.6 | Today board: details always on their own line under the car |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
