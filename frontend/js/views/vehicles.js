@@ -1,5 +1,5 @@
 import { PANEL_LABELS } from '../diagram.js';
-import { pdiCard } from './pdi.js';
+import { pdiBanner, pdiCard } from './pdi.js';
 import { storageCard } from './storagecare.js';
 import {
   api, append, badge, busy, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
@@ -63,7 +63,9 @@ export function vehicleCard(v, extra = null) {
         eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null,
         svc && svc.cls !== 'good' ? badge(svc) : null,
         v.finn_code ? h('span', { class: 'badge finn' }, 'finn.no') : null,
-        v.test_drive_id ? h('span', { class: 'badge warn' }, 'On test drive') : null)),
+        v.test_drive_id ? h('span', { class: 'badge warn' }, 'On test drive') : null,
+        v.pdi_status ? h('span', { class: `badge ${v.pdi_status === 'booked' ? 'good' : 'warn'}` },
+          v.pdi_status === 'booked' ? `PDI booked ${fmtDate(v.pdi_at)}` : v.pdi_status === 'sent' ? 'PDI ordered' : 'PDI not sent') : null)),
     h('div', { class: 'list-meta' },
       [v.registration_number, v.color, v.location_code && `Spot ${v.location_code}`,
         v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`, extra].filter(Boolean).join(' · ')));
@@ -119,11 +121,11 @@ function eventDetail(e) {
       return day ? `${fmtDate(day, false)} ${time || ''}`.trim() : '';
     }
     case 'storage_check':
-      return [d.kind === 'arrival' ? 'Arrival check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
+      return [d.kind === 'arrival' ? 'First storage check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
         d.v12 != null && `12V ${d.v12} V`, d.battery_action && d.battery_action !== 'none' && `battery ${d.battery_action}`,
         d.problems ? `Not OK: ${d.problems}` : null].filter(Boolean).join(' · ');
     case 'storage_check_voided':
-      return [d.kind === 'arrival' ? 'Arrival check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
+      return [d.kind === 'arrival' ? 'First storage check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
         d.performed_at && `from ${fmtDate(d.performed_at)}`, d.reason].filter(Boolean).join(' · ');
     case 'test_drive_out':
       return [d.removed?.length && `Taken out: ${d.removed.join(', ')}`, d.added?.length && `Put in: ${d.added.join(', ')}`,
@@ -691,6 +693,7 @@ export async function vehicleView(el, [id]) {
         v.finn_code ? finnLink(v.finn_code, 'finn.no ↗') : null)),
     duplicateNotice(v.possible_duplicates),
     testDriveBanner(v),
+    pdiBanner(pdiData.current),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
     pdiCard(v, pdiData, pdiOpts, rerender),

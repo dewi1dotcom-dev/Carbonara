@@ -2,7 +2,8 @@
 SI-GI2022102501 ("Technical requirements for storage vehicles management").
 Used for every factory-new car in storage until its PDI is done.
 
-Schedule: an arrival check (month 0), then periodic check n is due n months
+Schedule: an arrival check (month 0; "First storage check" in the UI, done as a
+step of the arrival inspection), then periodic check n is due n months
 after the start. Check n is a 6-month check if n % 6 == 0, a 3-month check if
 n % 3 == 0, otherwise a monthly check; larger checks include the smaller ones.
 """
@@ -115,7 +116,7 @@ def next_check(start: dt.date | None, has_arrival: bool, periodic_done: int, tod
     """What is due next: the arrival check, or periodic check n."""
     if not has_arrival or start is None:
         return {"kind": "arrival", "level": None, "seq": 0, "due": today, "days": 0,
-                "title": "Ankomstkontroll", "title_en": "Arrival check"}
+                "title": "Ankomstkontroll", "title_en": "First storage check"}
     seq = periodic_done + 1
     due = add_months(start, seq)
     level = level_for(seq)

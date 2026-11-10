@@ -1,32 +1,16 @@
 // The start page ("Today board"): what needs doing today and tomorrow first,
 // then what needs attention, then a few numbers.
 import { lang } from '../i18n.js';
-import { api, append, fmtDate, h, vehicleTitle } from '../ui.js';
+import { api, append, boardBlock as block, boardRow as row, carText, fmtDate, h, vehicleTitle } from '../ui.js';
 
 const weekday = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', { timeZone: 'Europe/Oslo', weekday: 'long' });
 const clock = new Intl.DateTimeFormat('nb-NO', { timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
 
-const carText = (c) => [vehicleTitle(c), c.registration_number].filter(Boolean).join(' · ');
 const since = (iso) => {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`;
 };
 const inDays = (n) => (n < 0 ? `${-n} d overdue` : n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} d`);
-
-/** One entry: the car (link) with its details on the line below. */
-function row(href, title, meta, cls = '') {
-  return h('a', { class: `today-row ${cls}`, href },
-    h('span', { class: 'today-title' }, title),
-    h('span', { class: 'today-meta muted small' }, meta));
-}
-
-function block(icon, title, rows, { cls = '', empty = null, more = null } = {}) {
-  if (!rows.length && !empty) return null;
-  return h('section', { class: `card today-block ${cls}` },
-    h('h2', {}, `${icon} ${title}`, rows.length ? h('span', { class: 'count' }, rows.length) : null),
-    rows.length ? h('div', { class: 'today-rows' }, rows) : h('p', { class: 'empty' }, empty),
-    more);
-}
 
 const pdiRow = (o) => row(`#/vehicles/${o.vehicle_id}`, carText(o),
   [o.pdi_at && clock.format(new Date(o.pdi_at)), o.location_code && `spot ${o.location_code}`].filter(Boolean).join(' · '));
@@ -48,7 +32,7 @@ export async function todayView(el) {
     block('⏰', 'PDI date passed – mark as done?', d.pdi_overdue.map((o) =>
       row(`#/vehicles/${o.vehicle_id}`, carText(o), `was ${fmtDate(o.pdi_at)}`)), { cls: 'bad' }),
     block('🔋', 'Storage checks due (new cars)', d.storage_due.map((s) =>
-      row(`#/vehicles/${s.id}`, carText(s), s.kind === 'arrival' ? 'arrival check missing'
+      row(`#/vehicles/${s.id}`, carText(s), s.kind === 'arrival' ? 'first storage check missing'
         : `${s.title} · ${s.in_days < 0 ? `${-s.in_days} d overdue` : s.in_days === 0 ? 'today' : `in ${s.in_days} d`}`,
       s.in_days < 0 || s.kind === 'arrival' ? 'bad' : '')), { cls: d.storage_due.some((s) => s.in_days < 0) ? 'bad' : '' }),
     block('🔑', 'Out on test drive', d.test_drives.map((t) =>
@@ -78,7 +62,7 @@ export async function todayView(el) {
       tile(n.in_storage, 'In storage', '#/storage'),
       tile(n.free_places, 'Free places', '#/storage'),
       tile(n.arrived_this_week, 'Arrived this week', '#/arrivals'),
-      tile(n.pdi_this_week, 'PDIs this week', null)));
+      tile(n.pdi_this_week, 'PDIs this week', '#/pdi')));
 }
 
 function tile(value, label, href) {

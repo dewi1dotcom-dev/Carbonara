@@ -99,6 +99,11 @@ ORDER_SELECT = """
       LEFT JOIN staff db ON db.id = o.done_by"""
 
 
+# PDIs booked or done in the current week (Monday–Sunday, Oslo time).
+THIS_WEEK_SQL = """o.status IN ('booked', 'done')
+    AND date_trunc('week', o.pdi_at AT TIME ZONE 'Europe/Oslo') = date_trunc('week', now() AT TIME ZONE 'Europe/Oslo')"""
+
+
 def _me(request: Request) -> Optional[int]:
     staff = getattr(request.state, "staff", None)
     return staff["id"] if staff else None
@@ -197,12 +202,15 @@ def options(conn=Depends(get_conn)):
 
 @router.get("/pdi")
 def list_orders(conn=Depends(get_conn)):
-    """Open orders (and the last few done) with their cars."""
+    """Open orders, this week's PDIs (booked or done; the same as the Today
+    tile counts) and the last few done, with their cars."""
     open_ = conn.execute(ORDER_SELECT + """ WHERE o.status NOT IN ('done', 'cancelled') AND v.deleted_at IS NULL
                                             ORDER BY o.pdi_at NULLS LAST, o.created_at""").fetchall()
+    week = conn.execute(ORDER_SELECT + f""" WHERE {THIS_WEEK_SQL} AND v.deleted_at IS NULL
+                                            ORDER BY o.pdi_at""").fetchall()
     done = conn.execute(ORDER_SELECT + """ WHERE o.status = 'done' AND v.deleted_at IS NULL
                                            ORDER BY o.done_at DESC LIMIT 10""").fetchall()
-    return {"open": open_, "done": done}
+    return {"open": open_, "week": week, "done": done}
 
 
 @router.get("/vehicles/{vehicle_id}/pdi")

@@ -1,5 +1,7 @@
-// Arrival inspection: vehicle details -> 4 photos -> damage -> storage.
+// Arrival inspection: vehicle details -> 4 photos -> damage -> (factory-new cars,
+// first arrival: MG's first storage check) -> storage.
 import { carDiagram, DIAGRAM_PANELS, EXTRA_PANELS, PANEL_LABELS } from '../diagram.js';
+import { checkDialog } from './storagecare.js';
 import {
   api, busy, cameraPicker, CONDITION, dateInput, osloTodayIso, duplicateNotice, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   showError, spotLabel, toast, vehicleTitle, viewPhoto,
@@ -33,6 +35,7 @@ export async function inspectionView(el, [id]) {
     checklist: h('div'),
     photos: h('div'),
     damage: h('div'),
+    storage: h('div'),
     finish: h('div'),
   };
 
@@ -46,6 +49,7 @@ export async function inspectionView(el, [id]) {
     renderChecklist();
     renderPhotos();
     renderDamage();
+    renderStorageCheck();
     renderFinish();
   }
 
@@ -346,12 +350,39 @@ export async function inspectionView(el, [id]) {
     ));
   }
 
-  // ------------------------------------------------------------ 4. storage
+  // ------------------------------------------------------------ 4. first storage check (new cars)
+  // Shown when the server says the car needs one (factory new, first arrival).
+  const storageStepShown = () => !!data.storage_check && (data.storage_check.done || editable());
+  const finishNo = () => (storageStepShown() ? 5 : 4);
+
+  function renderStorageCheck() {
+    const sc = data.storage_check;
+    if (!storageStepShown()) { slots.storage.replaceChildren(); return; }
+    const openCheck = async (e) => {
+      const btn = e.currentTarget;
+      btn.disabled = true;
+      try {
+        const p = await api.get(`/vehicles/${data.vehicle.id}/storage-care`);
+        if (p.next?.kind !== 'arrival') throw new Error(p.note || 'No storage check is due for this car');
+        checkDialog(data.vehicle, p, reload);
+      } catch (err) { showError(err); } finally { btn.disabled = false; }
+    };
+    slots.storage.replaceChildren(h('section', { class: `card step${sc.done ? ' done-card' : ''}` },
+      h('div', { class: 'step-head' }, h('h2', {}, '4. First storage check')),
+      sc.done
+        ? h('p', {}, `✓ Done ${fmtDate(sc.performed_at)}${sc.performed_by_name ? ` by ${sc.performed_by_name}` : ''}`)
+        : [h('p', { class: 'muted small' },
+          'Factory-new car: MG’s storage requirements start with this check (parking, 12V battery, tyre pressure). It is saved on the car, and the monthly storage checks follow from it.'),
+        h('div', { class: 'actions' },
+          h('button', { class: 'btn primary', type: 'button', onClick: openCheck }, 'Do first storage check'))]));
+  }
+
+  // ------------------------------------------------------------ 4/5. storage
   async function renderFinish() {
     if (data.status === 'completed') {
       const loc = data.current_location;
       slots.finish.replaceChildren(h('section', { class: 'card step done-card' },
-        h('h2', {}, '4. Storage'),
+        h('h2', {}, `${finishNo()}. Storage`),
         h('p', {}, `Completed ${fmtDate(data.completed_at)}. Odometer ${fmtKm(data.odometer_km)}.`),
         loc ? h('p', { class: 'big-loc' }, `📍 ${loc.code}`) : null));
       return;
@@ -388,7 +419,7 @@ export async function inspectionView(el, [id]) {
     });
 
     slots.finish.replaceChildren(h('section', { class: 'card step' },
-      h('div', { class: 'step-head' }, h('h2', {}, '4. Place in storage')),
+      h('div', { class: 'step-head' }, h('h2', {}, `${finishNo()}. Place in storage`)),
       missing.length
         ? h('div', { class: 'notice warn' }, 'Still to do: ', missing.map((m) =>
           m.key === 'photos' ? `${m.label.toLowerCase()} (missing: ${m.missing.join(', ')})` : m.label.toLowerCase()).join('; '))
@@ -400,7 +431,7 @@ export async function inspectionView(el, [id]) {
   }
 
   function rerenderAll() {
-    el.replaceChildren(slots.head, slots.checklist, detailsCard(), slots.photos, slots.damage, slots.finish);
+    el.replaceChildren(slots.head, slots.checklist, detailsCard(), slots.photos, slots.damage, slots.storage, slots.finish);
     renderDynamic();
   }
 

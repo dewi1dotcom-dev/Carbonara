@@ -49,9 +49,30 @@ def _check_photo(conn, inspection_id: int, photo_id: Optional[int]) -> None:
         raise bad_request("Photo does not belong to this inspection")
 
 
-def _checklist(insp: dict, vehicle: dict, photos: list, damages: list) -> list[dict]:
+def _storage_check(conn, vehicle: dict) -> Optional[dict]:
+    """Factory-new cars get MG's first storage check as part of the arrival
+    inspection, the first time only (a car coming back already has one, and a
+    car whose PDI is done has left the storage programme)."""
+    if vehicle["condition"] != "new":
+        return None
+    if conn.execute("SELECT 1 FROM pdi_orders WHERE vehicle_id = %s AND status = 'done'",
+                    (vehicle["id"],)).fetchone():
+        return None
+    done = conn.execute(
+        """SELECT c.performed_at, s.name AS performed_by_name
+             FROM storage_checks c LEFT JOIN staff s ON s.id = c.performed_by
+            WHERE c.vehicle_id = %s AND c.kind = 'arrival' AND c.voided_at IS NULL
+            ORDER BY c.performed_at LIMIT 1""",
+        (vehicle["id"],),
+    ).fetchone()
+    return {"done": done is not None, **(done or {})}
+
+
+def _checklist(insp: dict, vehicle: dict, photos: list, damages: list, storage: Optional[dict]) -> list[dict]:
     have = {p["kind"] for p in photos}
     missing = [a for a in ANGLES if a not in have]
+    storage_item = [{"key": "storage_check", "label": "First storage check done (new car)",
+                     "done": storage["done"]}] if storage else []
     return [
         {"key": "vehicle", "label": "Make and model recorded",
          "done": bool(vehicle["make"] and vehicle["model"])},
@@ -63,6 +84,7 @@ def _checklist(insp: dict, vehicle: dict, photos: list, damages: list) -> list[d
          "done": not missing, "missing": missing},
         {"key": "damage", "label": "Damage inspection done",
          "done": bool(damages) or insp["no_damage_confirmed"]},
+        *storage_item,
     ]
 
 
@@ -89,7 +111,8 @@ def load_inspection(conn, inspection_id: int) -> dict:
             WHERE a.vehicle_id = %s AND a.removed_at IS NULL""",
         (insp["vehicle_id"],),
     ).fetchone()
-    checklist = _checklist(insp, vehicle, photos, damages)
+    storage = _storage_check(conn, vehicle)
+    checklist = _checklist(insp, vehicle, photos, damages, storage)
     return {
         **insp,
         "vehicle": vehicle,
@@ -98,6 +121,7 @@ def load_inspection(conn, inspection_id: int) -> dict:
         "damages": damages,
         "current_location": location,
         "checklist": checklist,
+        "storage_check": storage,  # None when the car doesn't need one
         "ready_to_complete": all(c["done"] for c in checklist),
         # Same reg. no or a VIN one character away on another car: warn, never block.
         "possible_duplicates": similar_vehicles(conn, vehicle["vin"], vehicle["registration_number"], vehicle["id"]),

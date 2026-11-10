@@ -6,7 +6,9 @@ const RESULT = { ok: '✓', not_ok: '✗', na: '–' };
 const dueText = (n) => (n.days < 0 ? `overdue by ${-n.days} d` : n.days === 0 ? 'due today' : `due ${fmtDate(n.due, false)} (in ${n.days} d)`);
 const num = (v, digits = 2) => (v == null ? '' : Number(v).toFixed(digits).replace('.', ','));
 
-const KIND_EN = { arrival: 'Arrival check', monthly: 'Monthly check', quarterly: '3-month check', half_year: '6-month check' };
+// The "arrival" kind is called First storage check in the UI, so it isn't
+// mixed up with the arrival inspection (it is done as a step of it).
+const KIND_EN = { arrival: 'First storage check', monthly: 'Monthly check', quarterly: '3-month check', half_year: '6-month check' };
 const checkName = (c) => KIND_EN[c.kind === 'arrival' ? 'arrival' : c.level];
 
 /** All checks, newest first; admins can cancel one registered by mistake. */
@@ -43,7 +45,7 @@ export function storageCard(v, p, rerender) {
   const valid = p.checks.filter((c) => !c.voided_at);
   const last = valid[valid.length - 1];
   append(card,
-    h('p', { class: 'muted small' }, 'MG storage requirements (SI-GI2022102501): arrival check, then every month (more every 3 and 6 months) until the PDI.'),
+    h('p', { class: 'muted small' }, 'MG storage requirements (SI-GI2022102501): a first storage check at arrival, then every month (more every 3 and 6 months) until the PDI.'),
     n ? h('div', { class: `notice ${n.days < 0 ? 'bad-notice' : n.days <= 3 ? 'warn' : ''}` },
       h('strong', {}, n.title_en), ' — ', n.kind === 'arrival' ? 'not done yet' : dueText(n))
       : (p.note ? h('p', { class: 'muted' }, p.note) : null),
@@ -55,13 +57,15 @@ export function storageCard(v, p, rerender) {
     h('div', { class: 'actions' },
       p.checks.length ? h('a', { class: 'btn', href: `#/vehicles/${v.id}/storage-report` }, '🖨 Storage report') : null,
       n ? h('button', { class: n.days <= 3 ? 'btn primary' : 'btn', type: 'button', onClick: () => checkDialog(v, p, rerender) },
-        n.kind === 'arrival' ? 'Do arrival check' : `Do ${n.title_en.toLowerCase()}`) : null));
+        `Do ${n.title_en.toLowerCase()}`) : null));
   return card;
 }
 
 // ---------------------------------------------------------------- the check form
 
-function checkDialog(v, p, done) {
+/** The check form for p.next (p = GET /vehicles/:id/storage-care). Also opened
+ *  from the arrival inspection for the first storage check. */
+export function checkDialog(v, p, done) {
   const n = p.next;
   const L = p.limits;
   const results = new Map();

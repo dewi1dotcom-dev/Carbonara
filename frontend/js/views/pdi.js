@@ -1,7 +1,10 @@
 // PDI order card on the vehicle page: what the customer ordered, sent to the
 // workshop (RBV) by e-mail; the workshop's date/time is entered by staff.
+// Also the banner at the top of the vehicle page and the PDI page (#/pdi).
 import { tr } from '../i18n.js';
-import { api, append, busy, dateInput, fmtDate, h, openDialog, showError, timeInput, toast } from '../ui.js';
+import {
+  api, append, boardBlock, boardRow, busy, carText, dateInput, fmtDate, h, openDialog, showError, timeInput, toast,
+} from '../ui.js';
 
 const STATUS_TEXT = { draft: 'Not sent', sent: 'Sent – waiting for date', booked: 'PDI booked', done: 'PDI done', cancelled: 'Cancelled' };
 const STATUS_CLS = { draft: 'warn', sent: 'warn', booked: 'good', done: 'good', cancelled: '' };
@@ -16,9 +19,54 @@ function itemsList(o, opts) {
   return lines;
 }
 
+/** Top of the vehicle page: the car has an open PDI order (booked date first). */
+export function pdiBanner(o) {
+  if (!o) return null;
+  const booked = o.status === 'booked';
+  return h('div', { class: `card notice ${booked ? '' : 'warn'} td-banner` },
+    h('div', {},
+      h('strong', {}, booked ? `🔧 PDI booked ${fmtDate(o.pdi_at)}`
+        : o.status === 'sent' ? '🔧 PDI ordered – waiting for the workshop’s date'
+          : '🔧 PDI order started – not sent to the workshop yet'),
+      booked && !o.sent_at ? h('div', { class: 'small' }, 'The order list has not been sent to the workshop yet.') : null),
+    h('span', { class: 'row' },
+      h('button', {
+        class: 'btn', type: 'button',
+        onClick: () => document.getElementById('pdi-card')?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+      }, 'See order'),
+      h('a', { class: 'btn', href: '#/pdi' }, 'All PDIs')));
+}
+
+/** The PDI page: this week's PDIs first, then everything else that is open. */
+export async function pdiListView(el) {
+  const d = await api.get('/pdi');
+  const inWeek = new Set(d.week.map((o) => o.id));
+  const now = Date.now();
+  const link = (o, meta, cls = '') => boardRow(`#/vehicles/${o.vehicle_id}`, carText(o), meta, cls);
+  const when = (o) => [fmtDate(o.pdi_at), o.location_code && `spot ${o.location_code}`].filter(Boolean).join(' · ');
+  const booked = d.open.filter((o) => o.status === 'booked' && !inWeek.has(o.id));
+  const passed = booked.filter((o) => new Date(o.pdi_at).getTime() < now);
+  const later = booked.filter((o) => new Date(o.pdi_at).getTime() >= now);
+  const by = (name) => (name ? ` by ${name}` : '');
+
+  append(el,
+    h('div', { class: 'page-head' },
+      h('div', {}, h('h1', {}, 'PDI'), h('div', { class: 'muted' }, 'New cars booked for PDI at the workshop'))),
+    boardBlock('📅', 'This week', d.week.map((o) => link(o,
+      [when(o), o.status === 'done' ? 'done' : !o.sent_at ? 'order not sent' : null].filter(Boolean).join(' · '),
+      o.status === 'booked' && !o.sent_at ? 'bad' : '')), { cls: 'info', empty: 'No PDIs this week.' }),
+    boardBlock('⏰', 'PDI date passed – mark as done?', passed.map((o) => link(o, `was ${fmtDate(o.pdi_at)}`, 'bad')), { cls: 'bad' }),
+    boardBlock('🗓', 'Later', later.map((o) => link(o, when(o)))),
+    boardBlock('✉', 'Waiting for the workshop’s date', d.open.filter((o) => o.status === 'sent').map((o) =>
+      link(o, `sent ${fmtDate(o.sent_at, false)} to ${o.sent_to}`))),
+    boardBlock('📝', 'Not sent yet', d.open.filter((o) => o.status === 'draft').map((o) =>
+      link(o, `started ${fmtDate(o.created_at, false)}${by(o.created_by_name)}`))),
+    boardBlock('✓', 'Recently done', d.done.map((o) => link(o, `done ${fmtDate(o.done_at, false)}${by(o.done_by_name)}`))));
+}
+
 export function pdiCard(v, data, opts, rerender) {
   const o = data.current;
-  const card = h('section', { class: 'card' }, h('h2', {}, 'PDI order'));
+  const card = h('section', { class: 'card', id: 'pdi-card' }, h('h2', {}, 'PDI order'));
   if (!o) {
     append(card,
       h('p', { class: v.condition === 'new' ? '' : 'muted' }, v.condition === 'new'

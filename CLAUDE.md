@@ -188,8 +188,8 @@ frontend/               no build step; plain ES modules
   js/i18n.js            English/Norwegian translator + dictionary
   js/diagram.js         car damage diagram
   js/views/             today (start page), dashboard (= arrivals list), intake, inspection,
-                        vehicles, pdi (card), storagecare (card + report), storage, testdrive,
-                        login, settings, system
+                        vehicles, pdi (card + banner + PDI page), storagecare (card + check form
+                        + report), storage, testdrive, login, settings, system
 ```
 
 **Migrations:**
@@ -218,7 +218,8 @@ frontend/               no build step; plain ES modules
 (the runner tracks by file name; comment-only edits are harmless).
 
 **Frontend routes:**
-- **Main pages:** `#/` Today · `#/arrivals` · `#/intake` · `#/inspections/:id`.
+- **Main pages:** `#/` Today · `#/arrivals` · `#/intake` · `#/inspections/:id` · `#/pdi` (PDI
+  page, opened from the "PDIs this week" tile and the vehicle banner; not in the top menu).
 - **Vehicles:**
   - `#/vehicles` — filters are kept in the hash, e.g. `#/vehicles?q=…&status=…&condition=new`
   - `#/vehicles/:id`
@@ -409,6 +410,13 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   unsent. A booked but unsent order shows a warning and stays under "not sent yet" on Today.
   RBV can't reach the server. Reading replies (IMAP) or a booking link are possible later.
 - **Reminder:** only on Today, the day before ("make the car ready").
+- **Finding PDI cars (0.15.0):**
+  - Vehicle page: a banner at the top while an order is open ("PDI booked dd.mm.yyyy HH:mm", or
+    ordered / not sent), with "See order" (scrolls to the card) and "All PDIs".
+  - Vehicles list: a badge per car (`pdi_status`, `pdi_at` from `GET /vehicles`).
+  - PDI page `#/pdi` (`GET /pdi` → `open`, `week`, `done`): this week (booked + done; the same
+    rule as the Today tile, `pdi.THIS_WEEK_SQL`), date passed, later, waiting for a date, not
+    sent, recently done.
 
 **Storage maintenance for new cars (0.13.0)** (`storagecare.py`, `routers/storage_care.py`,
 `views/storagecare.js`). Source: MG bulletin **SI-GI2022102501** plus MG's sheets (long-term
@@ -418,6 +426,15 @@ storage, periodic checklist, 12V battery form).
 - **Schedule:** the arrival check, then periodic check *n* due *start + n months*. Every 6th
   is a 6-month check and every 3rd a 3-month check; larger checks include the smaller items.
   `start` = arrival check date, else first placement.
+- **The arrival check is called "First storage check" in the UI** ("Første lagerkontroll"), so
+  it isn't mixed up with the arrival inspection (the user's request, 0.15.0). In code and DB it
+  is still `kind = 'arrival'`, and the printed report keeps MG's term "Ankomstkontroll".
+- **Part of the arrival inspection (0.15.0):** for a factory-new car without a valid first
+  storage check (and no PDI done), `inspections._storage_check` adds a step "4. First storage
+  check" plus a **required** checklist item, so the inspection can't be completed without it.
+  The step opens the same form (`storagecare.checkDialog`). `programme()` allows the arrival
+  check while the car's status is `intake`. A car coming back already has one, so it is
+  skipped.
 - **Items per fuel type** (`ITEMS`, Norwegian labels, also printed): HV-battery steps for
   BEV/PHEV/FCEV; no "start the engine" for pure electric. Unknown fuel shows all items, with
   N/A allowed.
@@ -495,7 +512,7 @@ storage, periodic checklist, 12V battery form).
   |---|---|
   | PDI | **nybilklargjøring** |
   | Arrival inspection | **Mottakskontroll** |
-  | storage Arrival check | **Ankomstkontroll** |
+  | First storage check (storage programme) | **Første lagerkontroll** (report: Ankomstkontroll) |
   | Vehicles | Biler |
   | Storage | Lager |
   | Off site | Ikke på lager |
@@ -612,6 +629,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.14.4 | Printing without browser header/footer; privacy notice signature / date / name lines |
 | 0.14.5 | Customer phone, e-mail and postal address as separate settings / lines on the privacy notice |
 | 0.14.6 | Today board: details always on their own line under the car |
+| 0.15.0 | **PDI page** (`#/pdi`, from the "PDIs this week" tile); PDI banner on the vehicle page and badge in the Vehicles list; storage "Arrival check" renamed **First storage check** and made a required step of the arrival inspection for factory-new cars |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

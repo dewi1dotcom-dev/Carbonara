@@ -79,6 +79,10 @@ def programme(conn, vehicle_id: int) -> dict:
         active, note = False, "PDI done – storage programme finished."
     elif v["status"] == "off_site":
         active, note = False, "The car is off site."
+    elif v["status"] == "intake" and arrival is None:
+        active, note = True, None  # the first storage check is a step of the arrival inspection
+    elif v["status"] == "intake":
+        active, note = False, "First storage check done – the monthly checks start when the car is placed in storage."
     elif v["status"] != "in_storage":
         active, note = False, "Starts when the car is placed in storage."
     else:

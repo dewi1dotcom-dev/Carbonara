@@ -146,7 +146,7 @@ const NO = {
   'Storage check': 'Lagerkontroll', 'Storage check cancelled': 'Lagerkontroll annullert',
   'Automatically — listed as registered in Statens vegvesen': 'Automatisk — oppført som registrert hos Statens vegvesen',
   'from e-mail app': 'fra e-postprogram', 'sent again': 'sendt på nytt', 'Items not all back': 'Ikke alt utstyr tilbake',
-  'Arrival check': 'Ankomstkontroll', 'Monthly': 'Månedlig', 'Monthly check': 'Månedlig sjekk', '3-month check': '3-månederssjekk',
+  'First storage check': 'Første lagerkontroll', 'Monthly': 'Månedlig', 'Monthly check': 'Månedlig sjekk', '3-month check': '3-månederssjekk',
   '6-month check': '6-månederssjekk',
   // ---- today
   '+ New arrival': '+ Ny ankomst', 'Needs attention': 'Trenger oppfølging', 'PDI tomorrow – make the car ready': 'Nybilklargjøring i morgen – klargjør bilen',
@@ -156,7 +156,15 @@ const NO = {
   'open the car to confirm': 'åpne bilen for å bekrefte', 'Nothing needs attention. 👍': 'Ingenting trenger oppfølging. 👍',
   'Upcoming PDIs': 'Kommende nybilklargjøringer', 'In storage ': 'På lager ', 'Free places': 'Ledige plasser', 'Arrived this week': 'Ankommet denne uken',
   'PDIs this week': 'Nybilklargjøringer denne uken', 'Storage checks due (new cars)': 'Lagerkontroller som forfaller (nye biler)',
-  'arrival check missing': 'ankomstkontroll mangler', 'today': 'i dag', 'tomorrow': 'i morgen',
+  'first storage check missing': 'første lagerkontroll mangler', 'today': 'i dag', 'tomorrow': 'i morgen',
+  // ---- PDI page + vehicle banner/badge
+  'PDI': 'Nybilklargjøring', 'New cars booked for PDI at the workshop': 'Nye biler som er booket til nybilklargjøring på verkstedet',
+  'This week': 'Denne uken', 'Later': 'Senere', 'Waiting for the workshop’s date': 'Venter på dato fra verkstedet', 'Not sent yet': 'Ikke sendt ennå',
+  'Recently done': 'Nylig utført', 'No PDIs this week.': 'Ingen nybilklargjøringer denne uken.', 'done': 'utført', 'order not sent': 'bestilling ikke sendt',
+  'PDI ordered – waiting for the workshop’s date': 'Nybilklargjøring bestilt – venter på dato fra verkstedet',
+  'PDI order started – not sent to the workshop yet': 'Bestilling av nybilklargjøring påbegynt – ikke sendt til verkstedet ennå',
+  'The order list has not been sent to the workshop yet.': 'Bestillingen er ikke sendt til verkstedet ennå.', 'See order': 'Se bestillingen',
+  'All PDIs': 'Alle nybilklargjøringer', 'PDI ordered': 'Nybilklargjøring bestilt', 'PDI not sent': 'Bestilling ikke sendt',
   // ---- arrivals / intake / inspection
   'New arrival': 'Ny ankomst', 'No arrival inspections in progress.': 'Ingen pågående mottakskontroller.', 'Recently placed in storage': 'Nylig plassert på lager',
   'Nothing yet.': 'Ingenting ennå.', 'Select inspector…': 'Velg kontrollør…', 'Select staff…': 'Velg ansatt…', 'Inspector': 'Kontrollør',
@@ -182,6 +190,11 @@ const NO = {
   'Start inspection': 'Start kontroll', 'Continue inspection': 'Fortsett kontroll', 'Always compare with the car before starting.': 'Sammenlign alltid med bilen før du starter.',
   'Personalised plate? · tap to look up': 'Personlig skilt? · trykk for å slå opp',
   '1. Vehicle details': '1. Bildetaljer', '2. Photos': '2. Bilder', '3. Damage inspection': '3. Skadekontroll', '4. Place in storage': '4. Plasser på lager', '4. Storage': '4. Lager',
+  '5. Place in storage': '5. Plasser på lager', '5. Storage': '5. Lager', '4. First storage check': '4. Første lagerkontroll',
+  'First storage check done (new car)': 'Første lagerkontroll utført (ny bil)', 'first storage check done (new car)': 'første lagerkontroll utført (ny bil)',
+  'Do first storage check': 'Utfør første lagerkontroll',
+  'Factory-new car: MG’s storage requirements start with this check (parking, 12V battery, tyre pressure). It is saved on the car, and the monthly storage checks follow from it.':
+    'Fabrikkny bil: MGs lagringskrav starter med denne kontrollen (parkering, 12V-batteri, dekktrykk). Den lagres på bilen, og de månedlige lagerkontrollene følger av den.',
   '✓ Saved': '✓ Lagret', 'Still to do: ': 'Gjenstår: ', 'Make and model recorded': 'Merke og modell registrert', 'New or used car selected': 'Ny eller brukt bil valgt',
   'Odometer reading recorded': 'Kilometerstand registrert', 'Photos from all four sides': 'Bilder fra alle fire sider', 'Damage inspection done': 'Skadekontroll utført',
   'Take one photo from each side with the whole car in frame. "Left" means the left side when sitting in the car.': 'Ta ett bilde fra hver side med hele bilen i bildet. «Venstre» betyr venstre side sett fra førersetet.',
@@ -259,10 +272,10 @@ const NO = {
   'Mark the PDI as done?': 'Merke nybilklargjøringen som utført?', 'PDI marked as done': 'Nybilklargjøring merket som utført', 'Cancel this PDI order?': 'Avbryte denne bestillingen?',
   'Cancel this PDI order? It has already been sent – remember to tell the workshop.': 'Avbryte denne bestillingen? Den er allerede sendt – husk å gi beskjed til verkstedet.',
   // ---- storage maintenance
-  'Storage maintenance': 'Lagervedlikehold', 'not done yet': 'ikke utført ennå', 'due today': 'frist i dag', 'Do arrival check': 'Utfør ankomstkontroll',
+  'Storage maintenance': 'Lagervedlikehold', 'not done yet': 'ikke utført ennå', 'due today': 'frist i dag',
   '🖨 Storage report': '🖨 Lagerrapport', 'Storage report': 'Lagerrapport', 'Only 12V battery form': 'Bare 12V-batteriskjema', '🖨 Print / save as PDF': '🖨 Skriv ut / lagre som PDF',
-  'MG storage requirements (SI-GI2022102501): arrival check, then every month (more every 3 and 6 months) until the PDI.':
-    'MGs lagringskrav (SI-GI2022102501): ankomstkontroll, deretter hver måned (mer hver 3. og 6. måned) frem til nybilklargjøring.',
+  'MG storage requirements (SI-GI2022102501): a first storage check at arrival, then every month (more every 3 and 6 months) until the PDI.':
+    'MGs lagringskrav (SI-GI2022102501): første lagerkontroll ved ankomst, deretter hver måned (mer hver 3. og 6. måned) frem til nybilklargjøring.',
   'Checklist': 'Sjekkliste', 'Mark all OK': 'Merk alle OK', 'Tyre pressure': 'Dekktrykk', 'Measured (bar)': 'Målt (bar)', '12V battery (tester)': '12V-batteri (tester)',
   'Voltage on arrival (V)': 'Spenning ved mottak (V)', 'Voltage before charging (V)': 'Spenning før lading (V)', 'Battery status': 'Batteristatus', 'Tester result…': 'Testresultat…',
   'Voltage after charging (V)': 'Spenning etter lading (V)', 'Battery part number': 'Delenummer batteri', 'From the battery label': 'Fra batterietiketten', 'HV battery': 'HV-batteri',
@@ -370,6 +383,7 @@ const NO = {
   'Give a reason': 'Oppgi en begrunnelse', 'No storage check is due for this car': 'Ingen lagerkontroll forfaller for denne bilen',
   'The storage programme is for factory-new cars.': 'Lagerprogrammet gjelder fabrikknye biler.', 'PDI done – storage programme finished.': 'Nybilklargjøring utført – lagerprogrammet er avsluttet.',
   'The car is off site.': 'Bilen er ikke på lager.', 'Starts when the car is placed in storage.': 'Starter når bilen plasseres på lager.',
+  'First storage check done – the monthly checks start when the car is placed in storage.': 'Første lagerkontroll utført – de månedlige kontrollene starter når bilen plasseres på lager.',
   'Licence photo': 'Førerkortbilde', 'Licence photo file': 'Førerkortbildefil', 'Photo file': 'Bildefil', 'Photo variant': 'Bildevariant', 'Storage location': 'Lagerplass',
   'Parent spot': 'Hovedplass', 'Staff member': 'Ansatt', 'Inspection': 'Kontroll', 'List entry': 'Listeelement', 'Setting': 'Innstilling', 'Storage check ': 'Lagerkontroll ',
 };
@@ -442,6 +456,7 @@ const NO_PATTERNS = [
   // PDI
   ['Sent {} to {} by {} (e-mail app)', 'Sendt {1} til {2} av {3} (e-postprogram)'], ['Sent {} to {} by {}', 'Sendt {1} til {2} av {3}'], ['Sent {} to {} (e-mail app)', 'Sendt {1} til {2} (e-postprogram)'],
   ['Sent {} to {}', 'Sendt {1} til {2}'], ['Sent to {}', 'Sendt til {1}'], ['PDI done {} ({})', 'Nybilklargjøring utført {1} ({2})'], ['PDI done {}', 'Nybilklargjøring utført {1}'],
+  ['PDI booked {}', 'Nybilklargjøring booket {1}'], ['sent {} to {}', 'sendt {1} til {2}'], ['done {} by {}', 'utført {1} av {2}'], ['done {}', 'utført {1}'],
   ['{} · expected {}', '{1} · forventet {2}'], ['{} · {} · expected {}', '{1} · {2} · forventet {3}'], ['expected {}', 'forventet {1}'],
   // storage maintenance
   ['Do {}', 'Utfør {1t}'], ['monthly check', 'månedlig sjekk'], ['3-month check', '3-månederssjekk'], ['6-month check', '6-månederssjekk'],
@@ -451,7 +466,7 @@ const NO_PATTERNS = [
   ['Cancelled {} by {}: {}', 'Annullert {1} av {2}: {3}'], ['Cancelled {}: {}', 'Annullert {1}: {2}'],
   ['Cancel the {} from {}?\n\nIt stops counting in the schedule but stays in the report, struck through.\nReason (required):',
     'Annullere {1t} fra {2}?\n\nDen teller ikke lenger i planen, men blir stående i rapporten, gjennomstreket.\nBegrunnelse (påkrevd):'],
-  ['arrival check', 'ankomstkontroll'],
+  ['first storage check', 'første lagerkontroll'], ['✓ Done {} by {}', '✓ Utført {1} av {2}'], ['✓ Done {}', '✓ Utført {1}'],
   ['Answer every point (missing: {})', 'Svar på alle punkter (mangler: {1t})'], ['Tyre pressure {} bar – adjust to 2,7 ± 0,1 bar.', 'Dekktrykk {1} bar – juster til 2,7 ± 0,1 bar.'],
   ['12V is below {} V – charge or replace the battery.', '12V er under {1} V – lad eller bytt batteriet.'], ['SOC below {n} % – charge to at least {n} %.', 'SOC under {1} % – lad til minst {2} %.'],
   ['For storage over a month MG wants SOC over {n} %.', 'For lagring over en måned krever MG SOC over {1} %.'], ['Charged to (min. {n} %)', 'Ladet til (min. {1} %)'],

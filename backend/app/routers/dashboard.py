@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends
 from .. import vegvesen
 from ..common import service_due
 from ..db import get_conn
-from .pdi import ORDER_SELECT
+from .pdi import ORDER_SELECT, THIS_WEEK_SQL
 from .storage_care import programme
 
 router = APIRouter(tags=["dashboard"])
@@ -79,8 +79,8 @@ def dashboard(conn=Depends(get_conn)):
                   AND NOT EXISTS (SELECT 1 FROM storage_locations c WHERE c.parent_id = s.id AND c.active)) AS free_places,
               (SELECT count(*) FROM inspections WHERE status = 'completed'
                 AND completed_at >= date_trunc('week', now() AT TIME ZONE 'Europe/Oslo') AT TIME ZONE 'Europe/Oslo') AS arrived_this_week,
-              (SELECT count(*) FROM pdi_orders o WHERE o.status IN ('booked', 'done')
-                AND date_trunc('week', o.pdi_at AT TIME ZONE 'Europe/Oslo') = date_trunc('week', now() AT TIME ZONE 'Europe/Oslo')) AS pdi_this_week"""
+              (SELECT count(*) FROM pdi_orders o JOIN vehicles v ON v.id = o.vehicle_id
+                WHERE {THIS_WEEK_SQL} AND v.deleted_at IS NULL) AS pdi_this_week"""
     ).fetchone()
 
     return {

@@ -5,6 +5,7 @@ import { arrivalsView } from './views/dashboard.js';
 import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
+import { pdiListView } from './views/pdi.js';
 import { settingsView } from './views/settings.js';
 import { storageSpotView, storageView } from './views/storage.js';
 import { storageReportView } from './views/storagecare.js';
@@ -15,6 +16,7 @@ import { deletedView, vehiclesView, vehicleView } from './views/vehicles.js';
 const routes = [
   [/^#?\/?$/, todayView, 'today'],
   [/^#\/arrivals$/, arrivalsView, 'arrivals'],
+  [/^#\/pdi$/, pdiListView, 'today'],
   [/^#\/intake$/, intakeView, 'arrivals'],
   [/^#\/inspections\/(\d+)$/, inspectionView, 'arrivals'],
   [/^#\/vehicles$/, vehiclesView, 'vehicles'],

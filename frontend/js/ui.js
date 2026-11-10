@@ -420,6 +420,25 @@ export const pill = (status) => h('span', { class: `pill st-${status}` }, STATUS
 export const vehicleTitle = (v) =>
   [v.make, v.model, v.model_year && `(${v.model_year})`].filter(Boolean).join(' ') || 'Unknown vehicle';
 
+/** "MG ZS EV (2020) · EB82655" */
+export const carText = (c) => [vehicleTitle(c), c.registration_number].filter(Boolean).join(' · ');
+
+// Board lists (Today page, PDI page): a card with a heading + count and rows
+// of cars, each with its details on the line below.
+export function boardRow(href, title, meta, cls = '') {
+  return h('a', { class: `today-row ${cls}`, href },
+    h('span', { class: 'today-title' }, title),
+    h('span', { class: 'today-meta muted small' }, meta));
+}
+
+export function boardBlock(icon, title, rows, { cls = '', empty = null, more = null } = {}) {
+  if (!rows.length && !empty) return null;
+  return h('section', { class: `card today-block ${cls}` },
+    h('h2', {}, `${icon} ${title}`, rows.length ? h('span', { class: 'count' }, rows.length) : null),
+    rows.length ? h('div', { class: 'today-rows' }, rows) : h('p', { class: 'empty' }, empty),
+    more);
+}
+
 // ---------------------------------------------------------------- VIN (client-side mirror of vinlib.py)
 
 const TRANSLIT = { A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8, J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9, S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9 };
