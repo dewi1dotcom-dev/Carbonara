@@ -118,7 +118,8 @@ function eventDetail(e) {
   switch (e.event_type) {
     case 'placed_in_storage': return `Spot ${d.location_code}`;
     case 'pdi_order_sent':
-      return [`To ${d.to}`, d.via === 'mail_app' ? 'from e-mail app' : null, d.resent ? 'sent again' : null].filter(Boolean).join(' · ');
+      return [d.via === 'print' ? 'Printed / PDF' : `To ${d.to}`, d.via === 'mail_app' ? 'from e-mail app' : null,
+        d.resent ? 'sent again' : null].filter(Boolean).join(' · ');
     case 'pdi_booked': {
       const [day, time] = String(d.pdi_at || '').split(' ');
       return day ? `${fmtDate(day, false)} ${time || ''}`.trim() : '';
@@ -598,12 +599,31 @@ function storageText(v) {
 
 /** Everything else, folded away under "All vehicle data". */
 function registryCard(v, rerender) {
-  const card = h('section', { class: 'card' }, h('h2', {}, 'Statens vegvesen'));
+  // Sync now works for every car: a one-off lookup for cars not marked as
+  // registered (marked automatically if the registry says they are).
+  const syncBtn = h('button', {
+    class: 'btn', type: 'button', disabled: !v.registry_configured,
+    title: v.registry_configured ? 'Fetch the latest data from Statens vegvesen now' : 'The Statens vegvesen API key is not configured',
+  }, '↻ Sync now');
+  syncBtn.addEventListener('click', () => busy(syncBtn, async () => {
+    const res = await api.post(`/vehicles/${v.id}/registry/sync`);
+    const ok = res.result.status === 'ok';
+    toast(res.marked_registered ? 'Synced · Statens vegvesen lists the car as registered, so it is now marked as registered'
+      : ok ? 'Synced with Statens vegvesen' : res.result.message, ok ? 'success' : 'error');
+    rerender();
+  }));
+  const card = h('section', { class: 'card' },
+    h('div', { class: 'row spread-row' }, h('h2', {}, 'Statens vegvesen'), syncBtn));
   const r = v.registry || { sync_status: 'pending' };
 
   if (!v.registered_marked_at) {
     card.append(h('p', { class: 'muted' },
       'Not registered yet. When sales has registered the car, use "Mark as registered" above to fetch its data.'));
+    if (r.last_attempt_at) {
+      card.append(h('p', { class: 'muted small' }, r.sync_status === 'ok'
+        ? `Last checked ${fmtDate(r.last_attempt_at)}: found in the vehicle registry`
+        : `Last checked ${fmtDate(r.last_attempt_at)}: not in the vehicle registry yet`));
+    }
   } else {
     if (!v.registry_configured) {
       card.append(h('div', { class: 'notice warn' },
@@ -633,12 +653,6 @@ function registryCard(v, rerender) {
 
   if (!v.registered_marked_at) return card;
 
-  const syncBtn = h('button', { class: 'btn', type: 'button', disabled: !v.registry_configured }, '↻ Sync now');
-  syncBtn.addEventListener('click', () => busy(syncBtn, async () => {
-    const res = await api.post(`/vehicles/${v.id}/registry/sync`);
-    toast(res.result.status === 'ok' ? 'Synced' : res.result.message, res.result.status === 'ok' ? 'success' : 'error');
-    rerender();
-  }));
   card.append(h('div', { class: 'actions spread' },
     h('button', {
       class: 'link danger', type: 'button',
@@ -651,9 +665,7 @@ function registryCard(v, rerender) {
         } catch (e) { showError(e); }
       },
     }, 'Undo mark'),
-    h('span', { class: 'row' },
-      r.last_success_at && h('button', { class: 'btn', type: 'button', onClick: () => showRaw(v) }, 'Raw data'),
-      syncBtn)));
+    r.last_success_at ? h('button', { class: 'btn', type: 'button', onClick: () => showRaw(v) }, 'Raw data') : h('span')));
   return card;
 }
 

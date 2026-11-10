@@ -128,8 +128,9 @@ export async function busy(button, fn) {
 }
 
 /** Modal dialog. Returns {dialog, close}. */
-export function openDialog(title, body, { wide = false } = {}) {
-  const dialog = h('dialog', { class: wide ? 'wide' : '' },
+/** `doc: true` for a printable document: its title bar is left off the printout. */
+export function openDialog(title, body, { wide = false, doc = false } = {}) {
+  const dialog = h('dialog', { class: [wide ? 'wide' : '', doc ? 'doc-dialog' : ''].filter(Boolean).join(' ') },
     h('div', { class: 'dialog-head' },
       h('h2', {}, title),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close', onClick: () => close() }, '✕')),

@@ -180,7 +180,7 @@ backend/
                         test drive customer purge)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives,
                         session (login/language), pdi, dashboard (Today), system, storage_care
-  migrations/           001…018
+  migrations/           001…019
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
@@ -214,6 +214,7 @@ frontend/               no build step; plain ES modules
 | 016 | `language` | `staff.language`; Skvettlapper / Nybilklargjøring |
 | 017 | `drop_zones` | zones moved into descriptions |
 | 018 | `trade_plates` | `trade_plates`; `test_drives.trade_plate_id / plate_moved_at / plate_moved_to` |
+| 019 | `pdi_print` | `pdi_orders.sent_via` also allows `'print'` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -270,6 +271,10 @@ header `SVV-Authorization: Apikey <key>`.
 - Lookup happens at arrival (by VIN or reg. no). Mismatches with typed values need a
   per-field confirmation (`accept_fields`, `kept_values`).
 - The worker re-syncs registered cars every `vegvesen_sync_days`.
+- **"↻ Sync now" (0.16.1)** sits in the header of the vehicle page's Statens vegvesen card for
+  **every** car (`POST /vehicles/{id}/registry/sync`). For a car not marked as registered it
+  is a one-off lookup (the worker still only re-syncs marked cars). If SVV says `REGISTRERT`,
+  the car is marked as registered (event source `statens_vegvesen`, like at arrival).
 - New cars aren't in the registry until registered; "not found" is normal for them.
 
 **Status badges:** EU-kontroll and registration show amber within 60 days and **red from 1 day
@@ -416,6 +421,13 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   - Subject: "Bestilling av nybilklargjøring – …"; it asks RBV to reply with a date and time.
   - Sent by SMTP if configured (it isn't yet). Otherwise via **"Open in e-mail app"**
     (mailto) plus a "did you send it?" confirmation, or "Copy text".
+- **Print or PDF instead of e-mail (0.17.0):** the send dialog has two modes, "✉ E-mail" and
+  "🖨 Print or PDF". Print mode shows a Norwegian A4 order sheet (`pdiSheet()` in `pdi.js`:
+  car, ordered items with an "Utført ☐" column, other, winter tyres, note, date/time lines,
+  "Bestilt av" / "Mottatt av verkstedet" signatures). The browser's print window also
+  saves it as a PDF. Afterwards "did you give it to the workshop?" records `sent_via = 'print'`
+  with no `sent_to`; shown as "Printed / PDF". Opened with `openDialog(..., { doc: true })`,
+  so the app title bar isn't printed. Print mode works with no e-mail recipients set up.
 - **Lists in Settings** (`pdi_lists`, admins): items, tyre companies (NorgesDekk, Drivalia)
   and recipients (one is the default). During testing the user's own address is the
   default; switch to RBV when going live.
@@ -650,6 +662,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.15.0 | **PDI page** (`#/pdi`, from the "PDIs this week" tile); PDI banner on the vehicle page and badge in the Vehicles list; storage "Arrival check" renamed **First storage check** and made a required step of the arrival inspection for factory-new cars |
 | 0.15.1 | "Ready for registration and delivery" after the PDI is done (badge, Vehicles filter, Today tile) |
 | 0.16.0 | **Trade plates** in Settings (named sets, one car at a time); moving plates from a car on a test drive leads straight to its return |
+| 0.16.1 | "Sync now" with Statens vegvesen on every car (header of the SVV card); auto-marks registered cars |
+| 0.17.0 | PDI order: **print or save as PDF** instead of e-mail (Norwegian order sheet) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

@@ -102,6 +102,11 @@ const NO = {
   'Undo "repaired"? The damage will be listed as known damage again.': 'Angre «reparert»? Skaden vises som kjent skade igjen.',
   'Inspections': 'Kontroller', 'Vehicle history →': 'Bilens historikk →', '🗑 Delete car': '🗑 Slett bil', 'View vehicle': 'Vis bil',
   'Mark as registered': 'Merk som registrert', 'Undo mark': 'Angre merking', '↻ Sync now': '↻ Synkroniser nå', 'Raw data': 'Rådata',
+  'Synced with Statens vegvesen': 'Synkronisert med Statens vegvesen',
+  'Synced · Statens vegvesen lists the car as registered, so it is now marked as registered':
+    'Synkronisert · Statens vegvesen oppgir bilen som registrert, så den er nå merket som registrert',
+  'Fetch the latest data from Statens vegvesen now': 'Hent de nyeste dataene fra Statens vegvesen nå',
+  'The Statens vegvesen API key is not configured': 'API-nøkkelen til Statens vegvesen er ikke satt',
   'All vehicle data': 'Alle kjøretøydata', 'Statens vegvesen': 'Statens vegvesen', 'Statens vegvesen data': 'Data fra Statens vegvesen',
   'Not registered yet. When sales has registered the car, use "Mark as registered" above to fetch its data.':
     'Ikke registrert ennå. Når salg har registrert bilen, bruk «Merk som registrert» over for å hente data.',
@@ -166,6 +171,11 @@ const NO = {
   'The order list has not been sent to the workshop yet.': 'Bestillingen er ikke sendt til verkstedet ennå.', 'See order': 'Se bestillingen',
   'All PDIs': 'Alle nybilklargjøringer', 'PDI ordered': 'Nybilklargjøring bestilt', 'PDI not sent': 'Bestilling ikke sendt',
   'Ready for registration and delivery': 'Klar for registrering og levering',
+  'Print or PDF': 'Skriv ut eller PDF', 'Printed / PDF': 'Skrevet ut / PDF', 'Already given – mark as sent': 'Allerede levert – merk som sendt',
+  'Print the order for the workshop, or choose “Save as PDF” in the print window to send or store it as a file.':
+    'Skriv ut bestillingen til verkstedet, eller velg «Lagre som PDF» i utskriftsvinduet for å sende eller lagre den som fil.',
+  'Did you give the order to the workshop (printed or as a PDF)?': 'Har du gitt bestillingen til verkstedet (utskrift eller PDF)?',
+  'Marked as given to the workshop': 'Merket som levert til verkstedet', 'Choose who to send it to': 'Velg hvem den skal sendes til',
   'PDI done – the car is ready for registration and delivery': 'Nybilklargjøring utført – bilen er klar for registrering og levering',
   // ---- arrivals / intake / inspection
   'New arrival': 'Ny ankomst', 'No arrival inspections in progress.': 'Ingen pågående mottakskontroller.', 'Recently placed in storage': 'Nylig plassert på lager',
@@ -481,10 +491,15 @@ const NO_PATTERNS = [
   ['{} are on {}, which is out on a test drive.\n\nMove them to {}? You then register the return of {}.',
     '{1} står på {2}, som er ute på prøvekjøring.\n\nFlytte dem til {3}? Deretter registrerer du innlevering av {4}.'],
   ['{} are on {}; move them to this car?', '{1} står på {2}; flytte dem til denne bilen?'],
+  // Statens vegvesen sync
+  ['Last checked {}: found in the vehicle registry', 'Sist sjekket {1}: funnet i kjøretøyregisteret'],
+  ['Last checked {}: not in the vehicle registry yet', 'Sist sjekket {1}: ikke i kjøretøyregisteret ennå'],
   // PDI
   ['Sent {} to {} by {} (e-mail app)', 'Sendt {1} til {2} av {3} (e-postprogram)'], ['Sent {} to {} by {}', 'Sendt {1} til {2} av {3}'], ['Sent {} to {} (e-mail app)', 'Sendt {1} til {2} (e-postprogram)'],
   ['Sent {} to {}', 'Sendt {1} til {2}'], ['Sent to {}', 'Sendt til {1}'], ['PDI done {} ({})', 'Nybilklargjøring utført {1} ({2})'], ['PDI done {}', 'Nybilklargjøring utført {1}'],
-  ['PDI booked {}', 'Nybilklargjøring booket {1}'], ['sent {} to {}', 'sendt {1} til {2}'], ['done {} by {}', 'utført {1} av {2}'], ['done {}', 'utført {1}'],
+  ['PDI booked {}', 'Nybilklargjøring booket {1}'],
+  ['Printed / PDF {} by {}', 'Skrevet ut / PDF {1} av {2}'], ['Printed / PDF {}', 'Skrevet ut / PDF {1}'], ['printed / PDF {}', 'skrevet ut / PDF {1}'],
+  ['printed / PDF {} · enter the date when they reply', 'skrevet ut / PDF {1} · legg inn datoen når de svarer'], ['sent {} to {}', 'sendt {1} til {2}'], ['done {} by {}', 'utført {1} av {2}'], ['done {}', 'utført {1}'],
   ['{} · expected {}', '{1} · forventet {2}'], ['{} · {} · expected {}', '{1} · {2} · forventet {3}'], ['expected {}', 'forventet {1}'],
   // storage maintenance
   ['Do {}', 'Utfør {1t}'], ['monthly check', 'månedlig sjekk'], ['3-month check', '3-månederssjekk'], ['6-month check', '6-månederssjekk'],

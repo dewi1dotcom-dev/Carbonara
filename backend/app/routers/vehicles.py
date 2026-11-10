@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import photostore, vegvesen, vinlib
 from ..common import (READY_SQL, RETENTION_DUE_SQL, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
@@ -346,16 +346,26 @@ def unmark_registered(vehicle_id: int, staff_id: Optional[int] = None, conn=Depe
 
 
 @router.post("/vehicles/{vehicle_id}/registry/sync")
-def sync_now(vehicle_id: int, conn=Depends(get_conn)):
-    vehicle = conn.execute("SELECT registered_marked_at FROM vehicles WHERE id = %s", (vehicle_id,)).fetchone()
+def sync_now(vehicle_id: int, request: Request, conn=Depends(get_conn)):
+    """Fetch Statens vegvesen data now, for any car. For a car not marked as
+    registered this is a one-off lookup (the worker only re-syncs registered
+    cars), unless the registry says it is registered: then it is marked, as
+    at arrival, and regular syncing starts."""
+    vehicle = conn.execute("SELECT registered_marked_at FROM vehicles WHERE id = %s AND deleted_at IS NULL FOR UPDATE",
+                           (vehicle_id,)).fetchone()
     if not vehicle:
         raise not_found("Vehicle")
-    if not vehicle["registered_marked_at"]:
-        raise conflict("Mark the vehicle as registered before syncing with Statens vegvesen")
     if not vegvesen.is_configured():
         raise HTTPException(503, "Statens vegvesen API key is not configured on the server")
     result = vegvesen.sync_vehicle(conn, vehicle_id)
-    return {"result": result, "vehicle": get_vehicle(vehicle_id, conn)}
+    marked = False
+    if result.get("status_code") == "REGISTRERT" and not vehicle["registered_marked_at"]:
+        staff_id = request.state.staff["id"]
+        conn.execute("UPDATE vehicles SET registered_marked_at = now(), registered_marked_by = %s WHERE id = %s",
+                     (staff_id, vehicle_id))
+        log_event(conn, vehicle_id, "marked_registered", staff_id=staff_id, data={"source": "statens_vegvesen"})
+        marked = True
+    return {"result": result, "marked_registered": marked, "vehicle": get_vehicle(vehicle_id, conn)}
 
 
 # --------------------------------------------------------------------------- #

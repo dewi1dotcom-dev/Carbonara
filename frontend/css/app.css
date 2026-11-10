@@ -447,6 +447,10 @@ body.logged-out .topbar nav, body.logged-out .user-menu { display: none; }
   body:has(dialog[open]) > *:not(dialog) { display: none !important; }
   dialog { position: static; border: 0; box-shadow: none; max-width: none; }
   dialog .dialog-head button, dialog .no-print { display: none; }
+  /* Documents in a dialog (PDI order sheet): no app title bar, and the
+     dialog's own 15 mm padding is enough. */
+  dialog.doc-dialog .dialog-head { display: none; }
+  dialog .report { padding: 0 !important; }
   /* Otherwise print the page (storage report) without menu, footer and buttons. */
   .topbar, .app-footer, .no-print, #toasts { display: none !important; }
   body, .view, main { background: #fff !important; color: #000 !important; }
@@ -479,6 +483,10 @@ a.tile:hover { border-color: var(--primary); }
 .pdi-item label.check { margin-top: 0; }
 .pdi-item select { width: auto; }
 .pdi-status { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.pdi-sheet .pdi-tick { width: 4.5rem; text-align: center; }
+.pdi-sheet .pdi-lines { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin: 1.2rem 0 .4rem; }
+.pdi-sheet .pdi-lines div { border-bottom: 1px solid #111; padding-bottom: .2rem; font-size: .85rem; min-height: 1.8rem; }
+.send-modes { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .75rem; }
 .pdi-mail { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: .85rem; background: var(--bg);
   border: 1px solid var(--border); border-radius: 8px; padding: .75rem; max-height: 45vh; overflow: auto; }
 .list-edit li .row-actions { display: flex; gap: .75rem; flex-wrap: wrap; justify-content: flex-end; }

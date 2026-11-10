@@ -44,7 +44,9 @@ export async function todayView(el) {
     // ---- needs attention
     h('h2', { class: 'today-heading' }, 'Needs attention'),
     block('✉', 'PDI orders waiting for the workshop’s reply', d.pdi_waiting.map((o) =>
-      row(`#/vehicles/${o.vehicle_id}`, carText(o), `sent ${fmtDate(o.sent_at, false)} to ${o.sent_to} · enter the date when they reply`))),
+      row(`#/vehicles/${o.vehicle_id}`, carText(o), o.sent_via === 'print'
+        ? `printed / PDF ${fmtDate(o.sent_at, false)} · enter the date when they reply`
+        : `sent ${fmtDate(o.sent_at, false)} to ${o.sent_to} · enter the date when they reply`))),
     block('📝', 'PDI orders not sent yet', d.pdi_drafts.map((o) =>
       row(`#/vehicles/${o.vehicle_id}`, carText(o), `started ${fmtDate(o.created_at, false)}${o.created_by_name ? ` by ${o.created_by_name}` : ''}`))),
     block('🛂', 'EU-kontroll due', d.eu_control.map((c) =>

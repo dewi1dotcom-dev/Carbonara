@@ -3,8 +3,13 @@
 // Also the banner at the top of the vehicle page and the PDI page (#/pdi).
 import { tr } from '../i18n.js';
 import {
-  api, append, boardBlock, boardRow, busy, carText, dateInput, fmtDate, h, openDialog, showError, timeInput, toast,
+  api, append, boardBlock, boardRow, busy, carText, dateInput, fmtDate, h, openDialog, session, showError, timeInput, toast,
 } from '../ui.js';
+
+/** "Sent 10.11.2026 14:00 to rbv@…" or "Printed / PDF 10.11.2026 14:00". */
+const sentText = (o, withTime = true) => (o.sent_via === 'print'
+  ? `printed / PDF ${fmtDate(o.sent_at, withTime)}`
+  : `sent ${fmtDate(o.sent_at, withTime)} to ${o.sent_to}`);
 
 const STATUS_TEXT = { draft: 'Not sent', sent: 'Sent – waiting for date', booked: 'PDI booked', done: 'PDI done', cancelled: 'Cancelled' };
 const STATUS_CLS = { draft: 'warn', sent: 'warn', booked: 'good', done: 'good', cancelled: '' };
@@ -58,7 +63,7 @@ export async function pdiListView(el) {
     boardBlock('⏰', 'PDI date passed – mark as done?', passed.map((o) => link(o, `was ${fmtDate(o.pdi_at)}`, 'bad')), { cls: 'bad' }),
     boardBlock('🗓', 'Later', later.map((o) => link(o, when(o)))),
     boardBlock('✉', 'Waiting for the workshop’s date', d.open.filter((o) => o.status === 'sent').map((o) =>
-      link(o, `sent ${fmtDate(o.sent_at, false)} to ${o.sent_to}`))),
+      link(o, sentText(o, false)))),
     boardBlock('📝', 'Not sent yet', d.open.filter((o) => o.status === 'draft').map((o) =>
       link(o, `started ${fmtDate(o.created_at, false)}${by(o.created_by_name)}`))),
     boardBlock('✓', 'Recently done', d.done.map((o) => link(o, `done ${fmtDate(o.done_at, false)}${by(o.done_by_name)}`))));
@@ -81,8 +86,9 @@ export function pdiCard(v, data, opts, rerender) {
       h('div', { class: 'pdi-status' },
         h('span', { class: `badge ${STATUS_CLS[o.status]}` }, STATUS_TEXT[o.status]),
         o.status === 'booked' ? h('strong', {}, fmtDate(o.pdi_at)) : null,
-        o.sent_at ? h('span', { class: 'muted small' },
-          `Sent ${fmtDate(o.sent_at)} to ${o.sent_to}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}${o.sent_via === 'mail_app' ? ' (e-mail app)' : ''}`) : null),
+        o.sent_at ? h('span', { class: 'muted small' }, o.sent_via === 'print'
+          ? `Printed / PDF ${fmtDate(o.sent_at)}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}`
+          : `Sent ${fmtDate(o.sent_at)} to ${o.sent_to}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}${o.sent_via === 'mail_app' ? ' (e-mail app)' : ''}`) : null),
       o.changed_since_sent ? h('div', { class: 'notice warn small' }, 'Changed since it was sent — send it again so the workshop has the latest order.') : null,
       o.status === 'booked' && !o.sent_at ? h('div', { class: 'notice warn small' }, 'PDI date is set, but the order list has not been sent to the workshop yet.') : null,
       lines.length ? h('ul', {}, lines.map((l) => h('li', {}, l))) : h('p', { class: 'muted' }, 'Nothing ordered yet.'),
@@ -174,13 +180,50 @@ function editDialog(v, o, opts, done) {
 
 // ---------------------------------------------------------------- send
 
+/** The order as a Norwegian A4 sheet for the workshop (printed or saved as PDF). */
+function pdiSheet(o, opts) {
+  const car = [o.make, o.model, o.model_year].filter(Boolean).join(' ') || 'Bil';
+  const t = o.tyres || {};
+  const rows = (pairs) => h('table', { class: 'rep-head' }, h('tbody', {},
+    pairs.filter(([, v]) => v).map(([k, v]) => h('tr', {}, h('th', {}, k), h('td', {}, v)))));
+  const textBlock = (title, text) => (text ? [h('h2', {}, title), h('p', { style: { whiteSpace: 'pre-line' } }, text)] : null);
+  return h('div', { class: 'report pdi-sheet', translate: 'no' }, // a Norwegian document
+    h('div', { class: 'rep-title' },
+      h('h1', {}, 'Bestilling av nybilklargjøring'),
+      h('div', { class: 'small' }, [opts.company, fmtDate(new Date(), false)].filter(Boolean).join(' · '))),
+    h('h2', {}, 'Bil'),
+    rows([['Bil', car], ['Understellsnr. (VIN)', h('span', { class: 'mono' }, o.vin)],
+      ['Reg.nr.', o.registration_number || 'ikke registrert ennå'], ['Farge', o.color], ['Står på', o.location_code]]),
+    h('h2', {}, 'Bestilt'),
+    (o.items || []).length
+      ? h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Utstyr / arbeid'), h('th', { class: 'pdi-tick' }, 'Utført'))),
+        h('tbody', {}, o.items.map((i) => h('tr', {},
+          h('td', {}, `${i.label}${i.choice ? `: ${i.choice}` : ''}`), h('td', { class: 'pdi-tick' }, '☐')))))
+      : h('p', {}, '(ingen tilbehør)'),
+    textBlock('Annet', o.other),
+    t.mode && t.mode !== 'none' ? [h('h2', {}, 'Vinterdekk'),
+      rows([['Vinterdekk', opts.tyre_modes[t.mode]], ['Dekkleverandør', t.company],
+        ['Forventet levert', t.expected_date && fmtDate(t.expected_date, false)], ['Detaljer', t.note]])] : null,
+    textBlock('Merknad', o.note),
+    h('h2', {}, 'Tidspunkt for nybilklargjøring'),
+    h('p', { class: 'small' }, 'Gi beskjed om dato og klokkeslett for nybilklargjøringen.'),
+    h('div', { class: 'pdi-lines' }, h('div', {}, 'Dato:'), h('div', {}, 'Klokkeslett:')),
+    h('div', { class: 'sign-lines' },
+      h('div', { class: 'sign-wide' }, `Bestilt av${session.me?.name ? `: ${session.me.name}` : ''}`),
+      h('div', {}, 'Dato'),
+      h('div', { class: 'sign-wide' }, 'Mottatt av verkstedet'),
+      h('div', {}, 'Dato')));
+}
+
+/** Send the order to the workshop: by e-mail, or printed / saved as a PDF. */
 function sendDialog(o, opts, done) {
-  if (!opts.recipients.length) { showError(new Error('No e-mail recipients yet. An administrator can add them under Settings → PDI order lists.')); return; }
+  const hasRecipients = opts.recipients.length > 0;
   const recipient = h('select', { id: 'pdi-to' }, opts.recipients.map((r) => h('option', { value: r.id }, `${r.label} – ${r.email}`)));
-  recipient.value = String((opts.recipients.find((r) => r.is_default) || opts.recipients[0]).id);
+  if (hasRecipients) recipient.value = String((opts.recipients.find((r) => r.is_default) || opts.recipients[0]).id);
   const preview = h('div', { class: 'pdi-mail', translate: 'no' }); // the e-mail is always Norwegian
   let mail = null;
   const load = async () => {
+    if (!hasRecipients) return;
     try {
       mail = await api.get(`/pdi/${o.id}/email?recipient_id=${recipient.value}`);
       preview.textContent = `Til: ${mail.to}\nEmne: ${mail.subject}\n\n${mail.body}`;
@@ -189,9 +232,9 @@ function sendDialog(o, opts, done) {
   recipient.addEventListener('change', load);
 
   const record = async (via) => {
-    await api.post(`/pdi/${o.id}/send`, { recipient_id: Number(recipient.value), via });
+    await api.post(`/pdi/${o.id}/send`, { recipient_id: via === 'print' ? null : Number(recipient.value), via });
     close();
-    toast(via === 'smtp' ? `Sent to ${mail?.to ?? 'the workshop'}` : 'Marked as sent', 'success');
+    toast(via === 'smtp' ? `Sent to ${mail?.to ?? 'the workshop'}` : via === 'print' ? 'Marked as given to the workshop' : 'Marked as sent', 'success');
     await done();
   };
   const smtpBtn = h('button', { class: 'btn primary', type: 'button', onClick: (e) => busy(e.currentTarget, () => record('smtp')) },
@@ -213,13 +256,44 @@ function sendDialog(o, opts, done) {
     },
   }, 'Copy text');
 
-  const body = h('div', {},
-    h('div', { class: 'field' }, h('label', { for: 'pdi-to' }, 'Send to'), recipient),
-    preview,
-    opts.smtp_configured ? null : h('p', { class: 'muted small' },
-      'Sending directly from Carbonara is not set up yet (a system admin can add the mail server on the System page → E-mail), so use your own e-mail app.'),
-    h('div', { class: 'actions' }, copyBtn, appBtn, opts.smtp_configured ? smtpBtn : null));
-  const { close } = openDialog('Send PDI order', body, { wide: true });
+  const emailPanel = hasRecipients
+    ? h('div', {},
+      h('div', { class: 'field' }, h('label', { for: 'pdi-to' }, 'Send to'), recipient),
+      preview,
+      opts.smtp_configured ? null : h('p', { class: 'muted small' },
+        'Sending directly from Carbonara is not set up yet (a system admin can add the mail server on the System page → E-mail), so use your own e-mail app.'),
+      h('div', { class: 'actions' }, copyBtn, appBtn, opts.smtp_configured ? smtpBtn : null))
+    : h('div', { class: 'notice warn' }, 'No e-mail recipients yet. An administrator can add them under Settings → PDI order lists.');
+
+  // Print / PDF: the browser's print dialog also offers "Save as PDF".
+  const printBtn = h('button', {
+    class: 'btn primary', type: 'button',
+    onClick: () => {
+      window.print();
+      setTimeout(() => {
+        if (confirm('Did you give the order to the workshop (printed or as a PDF)?')) record('print').catch(showError);
+      }, 500);
+    },
+  }, '🖨 Print / save as PDF');
+  const printPanel = h('div', {},
+    h('p', { class: 'muted small no-print' }, 'Print the order for the workshop, or choose “Save as PDF” in the print window to send or store it as a file.'),
+    pdiSheet(o, opts),
+    h('div', { class: 'actions no-print' },
+      h('button', { class: 'btn', type: 'button', onClick: (e) => busy(e.currentTarget, () => record('print')) }, 'Already given – mark as sent'),
+      printBtn));
+
+  // E-mail or print: one panel at a time.
+  const slot = h('div');
+  const modeBtns = {};
+  const show = (mode) => {
+    slot.replaceChildren(mode === 'print' ? printPanel : emailPanel);
+    Object.entries(modeBtns).forEach(([m, b]) => { b.className = m === mode ? 'btn primary' : 'btn'; });
+  };
+  modeBtns.email = h('button', { type: 'button', onClick: () => show('email') }, '✉ E-mail');
+  modeBtns.print = h('button', { type: 'button', onClick: () => show('print') }, '🖨 Print or PDF');
+  const body = h('div', {}, h('div', { class: 'send-modes no-print' }, modeBtns.email, modeBtns.print), slot);
+  const { close } = openDialog('Send PDI order', body, { wide: true, doc: true });
+  show(hasRecipients ? 'email' : 'print');
   load();
 }
 

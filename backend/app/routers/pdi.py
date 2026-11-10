@@ -50,8 +50,8 @@ class OrderIn(BaseModel):
 
 
 class SendIn(BaseModel):
-    recipient_id: int
-    via: Literal["smtp", "mail_app"]
+    recipient_id: Optional[int] = None  # not used for 'print'
+    via: Literal["smtp", "mail_app", "print"]
 
 
 class BookingIn(BaseModel):
@@ -197,6 +197,7 @@ def options(conn=Depends(get_conn)):
         "recipients": [r for r in rows if r["kind"] == "recipient"],
         "tyre_modes": TYRE_MODES,
         "smtp_configured": mailer.is_configured(),
+        "company": settings.privacy_company,  # printed on the order sheet
     }
 
 
@@ -265,9 +266,15 @@ def preview_email(order_id: int, recipient_id: int, request: Request, conn=Depen
 
 @router.post("/pdi/{order_id}/send")
 def send_order(order_id: int, body: SendIn, request: Request, conn=Depends(get_conn)):
-    """Send by SMTP, or record that staff sent it from their own e-mail app."""
+    """Send by SMTP, or record that staff sent it from their own e-mail app, or
+    printed it / saved it as a PDF for the workshop (via 'print', no address)."""
     row = _open_order(conn, order_id)
-    to = _recipient(conn, body.recipient_id)["email"]
+    if body.via == "print":
+        to = None
+    elif body.recipient_id is None:
+        raise bad_request("Choose who to send it to")
+    else:
+        to = _recipient(conn, body.recipient_id)["email"]
     if body.via == "smtp":
         order = _order(conn, order_id)
         order["sender_name"] = (getattr(request.state, "staff", None) or {}).get("name")
