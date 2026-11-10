@@ -6,3 +6,15 @@ __pycache__/
 node_modules/
 dist/
 .claude/settings.local.json
+
+# Test photos (licences, ID cards, car labels) must never be committed
+*.png
+*.jpg
+*.jpeg
+*.heic
+*.webp
+*.gif
+*.bmp
+*.tif
+*.tiff
+*.pdf

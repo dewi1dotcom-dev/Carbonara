@@ -51,6 +51,10 @@ git grep -nE "[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0
 # must print nothing (exit code 1 = clean)
 ```
 
+**Never write personal data from test photos** (names, ID numbers, licence numbers, birth dates
+from licences or ID cards) into a file, comment or commit message; use made-up names like
+"Ola Nordmann". Test photos never go into the repo (`.gitignore` blocks image files).
+
 **Never write any part of a real key, password or PIN into a file,** not even in a check
 like the one above. Never write staff PINs (e.g. the Claude test account's) into any file.
 
@@ -146,7 +150,9 @@ curl.exe -s -b $jar -F "file=@C:\path\licence.png;type=image/png" "$b/api/test-d
 - **Reference results:**
   - The OCR regression set was 35 user photos; the result was **34 of 35** (the miss, a tiny
     Subaru door label, is accepted).
-  - The user's licence must read as "Anders Strang Thorkildsen".
+  - The user's licence must read with the full name (given names + surname) correctly spaced.
+    Licence test photos: the user's own card (two given names) and a card with labels "1"/"2" without
+    dots (0.19.1). Never write the names from them into a file or commit message.
   - The Norsk Biltransport transport sheet must give VIN `LSJWS4090SZ716243` via the QR code.
   - These photos lived in session temp folders and are gone. Ask for them again before
     changing `vinlib.py` or `licenselib.py`.
@@ -348,9 +354,11 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
     vehicle banner ("Register return" button) and Today. Its return doesn't need the plates
     ticked; a drive with plates still on needs "Trade plates taken off" ticked (or a note).
 - **Name from the licence** (`licenselib.py`, `POST /test-drives/read-license`):
-  - The OCR reads EU-format field labels `1.` (surname) and `2.` (given names) and tries
-    0°/90°/270°/180°. It fills in "Given Surname" and never overwrites a typed name.
-  - The OCR model often **drops spaces** ("ANDERS STRANG" → "ANDERSSTRANG"). `_respace` finds
+  - The OCR reads EU-format field labels `1.` (surname) and `2.` (given names), with or without the
+    dot, and tries 0°/90°/270°/180°. It fills in "Given Surname" and never overwrites a typed name.
+  - Fallbacks (0.19.1): a lone label misread as I/l/| (1) or Z (2) is accepted; if only one field
+    is found, the name line right above/below it is used, with "low" confidence.
+  - The OCR model often **drops spaces** ("OLA KRISTIAN" → "OLAKRISTIAN"). `_respace` finds
     ink column runs in the straightened box. A gap ≥ max(0.45 × median letter width, 2.2 ×
     median letter gap) counts as a space. It is only used if the letters are unchanged, and
     it never cuts off a single letter.
@@ -703,6 +711,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.17.0 | PDI order: **print or save as PDF** instead of e-mail (Norwegian order sheet) |
 | 0.18.0 | In-app Yes/No "given to the workshop?" with PDI date; **PDI preparation** (trade plates, spot + message, winter wheels) with a notification bar the working day before |
 | 0.19.0 | Staff: first name, last name, phone; names auto-capitalized; deactivated staff can be deleted (history keeps the name) |
+| 0.19.1 | Licence reader: misread field labels (I, l or a bar for 1; Z for 2) accepted; if only one name field is found, the line above/below is used (low confidence) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

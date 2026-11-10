@@ -22,6 +22,10 @@ log = logging.getLogger("carbonara.license")
 
 # "1. NORDMANN", "1.NORDMANN", "1, NORDMANN", "1 NORDMANN" — or just the label "1." alone.
 _FIELD = re.compile(r"^\s*([12])\s*[.,:]?\s*(.*)$")
+# A lone label digit without a dot (older Norwegian cards) is often misread: "1" as I/l/|, "2" as Z.
+# Only accepted with a space after it, so names like "IVAR" or "ZAHRA" aren't cut.
+_FIELD_MISREAD = re.compile(r"^\s*([Il|Z])\s*[.,:]?\s+(\S.*)$")
+_MISREAD_KEY = {"I": "1", "l": "1", "|": "1", "Z": "2"}
 _NAME_CHARS = re.compile(r"[^A-ZÆØÅÄÖÜÉÈÁÀÓÍÚÑ' \-]")
 # Header words on the card that are never a name.
 _NOT_NAMES = {"NORGE", "NORWAY", "FØRERKORT", "FORERKORT", "DRIVING", "LICENCE", "LICENSE", "KONGERIKET",
@@ -63,7 +67,7 @@ def _otsu(arr) -> int:
 def _word_gaps(image: Image.Image, it: dict, n_chars: int) -> list[int]:
     """Positions (in the text without spaces) where the photo shows a word gap.
 
-    The OCR model often drops spaces ("ANDERS STRANG" -> "ANDERSSTRANG").
+    The OCR model often drops spaces ("OLA KRISTIAN" -> "OLAKRISTIAN").
     Straighten the text box, find the columns with ink (one run per letter)
     and treat gaps much wider than the normal letter spacing as spaces."""
     import math
@@ -159,21 +163,43 @@ def _with_spaces(value: str, respaced: str) -> str:
     return respaced if respaced.replace(" ", "") == value.replace(" ", "") and _plausible(respaced) else value
 
 
+def _next_line(box: dict, items: list[dict], up: bool) -> dict | None:
+    """The box on the line straight above (or below) `box`, starting at about the same place."""
+    h = box["height"]
+    best = None
+    for b in items:
+        # Skip a stray label box ("1") or a date; only name-like text counts.
+        if b is box or re.search(r"\d", b["text"]) or not _plausible(_clean_name(b["text"])):
+            continue
+        dx, dy = b["cx"] - box["cx"], b["cy"] - box["cy"]
+        along = dx * box["ux"] + dy * box["uy"]
+        across = -dx * box["uy"] + dy * box["ux"]  # positive = below
+        dist = -across if up else across
+        left_diff = abs((along - b["width"] / 2) - (-box["width"] / 2))
+        if 0.6 * h < dist < 2.2 * h and left_diff < 3 * h and (best is None or dist < best[0]):
+            best = (dist, b)
+    return best[1] if best else None
+
+
 def _fields(image: Image.Image, items: list[dict]) -> dict[str, tuple[str, float]]:
     """{'1': (surname, score), '2': (given names, score)} from labelled boxes."""
     found: dict[str, tuple[str, float]] = {}
+    source: dict[str, dict] = {}  # the box each value was read from
     for it in items:
         m = _FIELD.match(it["text"])
         if not m:
-            continue
+            mm = _FIELD_MISREAD.match(it["text"])
+            if not mm:
+                continue
+            m = _FIELD.match(f"{_MISREAD_KEY[mm.group(1)]} {mm.group(2)}")
         key, rest = m.group(1), m.group(2)
         # Digits after the label: a date or number ("12.03.2020"), not a name field.
         if re.search(r"\d", rest):
             continue
-        score = it["score"]
+        score, box = it["score"], it
         value = _clean_name(rest)
         if _plausible(value):
-            # "2.ANDERSSTRANG": put back the spaces the OCR dropped, then drop the label again.
+            # "2.OLAKRISTIAN": put back the spaces the OCR dropped, then drop the label again.
             m2 = _FIELD.match(_respace(image, it))
             if m2 and m2.group(1) == key:
                 value = _with_spaces(value, m2.group(2))
@@ -182,13 +208,26 @@ def _fields(image: Image.Image, items: list[dict]) -> dict[str, tuple[str, float
             nxt = _same_line_after(it, items)
             if not nxt or re.search(r"\d", nxt["text"]):
                 continue
-            value, score = _clean_name(nxt["text"]), min(score, nxt["score"])
+            value, score, box = _clean_name(nxt["text"]), min(score, nxt["score"]), nxt
             if not _plausible(value):
                 continue
             value = _with_spaces(value, _respace(image, nxt))
         prev = found.get(key)
         if prev is None or score > prev[1]:
             found[key] = (value, score)
+            source[key] = box
+
+    # Only one field found: its label digit was probably not seen at all (a lone narrow "1" is
+    # easy to miss). Field 1 is always the line right above field 2, so read that line instead.
+    if len(found) == 1:
+        have = next(iter(found))
+        nb = _next_line(source[have], items, up=(have == "2"))
+        if nb and not re.search(r"\d", nb["text"]):
+            value = _clean_name(nb["text"])
+            if _plausible(value):
+                value = _with_spaces(value, _respace(image, nb))
+                # Found by position, not by label: always "low" confidence (staff check the name).
+                found["1" if have == "2" else "2"] = (value, min(nb["score"], 0.5))
     return found
 
 
