@@ -780,6 +780,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.22.2 | Fix: car photos skip cancelled arrival inspections (prefer the completed one) |
 | 0.22.3 | Arrival inspection: "Cancel inspection and delete" (cars new to Carbonara go to Recently deleted) and "Pause inspection" (back to Arrivals) |
 | 0.22.4 | Test drive return: "Received by" is the logged-in user (no dropdown; server takes it from the session) |
+| 0.22.5 | Login page: clock on the right, as when logged in |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

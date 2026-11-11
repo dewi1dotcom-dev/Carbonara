@@ -446,6 +446,8 @@ button.list-card { width: 100%; text-align: left; font: inherit; color: inherit;
 button.list-card:disabled { opacity: .55; cursor: not-allowed; }
 /* ---------------------------------------------------------------- login */
 body.logged-out .topbar nav, body.logged-out .user-menu { display: none; }
+/* Logged in, the menu (margin-left: auto) pushes the clock right; without it, the clock does it. */
+body.logged-out .clock { margin-left: auto; }
 .login-card { max-width: 420px; margin: 2rem auto; }
 .login-card h1 { margin-top: 0; }
 .login-card input[type=password] { font-size: 1.4rem; letter-spacing: .3em; }
