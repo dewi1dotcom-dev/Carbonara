@@ -186,7 +186,7 @@ backend/
                         test drive customer purge)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives,
                         session (login/language), pdi, dashboard (Today), system, storage_care
-  migrations/           001…022
+  migrations/           001…023
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
@@ -224,6 +224,7 @@ frontend/               no build step; plain ES modules
 | 020 | `pdi_prep` | `pdi_orders.prep_plate_id / prep_note / prep_wheels_location / prepared_at / prepared_by` |
 | 021 | `staff_names` | `staff.first_name / last_name / phone / deleted_at / deleted_by`; existing names split |
 | 022 | `theme` | `staff.theme` ('auto' / 'light' / 'dark') |
+| 023 | `battery_charges` | monthly 12V charges of used cars in storage (cancellable) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -533,6 +534,20 @@ storage, periodic checklist, 12V battery form).
     a signature/stamp box
   - "Only 12V battery form" prints that part alone (warranty claims)
 
+**12V charging for used cars (0.21.0)** (`battery_charges`, end of `routers/storage_care.py`,
+`batteryCard` in `views/storagecare.js`):
+- Used cars (`condition = 'used'`; "not chosen" doesn't count) in storage get their 12V battery
+  charged **every month**. Card "12V battery charging" on the vehicle page: next charge,
+  last charge, all charges, "🔌 Record charge" (voltage before/after optional, note).
+  Below 12.5 V after charging needs a note.
+- **Due** = one month after the latest of the last charge and the start of the current stay
+  in storage. The stay starts at the latest placement that doesn't continue an earlier
+  assignment (a move ends one and starts the next in the same transaction, so
+  `removed_at = placed_at`); coming back from off site starts a new stay.
+- Today: "12V battery charging due (used cars)", due within 3 days or overdue (same rule as
+  storage checks). Events `battery_charged` / `battery_charge_voided`; an admin cancels a
+  charge with a reason (struck through, never deleted).
+
 **Printing:**
 - `@page { size: A4; margin: 0 }`: the browser prints no header/footer (title, date, URL,
   page no.). Documents (`dialog`, `.report`) get 15 mm padding instead.
@@ -543,7 +558,7 @@ storage, periodic checklist, 12V battery form).
 **Today board (0.12.0)** (`routers/dashboard.py`, `views/today.js`): the start page `#/`, one
 `/api/dashboard` call.
 - **Today/tomorrow:** PDI tomorrow (warn), PDI today, PDI date passed, storage checks due,
-  out on test drive, arrivals in progress.
+  12V charging due (used cars), out on test drive, arrivals in progress.
 - **Needs attention:** PDI orders waiting for reply, unsent orders, EU-kontroll ≤ 60 days,
   service ≤ 31 days, SVV differences.
 - **Then:** upcoming PDIs and number tiles. Attention lists only cover cars that aren't off
@@ -723,6 +738,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.19.0 | Staff: first name, last name, phone; names auto-capitalized; deactivated staff can be deleted (history keeps the name) |
 | 0.19.1 | Licence reader: misread field labels (I, l or a bar for 1; Z for 2) accepted; if only one name field is found, the line above/below is used (low confidence) |
 | 0.20.0 | **Light / dark theme** per user (or same as device), under their name at the top |
+| 0.21.0 | **12V charging every month for used cars** in storage: card on the vehicle page, reminder on Today |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

@@ -1,5 +1,5 @@
 """Storage maintenance checks for new cars (MG SI-GI2022102501), and the
-printable record of them."""
+printable record of them. Also the monthly 12V charging of used cars in storage."""
 
 from typing import Literal, Optional
 
@@ -221,3 +221,115 @@ def report(vehicle_id: int, conn=Depends(get_conn)):
         "level_text": sc.LEVEL_TEXT,
         "reference": "MG Service Information SI-GI2022102501",
     }
+
+
+# ---------------------------------------------------------------- used cars: 12V charging every month
+
+# Every car with where its current stay in storage started and its last charge.
+# A move between spots ends one assignment and starts the next in the same
+# transaction (same now()), so the stay starts at the latest placement that
+# doesn't continue an earlier one (i.e. the car came back from off site).
+CHARGE_SQL = """
+SELECT v.id, v.vin, v.make, v.model, v.model_year, v.registration_number, v.condition, v.status,
+       (SELECT (max(a.placed_at) AT TIME ZONE 'Europe/Oslo')::date FROM storage_assignments a
+         WHERE a.vehicle_id = v.id
+           AND NOT EXISTS (SELECT 1 FROM storage_assignments b
+                            WHERE b.vehicle_id = a.vehicle_id AND b.id <> a.id AND b.removed_at = a.placed_at)) AS stay_start,
+       (SELECT (max(c.charged_at) AT TIME ZONE 'Europe/Oslo')::date FROM battery_charges c
+         WHERE c.vehicle_id = v.id AND c.voided_at IS NULL) AS last_charged
+  FROM vehicles v
+ WHERE v.deleted_at IS NULL"""
+
+
+def charge_due(row: dict, today) -> Optional[dict]:
+    """Used cars in storage: due one month after the last charge, or after the
+    car came into storage if it hasn't been charged since."""
+    if row["condition"] != "used" or row["status"] != "in_storage":
+        return None
+    dates = [d for d in (row["stay_start"], row["last_charged"]) if d]
+    base = max(dates) if dates else today
+    due = sc.add_months(base, 1)
+    return {"due": due, "days": (due - today).days}
+
+
+def charging_due_list(conn, today, within_days: int = 3) -> list[dict]:
+    """For the Today board: used cars whose 12V charge is due within a few days or overdue."""
+    out = []
+    for r in conn.execute(CHARGE_SQL + " AND v.condition = 'used' AND v.status = 'in_storage'").fetchall():
+        d = charge_due(r, today)
+        if d and d["days"] <= within_days:
+            out.append({k: r[k] for k in ("id", "vin", "make", "model", "model_year", "registration_number",
+                                           "stay_start", "last_charged")} | {"due": d["due"], "in_days": d["days"]})
+    out.sort(key=lambda r: r["in_days"])
+    return out
+
+
+def charging(conn, vehicle_id: int) -> dict:
+    v = conn.execute(CHARGE_SQL + " AND v.id = %s", (vehicle_id,)).fetchone()
+    if not v:
+        raise not_found("Vehicle")
+    charges = conn.execute(
+        """SELECT c.*, s.name AS charged_by_name, vb.name AS voided_by_name
+             FROM battery_charges c LEFT JOIN staff s ON s.id = c.charged_by LEFT JOIN staff vb ON vb.id = c.voided_by
+            WHERE c.vehicle_id = %s ORDER BY c.charged_at""",
+        (vehicle_id,),
+    ).fetchall()
+    today = conn.execute(TODAY_SQL).fetchone()["d"]
+    applies = v["condition"] == "used"
+    note = None
+    if applies and v["status"] == "off_site":
+        note = "The car is off site."
+    elif applies and v["status"] != "in_storage":
+        note = "Starts when the car is placed in storage."
+    return {"vehicle_id": v["id"], "applies": applies, "note": note, "stay_start": v["stay_start"],
+            "next": charge_due(v, today), "charges": charges, "v12_min": sc.V12_MIN}
+
+
+class ChargeIn(BaseModel):
+    v12_before: Optional[float] = Field(None, ge=0, le=20)
+    v12_after: Optional[float] = Field(None, ge=0, le=20)
+    note: Optional[str] = Field(None, max_length=500)
+
+
+@router.get("/vehicles/{vehicle_id}/battery-charging")
+def get_charging(vehicle_id: int, conn=Depends(get_conn)):
+    return charging(conn, vehicle_id)
+
+
+@router.post("/vehicles/{vehicle_id}/battery-charging", status_code=201)
+def add_charge(vehicle_id: int, body: ChargeIn, request: Request, conn=Depends(get_conn)):
+    conn.execute("SELECT 1 FROM vehicles WHERE id = %s FOR UPDATE", (vehicle_id,))
+    p = charging(conn, vehicle_id)
+    if not p["applies"]:
+        raise conflict("Monthly 12V charging is recorded for used cars")
+    note = (body.note or "").strip() or None
+    if body.v12_after is not None and body.v12_after < sc.V12_MIN and not note:
+        raise bad_request(f"Below {sc.V12_MIN} V after charging – write what was done under Note")
+    staff_id = request.state.staff["id"]
+    row = conn.execute(
+        """INSERT INTO battery_charges (vehicle_id, charged_by, v12_before, v12_after, note)
+           VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+        (vehicle_id, staff_id, body.v12_before, body.v12_after, note),
+    ).fetchone()
+    log_event(conn, vehicle_id, "battery_charged", staff_id=staff_id,
+              data={"charge_id": row["id"], "v12_before": body.v12_before, "v12_after": body.v12_after})
+    return charging(conn, vehicle_id)
+
+
+@router.post("/battery-charges/{charge_id}/void")
+def void_charge(charge_id: int, body: VoidIn, request: Request, conn=Depends(get_conn), _admin=Depends(require_admin)):
+    """Cancel a charge registered by mistake. It stops counting but stays in the list, struck through."""
+    row = conn.execute("SELECT * FROM battery_charges WHERE id = %s FOR UPDATE", (charge_id,)).fetchone()
+    if not row:
+        raise not_found("Battery charge")
+    if row["voided_at"]:
+        raise conflict("This charge is already cancelled")
+    reason = body.reason.strip()
+    if len(reason) < 3:
+        raise bad_request("Give a reason")
+    staff_id = request.state.staff["id"]
+    conn.execute("UPDATE battery_charges SET voided_at = now(), voided_by = %s, void_reason = %s WHERE id = %s",
+                 (staff_id, reason, charge_id))
+    log_event(conn, row["vehicle_id"], "battery_charge_voided", staff_id=staff_id,
+              data={"charge_id": charge_id, "charged_at": row["charged_at"], "reason": reason})
+    return charging(conn, row["vehicle_id"])

@@ -1,6 +1,6 @@
 import { PANEL_LABELS } from '../diagram.js';
 import { pdiBanner, pdiCard } from './pdi.js';
-import { storageCard } from './storagecare.js';
+import { batteryCard, storageCard } from './storagecare.js';
 import {
   api, append, badge, busy, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   readyBadge, regStatus, showError, spotLabel, STATUS,
@@ -102,6 +102,8 @@ const EVENT_LABELS = {
   pdi_cancelled: 'PDI order cancelled',
   storage_check: 'Storage check',
   storage_check_voided: 'Storage check cancelled',
+  battery_charged: '12V battery charged',
+  battery_charge_voided: '12V charge cancelled',
 };
 
 const FIELD_LABELS = {
@@ -132,6 +134,11 @@ function eventDetail(e) {
     case 'storage_check_voided':
       return [d.kind === 'arrival' ? 'First storage check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
         d.performed_at && `from ${fmtDate(d.performed_at)}`, d.reason].filter(Boolean).join(' · ');
+    case 'battery_charged':
+      return [d.v12_before != null && `before ${d.v12_before} V`, d.v12_after != null && `after ${d.v12_after} V`]
+        .filter(Boolean).join(' · ');
+    case 'battery_charge_voided':
+      return [d.charged_at && `from ${fmtDate(d.charged_at)}`, d.reason].filter(Boolean).join(' · ');
     case 'test_drive_out':
       return [d.removed?.length && `Taken out: ${d.removed.join(', ')}`, d.added?.length && `Put in: ${d.added.join(', ')}`,
         d.trade_plates && `Trade plates: ${d.trade_plates}`, d.odometer_out != null && fmtKm(d.odometer_out), d.note]
@@ -696,9 +703,9 @@ function testDriveBanner(v) {
 }
 
 export async function vehicleView(el, [id]) {
-  const [v, pdiData, pdiOpts, care] = await Promise.all([
+  const [v, pdiData, pdiOpts, care, charging] = await Promise.all([
     api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options'),
-    api.get(`/vehicles/${id}/storage-care`)]);
+    api.get(`/vehicles/${id}/storage-care`), api.get(`/vehicles/${id}/battery-charging`)]);
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -725,6 +732,7 @@ export async function vehicleView(el, [id]) {
     overviewCard(v, rerender),
     pdiCard(v, pdiData, pdiOpts, rerender),
     storageCard(v, care, rerender),
+    batteryCard(v, charging, rerender),
     registryCard(v, rerender),
     h('section', { class: 'card' },
       h('h2', {}, `Known damage (${v.open_damages.length})`),

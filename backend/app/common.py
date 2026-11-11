@@ -183,6 +183,7 @@ def purge_vehicle(conn, vehicle_id: int) -> list:
         "DELETE FROM test_drives WHERE vehicle_id = %s",
         "DELETE FROM pdi_orders WHERE vehicle_id = %s",
         "DELETE FROM storage_checks WHERE vehicle_id = %s",
+        "DELETE FROM battery_charges WHERE vehicle_id = %s",
         "DELETE FROM damages WHERE vehicle_id = %s",
         "DELETE FROM vehicle_events WHERE vehicle_id = %s",
         "DELETE FROM inspection_photos WHERE inspection_id IN (SELECT id FROM inspections WHERE vehicle_id = %s)",

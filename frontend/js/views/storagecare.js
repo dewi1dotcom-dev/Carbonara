@@ -61,6 +61,86 @@ export function storageCard(v, p, rerender) {
   return card;
 }
 
+// ---------------------------------------------------------------- used cars: 12V charging every month
+
+const chargeText = (c) => [fmtDate(c.charged_at), c.charged_by_name,
+  c.v12_before != null && `before ${num(c.v12_before)} V`, c.v12_after != null && `after ${num(c.v12_after)} V`]
+  .filter(Boolean).join(' · ');
+
+/** p = GET /vehicles/:id/battery-charging. Shown for used cars (or any car with charges recorded). */
+export function batteryCard(v, p, rerender) {
+  if (!p.applies && !p.charges.length) return null;
+  const admin = !!session.me?.is_admin;
+  const n = p.next;
+  const valid = p.charges.filter((c) => !c.voided_at);
+  const last = valid[valid.length - 1];
+  const rows = [...p.charges].reverse().map((c) => h('li', { class: c.voided_at ? 'sc-void' : '' },
+    h('span', {}, chargeText(c),
+      c.note ? h('span', { class: 'small block' }, c.note) : null,
+      c.voided_at ? h('span', { class: 'small block' },
+        `Cancelled ${fmtDate(c.voided_at)}${c.voided_by_name ? ` by ${c.voided_by_name}` : ''}: ${c.void_reason}`) : null),
+    admin && !c.voided_at ? h('button', {
+      class: 'link danger', type: 'button',
+      onClick: async () => {
+        const reason = prompt(`Cancel the 12V charge from ${fmtDate(c.charged_at)}?\n\nIt stops counting but stays in the list, struck through.\nReason (required):`);
+        if (reason == null) return;
+        if (reason.trim().length < 3) { showError(new Error('Give a reason (at least 3 characters)')); return; }
+        try {
+          await api.post(`/battery-charges/${c.id}/void`, { reason: reason.trim() });
+          toast('Charge cancelled', 'success');
+          await rerender();
+        } catch (e) { showError(e); }
+      },
+    }, 'Cancel') : null));
+  return h('section', { class: 'card' },
+    h('h2', {}, '12V battery charging'),
+    h('p', { class: 'muted small' }, 'Used cars in storage: charge the 12V battery every month.'),
+    n ? h('div', { class: `notice ${n.days < 0 ? 'bad-notice' : n.days <= 3 ? 'warn' : ''}` },
+      h('strong', {}, 'Next charge'), ' — ', dueText(n))
+      : (p.note ? h('p', { class: 'muted' }, p.note) : null),
+    last ? h('p', { class: 'small' }, `Last charged ${chargeText(last)}`)
+      : (p.stay_start && n ? h('p', { class: 'small' }, `Not charged since it came into storage ${fmtDate(p.stay_start, false)}`) : null),
+    p.charges.length ? h('details', { class: 'more' }, h('summary', {}, `All charges (${p.charges.length})`),
+      h('ul', { class: 'plain rows' }, rows)) : null,
+    p.applies ? h('div', { class: 'actions' },
+      h('button', { class: n && n.days <= 3 ? 'btn primary' : 'btn', type: 'button', onClick: () => chargeDialog(v, p, rerender) },
+        '🔌 Record charge')) : null);
+}
+
+function chargeDialog(v, p, done) {
+  const before = h('input', { type: 'number', id: 'bc-before', step: '0.01', min: 0, max: 20, inputmode: 'decimal', placeholder: '12,2' });
+  const after = h('input', { type: 'number', id: 'bc-after', step: '0.01', min: 0, max: 20, inputmode: 'decimal', placeholder: '12,7' });
+  const note = h('textarea', { id: 'bc-note', rows: 2, maxlength: 500 });
+  const warning = h('div', { class: 'notice warn small', hidden: true },
+    `Below ${num(p.v12_min, 1)} V after charging – the battery may need replacing. Write what was done under Note.`);
+  after.addEventListener('input', () => { warning.hidden = !(after.value && Number(after.value) < p.v12_min); });
+  const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
+  const form = h('form', {},
+    h('p', { class: 'muted' }, `${vehicleTitle(v)} · ${v.vin}`),
+    h('div', { class: 'grid' },
+      h('div', { class: 'field' }, h('label', { for: 'bc-before' }, 'Voltage before charging (V)'), before),
+      h('div', { class: 'field' }, h('label', { for: 'bc-after' }, 'Voltage after charging (V)'), after)),
+    h('p', { class: 'muted small' }, 'The voltages are optional.'),
+    h('div', { class: 'field' }, h('label', { for: 'bc-note' }, 'Note'), note),
+    warning,
+    h('p', { class: 'muted small' }, 'Signed with your name and the time when saved.'),
+    h('div', { class: 'actions' }, save));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(save, async () => {
+      await api.post(`/vehicles/${v.id}/battery-charging`, {
+        v12_before: before.value ? Number(before.value) : null,
+        v12_after: after.value ? Number(after.value) : null,
+        note: note.value,
+      });
+      close();
+      toast('12V charge saved', 'success');
+      await done();
+    });
+  });
+  const { close } = openDialog('Record 12V charge', form);
+}
+
 // ---------------------------------------------------------------- the check form
 
 /** The check form for p.next (p = GET /vehicles/:id/storage-care). Also opened

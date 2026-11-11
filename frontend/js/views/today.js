@@ -38,6 +38,10 @@ export async function todayView(el) {
       row(`#/vehicles/${s.id}`, carText(s), s.kind === 'arrival' ? 'first storage check missing'
         : `${s.title} · ${s.in_days < 0 ? `${-s.in_days} d overdue` : s.in_days === 0 ? 'today' : `in ${s.in_days} d`}`,
       s.in_days < 0 || s.kind === 'arrival' ? 'bad' : '')), { cls: d.storage_due.some((s) => s.in_days < 0) ? 'bad' : '' }),
+    block('🔌', '12V battery charging due (used cars)', d.battery_due.map((b) =>
+      row(`#/vehicles/${b.id}`, carText(b),
+        `${b.last_charged ? `last charged ${fmtDate(b.last_charged, false)}` : 'not charged since it came into storage'} · ${inDays(b.in_days)}`,
+        b.in_days < 0 ? 'bad' : '')), { cls: d.battery_due.some((b) => b.in_days < 0) ? 'bad' : '' }),
     block('🔑', 'Out on test drive', d.test_drives.map((t) => (t.plate_moved_at
       ? row(`#/test-drive?return=${t.id}`, carText(t), 'trade plates moved to another car – register the return', 'bad')
       : row('#/test-drive', carText(t), `${t.customer_name} · ${since(t.started_at)}`)))),

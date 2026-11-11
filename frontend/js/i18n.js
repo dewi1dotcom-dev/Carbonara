@@ -316,6 +316,13 @@ const NO = {
   'Cancel this PDI order? It has already been sent – remember to tell the workshop.': 'Avbryte denne bestillingen? Den er allerede sendt – husk å gi beskjed til verkstedet.',
   // ---- storage maintenance
   'Storage maintenance': 'Lagervedlikehold', 'not done yet': 'ikke utført ennå', 'due today': 'frist i dag',
+  // used cars: 12V charging every month
+  '12V battery charging due (used cars)': '12V-lading som forfaller (bruktbiler)', 'not charged since it came into storage': 'ikke ladet siden den kom på lager',
+  '12V battery charging': '12V-batterilading', 'Used cars in storage: charge the 12V battery every month.': 'Bruktbiler på lager: lad 12V-batteriet hver måned.',
+  'Next charge': 'Neste lading', 'Record charge': 'Registrer lading', 'Record 12V charge': 'Registrer 12V-lading', 'The voltages are optional.': 'Spenningene er valgfrie.',
+  'Charge cancelled': 'Lading annullert', '12V charge saved': '12V-lading lagret', '12V battery charged': '12V-batteri ladet', '12V charge cancelled': '12V-lading annullert',
+  'Monthly 12V charging is recorded for used cars': 'Månedlig 12V-lading registreres for bruktbiler', 'This charge is already cancelled': 'Denne ladingen er allerede annullert',
+  'Battery charge': 'Batterilading',
   '🖨 Storage report': '🖨 Lagerrapport', 'Storage report': 'Lagerrapport', 'Only 12V battery form': 'Bare 12V-batteriskjema', '🖨 Print / save as PDF': '🖨 Skriv ut / lagre som PDF',
   'MG storage requirements (SI-GI2022102501): a first storage check at arrival, then every month (more every 3 and 6 months) until the PDI.':
     'MGs lagringskrav (SI-GI2022102501): første lagerkontroll ved ankomst, deretter hver måned (mer hver 3. og 6. måned) frem til nybilklargjøring.',
@@ -526,6 +533,15 @@ const NO_PATTERNS = [
   ['Printed / PDF {} by {}', 'Skrevet ut / PDF {1} av {2}'], ['Printed / PDF {}', 'Skrevet ut / PDF {1}'], ['printed / PDF {}', 'skrevet ut / PDF {1}'],
   ['printed / PDF {} · enter the date when they reply', 'skrevet ut / PDF {1} · legg inn datoen når de svarer'], ['sent {} to {}', 'sendt {1} til {2}'], ['done {} by {}', 'utført {1} av {2}'], ['done {}', 'utført {1}'],
   ['{} · expected {}', '{1} · forventet {2}'], ['{} · {} · expected {}', '{1} · {2} · forventet {3}'], ['expected {}', 'forventet {1}'],
+  // used cars: 12V charging every month
+  ['last charged {}', 'sist ladet {1}'], ['Last charged {}', 'Sist ladet {1t}'], ['{} · tomorrow', '{1t} · i morgen'],
+  ['Not charged since it came into storage {}', 'Ikke ladet siden den kom på lager {1}'], ['All charges ({n})', 'Alle ladinger ({1})'],
+  ['before {} V', 'før {1} V'], ['after {} V', 'etter {1} V'],
+  ['Cancel the 12V charge from {}?\n\nIt stops counting but stays in the list, struck through.\nReason (required):',
+    'Annullere 12V-ladingen fra {1}?\n\nDen teller ikke lenger, men blir stående i listen, gjennomstreket.\nBegrunnelse (påkrevd):'],
+  ['Below {} V after charging – the battery may need replacing. Write what was done under Note.',
+    'Under {1} V etter lading – batteriet må kanskje byttes. Skriv hva som ble gjort under Merknad.'],
+  ['Below {} V after charging – write what was done under Note', 'Under {1} V etter lading – skriv hva som ble gjort under Merknad'],
   // storage maintenance
   ['Do {}', 'Utfør {1t}'], ['monthly check', 'månedlig sjekk'], ['3-month check', '3-månederssjekk'], ['6-month check', '6-månederssjekk'],
   ['{} — {}', '{1t} — {2t}'], ['{} saved', '{1t} lagret'], ['Last check {} by {}', 'Siste kontroll {1} av {2}'], ['Last check {}', 'Siste kontroll {1}'],

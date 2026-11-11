@@ -7,7 +7,7 @@ from .. import vegvesen
 from ..common import READY_SQL, service_due
 from ..db import get_conn
 from .pdi import ORDER_SELECT, THIS_WEEK_SQL
-from .storage_care import programme
+from .storage_care import charging_due_list, programme
 
 router = APIRouter(tags=["dashboard"])
 
@@ -69,6 +69,7 @@ def dashboard(conn=Depends(get_conn)):
                                 "model_year": v["model_year"], "registration_number": v["registration_number"],
                                 "title": n["title_en"], "due": n["due"], "in_days": n["days"], "kind": n["kind"]})
     storage_due.sort(key=lambda r: r["in_days"])
+    battery_due = charging_due_list(conn, today)  # used cars: 12V charged every month
 
     numbers = conn.execute(
         f"""SELECT
@@ -99,5 +100,6 @@ def dashboard(conn=Depends(get_conn)):
         "service": service,
         "registry_mismatches": mismatches,
         "storage_due": storage_due,
+        "battery_due": battery_due,
         "numbers": numbers,
     }
