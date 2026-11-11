@@ -1,5 +1,6 @@
 import { PANEL_LABELS } from '../diagram.js';
-import { pdiBanner, pdiCard } from './pdi.js';
+import { documentDialog, documentsCard } from './documents.js';
+import { editDialog, pdiBanner, pdiCard } from './pdi.js';
 import { batteryCard, storageCard } from './storagecare.js';
 import {
   api, append, badge, busy, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
@@ -112,6 +113,9 @@ const EVENT_LABELS = {
   storage_check_voided: 'Storage check cancelled',
   battery_charged: '12V battery charged',
   battery_charge_voided: '12V charge cancelled',
+  document_added: 'Document added',
+  document_updated: 'Document changed',
+  document_deleted: 'Document deleted',
 };
 
 const FIELD_LABELS = {
@@ -145,6 +149,10 @@ function eventDetail(e) {
     case 'battery_charged':
       return [d.v12_before != null && `before ${d.v12_before} V`, d.v12_after != null && `after ${d.v12_after} V`]
         .filter(Boolean).join(' · ');
+    case 'document_added':
+    case 'document_updated':
+    case 'document_deleted':
+      return { contract: 'Contract', note: 'Note', other: 'Other document' }[d.kind] ?? '';
     case 'battery_charge_voided':
       return [d.charged_at && `from ${fmtDate(d.charged_at)}`, d.reason].filter(Boolean).join(' · ');
     case 'test_drive_out':
@@ -688,13 +696,20 @@ function registryCard(v, rerender) {
   return card;
 }
 
-/** Out on a test drive: who has it and since when; otherwise a start button. */
+/** Quick actions under the car's header: test drive, PDI order, document. */
+function topActions(v, pdiData, pdiOpts, rerender) {
+  return h('div', { class: 'actions top-actions' },
+    v.active_test_drive ? null : h('a', { class: 'btn', href: `#/test-drive/new/${v.id}` }, '🔑 Start test drive'),
+    pdiData.current ? null : h('button', {
+      class: 'btn', type: 'button', onClick: () => editDialog(v, null, pdiOpts, rerender),
+    }, '🔧 Create PDI order'),
+    h('button', { class: 'btn', type: 'button', onClick: () => documentDialog(v, null, rerender) }, '📄 Add document'));
+}
+
+/** Out on a test drive: who has it and since when (nothing otherwise). */
 function testDriveBanner(v) {
   const d = v.active_test_drive;
-  if (!d) {
-    return h('div', { class: 'actions' },
-      h('a', { class: 'btn', href: `#/test-drive/new/${v.id}` }, '🔑 Start test drive'));
-  }
+  if (!d) return null; // the start button is in topActions()
   return h('div', { class: 'card notice warn td-banner' },
     h('div', {},
       h('strong', {}, 'Out on test drive'), ` since ${fmtDate(d.started_at)} — ${d.customer_name}, `,
@@ -729,9 +744,10 @@ function arrivalPhotosCard(v) {
 }
 
 export async function vehicleView(el, [id]) {
-  const [v, pdiData, pdiOpts, care, charging] = await Promise.all([
+  const [v, pdiData, pdiOpts, care, charging, docs] = await Promise.all([
     api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options'),
-    api.get(`/vehicles/${id}/storage-care`), api.get(`/vehicles/${id}/battery-charging`)]);
+    api.get(`/vehicles/${id}/storage-care`), api.get(`/vehicles/${id}/battery-charging`),
+    api.get(`/vehicles/${id}/documents`)]);
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -752,11 +768,13 @@ export async function vehicleView(el, [id]) {
         // Visual hint: the car is advertised (on the website, via finn.no)
         v.finn_code ? finnLink(v.finn_code, 'finn.no ↗') : null)),
     duplicateNotice(v.possible_duplicates),
+    topActions(v, pdiData, pdiOpts, rerender),
     testDriveBanner(v),
     pdiBanner(pdiData.current),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
     arrivalPhotosCard(v),
+    documentsCard(v, docs, rerender),
     pdiCard(v, pdiData, pdiOpts, rerender),
     storageCard(v, care, rerender),
     batteryCard(v, charging, rerender),

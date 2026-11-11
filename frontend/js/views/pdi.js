@@ -124,7 +124,7 @@ export function pdiCard(v, data, opts, rerender) {
 
 // ---------------------------------------------------------------- edit
 
-function editDialog(v, o, opts, done) {
+export function editDialog(v, o, opts, done) {
   const chosen = new Map((o?.items || []).map((i) => [i.label, i.choice]));
   // Items that were ordered but have since been removed from the list stay visible.
   const known = new Set(opts.items.map((i) => i.label));

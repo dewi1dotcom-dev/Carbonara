@@ -184,9 +184,9 @@ backend/
   app/photostore.py     original + 1600px + 400px JPEG
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
                         test drive customer purge)
-  app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives,
+  app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care
-  migrations/           001…023
+  migrations/           001…024
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
@@ -194,7 +194,7 @@ frontend/               no build step; plain ES modules
   js/i18n.js            English/Norwegian translator + dictionary
   js/diagram.js         car damage diagram
   js/views/             today (start page), dashboard (= arrivals list), intake, inspection,
-                        vehicles, pdi (card + banner + PDI page), storagecare (card + check form
+                        vehicles, documents, pdi (card + banner + PDI page), storagecare (card + check form
                         + report), storage, testdrive, login, settings, system
 ```
 
@@ -225,6 +225,7 @@ frontend/               no build step; plain ES modules
 | 021 | `staff_names` | `staff.first_name / last_name / phone / deleted_at / deleted_by`; existing names split |
 | 022 | `theme` | `staff.theme` ('auto' / 'light' / 'dark') |
 | 023 | `battery_charges` | monthly 12V charges of used cars in storage (cancellable) |
+| 024 | `vehicle_documents` | contracts, notes and other files per car |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -340,6 +341,20 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
 - **Vehicle page (0.21.2):** "Photos from the arrival inspection" card under the overview: every
   photo (angles, VIN, damage, other) of the latest arrival inspection that has photos
   (`arrival_photos` from `GET /vehicles/{id}`); tap to enlarge, link to the inspection.
+- **Quick actions (0.22.0)** under the vehicle header (`topActions`): "🔑 Start test drive" (not
+  while out), "🔧 Create PDI order" (no open order; opens `pdi.editDialog`), "📄 Add document".
+
+**Documents per car (0.22.0)** (`vehicle_documents`, `routers/documents.py`, `views/documents.js`):
+- Type contract / note / other, optional title, a **file and/or a text**. Files: PDF, photos,
+  Word/Excel/ODF, txt (whitelist by extension; content type from the table, not the browser).
+  Max `MAX_UPLOAD_MB`. Stored as uploaded under `PHOTO_DIR/docs/yyyy/mm/<uuid>.<ext>`, so
+  `photostore.remove()` and `purge_vehicle` delete them too.
+- Served at `/api/documents/{id}/file` with `no-store` + `nosniff`; PDFs and images open
+  inline, other types download.
+- Edit (type, title, text; not the file) and delete: the person who added it, or an admin.
+  Delete is permanent (file removed after commit).
+- **Contracts hold personal data:** events `document_added/updated/deleted` log only id and
+  type, never the title or text.
 
 **Test drives** (`routers/testdrives.py`, `views/testdrive.js`):
 - **Start:** car, customer name + phone (8–15 digits, optional +), **driving licence photo**,
@@ -747,6 +762,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.19.1 | Licence reader: misread field labels (I, l or a bar for 1; Z for 2) accepted; if only one name field is found, the line above/below is used (low confidence) |
 | 0.20.0 | **Light / dark theme** per user (or same as device), under their name at the top |
 | 0.21.0 | **12V charging every month for used cars** in storage: card on the vehicle page, reminder on Today |
+| 0.21.1–0.21.2 | Car photo (right side) in the Vehicles list; arrival inspection photos on the vehicle page |
+| 0.22.0 | **Documents per car** (contracts, notes, files); quick actions on the vehicle page (test drive, Create PDI order, Add document) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

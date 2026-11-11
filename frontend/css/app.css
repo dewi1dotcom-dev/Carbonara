@@ -121,6 +121,12 @@ main { max-width: 980px; margin: 0 auto; padding: 1rem 16px 2rem; }
 }
 .car-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
 @media (max-width: 480px) { .car-photo { width: 110px; } }
+/* Vehicle page: quick actions under the header; documents. */
+.top-actions { justify-content: flex-start; margin: 0 0 1rem; }
+.doc-row { align-items: flex-start; }
+.doc-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .15rem; }
+.doc-main a { overflow-wrap: anywhere; }
+.doc-body { white-space: pre-wrap; overflow-wrap: anywhere; margin: .25rem 0; }
 .list-meta { color: var(--muted); font-size: .85rem; }
 .mini-thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; }
 

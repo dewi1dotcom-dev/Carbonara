@@ -176,10 +176,14 @@ def purge_vehicle(conn, vehicle_id: int) -> list:
              JOIN inspections i ON i.id = p.inspection_id WHERE i.vehicle_id = %s
            UNION ALL
            SELECT license_file_key, license_ext FROM test_drives
-            WHERE vehicle_id = %s AND license_file_key IS NOT NULL""",
-        (vehicle_id, vehicle_id),
+            WHERE vehicle_id = %s AND license_file_key IS NOT NULL
+           UNION ALL
+           SELECT file_key, original_ext FROM vehicle_documents
+            WHERE vehicle_id = %s AND file_key IS NOT NULL""",
+        (vehicle_id, vehicle_id, vehicle_id),
     ).fetchall()
     for stmt in (
+        "DELETE FROM vehicle_documents WHERE vehicle_id = %s",
         "DELETE FROM test_drives WHERE vehicle_id = %s",
         "DELETE FROM pdi_orders WHERE vehicle_id = %s",
         "DELETE FROM storage_checks WHERE vehicle_id = %s",
