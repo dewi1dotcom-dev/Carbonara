@@ -23,8 +23,10 @@
   color-scheme: light;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
+/* Dark theme. data-theme is always set to "light" or "dark" by the script in
+   index.html / applyTheme() in ui.js, which resolves the user's choice
+   (light, dark, or the device's setting). */
+:root[data-theme="dark"] {
     --bg: #0b1120;
     --surface: #151e2e;
     --text: #e2e8f0;
@@ -41,7 +43,6 @@
     --panel-hover: #1e3a8a;
     --topbar: #020617;
     color-scheme: dark;
-  }
 }
 
 * { box-sizing: border-box; }

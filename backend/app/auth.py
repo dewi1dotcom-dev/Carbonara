@@ -75,7 +75,7 @@ def session_staff(conn, token: str | None) -> dict | None:
     if not token:
         return None
     row = conn.execute(
-        """SELECT s.id, s.name, s.active, s.is_admin, s.is_superadmin, s.language, s.created_at, s.last_login_at,
+        """SELECT s.id, s.name, s.active, s.is_admin, s.is_superadmin, s.language, s.theme, s.created_at, s.last_login_at,
                   (s.pin_hash IS NOT NULL) AS has_pin
               FROM sessions x JOIN staff s ON s.id = x.staff_id
              WHERE x.token_hash = %s AND x.expires_at > now() AND s.active""",

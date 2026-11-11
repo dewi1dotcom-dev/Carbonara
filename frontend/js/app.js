@@ -1,5 +1,6 @@
 import {
-  api, carText, fmtDate, h, openDialog, osloTodayIso, session, setInspectorId, showError, startClock, toast,
+  api, applyTheme, carText, fmtDate, h, openDialog, osloTodayIso, session, setInspectorId, showError, startClock, theme,
+  toast,
 } from './ui.js';
 import { lang, setLang, startTranslator } from './i18n.js';
 import { changePinForm, loginView } from './views/login.js';
@@ -104,6 +105,23 @@ function renderUser() {
   userMenu.replaceChildren(h('button', {
     class: 'user-btn', type: 'button', title: 'Account',
     onClick: () => {
+      // Light / dark / device: applied at once, then saved on the account.
+      const themeRow = h('div', { class: 'row' });
+      const drawThemes = () => themeRow.replaceChildren(
+        ...[['auto', 'Same as device'], ['light', 'Light'], ['dark', 'Dark']].map(([code, label]) => h('button', {
+          class: code === theme ? 'btn primary' : 'btn', type: 'button',
+          onClick: async () => {
+            if (code === theme) return;
+            const before = theme;
+            applyTheme(code);
+            drawThemes();
+            try {
+              await api.post('/auth/theme', { theme: code });
+              me.theme = code;
+            } catch (e) { applyTheme(before); drawThemes(); showError(e); }
+          },
+        }, label)));
+      drawThemes();
       const { close } = openDialog(me.name, h('div', {},
         h('p', { class: 'muted' }, me.is_superadmin ? 'System admin' : me.is_admin ? 'Administrator' : 'Staff'),
         h('div', { class: 'field' }, h('label', {}, 'Language'),
@@ -117,6 +135,7 @@ function renderUser() {
                 location.reload(); // simplest way to show every page in the new language
               },
             }, label)))),
+        h('div', { class: 'field' }, h('label', {}, 'Theme'), themeRow),
         h('div', { class: 'actions spread' },
           h('button', {
             class: 'btn', type: 'button',
@@ -146,6 +165,7 @@ function boot() {
       session.me = state.me;
       // The user's saved language wins over the device's; reload once to apply it.
       if (state.me?.language && state.me.language !== lang) { setLang(state.me.language); location.reload(); return; }
+      if (state.me?.theme && state.me.theme !== theme) applyTheme(state.me.theme); // no reload needed
       renderUser();
       document.body.classList.toggle('logged-out', !state.me);
       if (!state.me) {

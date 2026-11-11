@@ -186,7 +186,7 @@ backend/
                         test drive customer purge)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives,
                         session (login/language), pdi, dashboard (Today), system, storage_care
-  migrations/           001…021
+  migrations/           001…022
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
@@ -223,6 +223,7 @@ frontend/               no build step; plain ES modules
 | 019 | `pdi_print` | `pdi_orders.sent_via` also allows `'print'` |
 | 020 | `pdi_prep` | `pdi_orders.prep_plate_id / prep_note / prep_wheels_location / prepared_at / prepared_by` |
 | 021 | `staff_names` | `staff.first_name / last_name / phone / deleted_at / deleted_by`; existing names split |
+| 022 | `theme` | `staff.theme` ('auto' / 'light' / 'dark') |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -595,6 +596,15 @@ storage, periodic checklist, 12V battery form).
   | Sub-zone | Undersone |
   | Mudflaps | **Skvettlapper** (not "Sprutlapper") |
 
+**Theme: light / dark (0.20.0):**
+- Per user, under their name at the top: "Same as device" (default `auto`), "Light", "Dark".
+  Saved in `staff.theme` (`POST /api/auth/theme`) and in localStorage (`carbonara.theme`).
+- A small inline script in `index.html` sets `<html data-theme="light|dark">` before the first
+  paint; `applyTheme()` in `ui.js` does the same later and follows the device when it switches.
+  `boot()` applies the account's theme (no reload).
+- CSS: the dark colours live under `:root[data-theme="dark"]`. **Don't use
+  `@media (prefers-color-scheme)`** for colours; new colours go in both token blocks.
+
 **Dates, times & numbers (standing rule):**
 - **Display:** always through `fmtDate` in `ui.js` (`dd.mm.yyyy`, or `dd.mm.yyyy HH:mm`).
   Bare ISO dates are formatted as-is, with no timezone shift. Only the header clock and the
@@ -712,6 +722,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.18.0 | In-app Yes/No "given to the workshop?" with PDI date; **PDI preparation** (trade plates, spot + message, winter wheels) with a notification bar the working day before |
 | 0.19.0 | Staff: first name, last name, phone; names auto-capitalized; deactivated staff can be deleted (history keeps the name) |
 | 0.19.1 | Licence reader: misread field labels (I, l or a bar for 1; Z for 2) accepted; if only one name field is found, the line above/below is used (low confidence) |
+| 0.20.0 | **Light / dark theme** per user (or same as device), under their name at the top |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

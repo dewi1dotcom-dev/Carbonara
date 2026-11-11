@@ -378,7 +378,7 @@ const NO = {
   'Repeat the PIN': 'Gjenta PIN-koden', 'Set PIN and log in': 'Sett PIN-kode og logg inn', 'Nobody has a PIN yet. Ask an administrator.': 'Ingen har PIN-kode ennå. Spør en administrator.',
   'The two PINs are not the same': 'De to PIN-kodene er ikke like', 'Change PIN': 'Endre PIN-kode', 'Current PIN': 'Nåværende PIN-kode', 'New PIN (4–8 digits)': 'Ny PIN-kode (4–8 sifre)',
   'Repeat new PIN': 'Gjenta ny PIN-kode', 'Your other devices are logged out.': 'De andre enhetene dine logges ut.', 'The two new PINs are not the same': 'De to nye PIN-kodene er ikke like',
-  'PIN changed': 'PIN-kode endret', 'Language': 'Språk', 'Staff ': 'Ansatt ',
+  'PIN changed': 'PIN-kode endret', 'Language': 'Språk', 'Theme': 'Tema', 'Same as device': 'Som enheten', 'Light': 'Lyst', 'Dark': 'Mørkt', 'Staff ': 'Ansatt ',
   // ---- date/time fields
   'dd.mm.yyyy': 'dd.mm.åååå', 'hh:mm': 'tt:mm', 'Use the format dd.mm.yyyy': 'Bruk formatet dd.mm.åååå', 'Use 24-hour time, e.g. 08:00 or 14:30': 'Bruk 24-timers tid, f.eks. 08:00 eller 14:30',
   // ---- registry detail labels (from the server)

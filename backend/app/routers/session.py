@@ -130,6 +130,16 @@ def set_language(body: LanguageIn, staff=Depends(auth.require_staff), conn=Depen
     conn.execute("UPDATE staff SET language = %s WHERE id = %s", (body.language, staff["id"]))
 
 
+class ThemeIn(BaseModel):
+    theme: str = Field(pattern="^(auto|light|dark)$")
+
+
+@router.post("/theme", status_code=204)
+def set_theme(body: ThemeIn, staff=Depends(auth.require_staff), conn=Depends(get_conn)):
+    """Light, dark or the device's setting for the logged-in user (saved on the account)."""
+    conn.execute("UPDATE staff SET theme = %s WHERE id = %s", (body.theme, staff["id"]))
+
+
 @router.post("/pin", status_code=204)
 def change_own_pin(body: PinChangeIn, request: Request, staff=Depends(auth.require_staff), conn=Depends(get_conn)):
     row = conn.execute("SELECT pin_hash FROM staff WHERE id = %s", (staff["id"],)).fetchone()

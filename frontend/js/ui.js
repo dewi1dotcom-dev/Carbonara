@@ -483,6 +483,28 @@ export function setInspectorId(id) {
   try { localStorage.setItem(INSPECTOR_KEY, String(id)); } catch { /* private mode */ }
 }
 
+// Theme: 'auto' (follow the device), 'light' or 'dark'. Saved on the account
+// and in localStorage, so the script in index.html can set it before the first
+// paint. <html data-theme> always holds the resolved 'light' / 'dark'.
+const THEME_KEY = 'carbonara.theme';
+const darkQuery = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+export let theme = (() => {
+  try { const t = localStorage.getItem(THEME_KEY); if (['auto', 'light', 'dark'].includes(t)) return t; } catch { /* private mode */ }
+  return 'auto';
+})();
+function resolveTheme() {
+  const dark = theme === 'dark' || (theme === 'auto' && !!darkQuery?.matches);
+  document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+}
+export function applyTheme(t) {
+  theme = ['light', 'dark'].includes(t) ? t : 'auto';
+  try { localStorage.setItem(THEME_KEY, theme); } catch { /* private mode */ }
+  resolveTheme();
+}
+// "Same as device" follows the device when it switches (e.g. automatic dark mode at night).
+darkQuery?.addEventListener?.('change', resolveTheme);
+resolveTheme();
+
 export function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
