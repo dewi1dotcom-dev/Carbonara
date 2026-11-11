@@ -2,14 +2,14 @@
 
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 from psycopg import errors
 
 from .. import photostore, vegvesen, vinlib
 from ..common import (
     bad_request, check_staff, conflict, insert_row, log_event, not_found, patch_fields, place_in_location,
-    purge_vehicle, similar_vehicles, update_row,
+    purge_vehicle, similar_vehicles, soft_delete_vehicle, update_row,
 )
 from ..config import settings
 from ..db import get_conn
@@ -125,7 +125,21 @@ def load_inspection(conn, inspection_id: int) -> dict:
         "ready_to_complete": all(c["done"] for c in checklist),
         # Same reg. no or a VIN one character away on another car: warn, never block.
         "possible_duplicates": similar_vehicles(conn, vehicle["vin"], vehicle["registration_number"], vehicle["id"]),
+        # Cancelling deletes the car only if it is new to Carbonara (see cancel_inspection).
+        "cancel_deletes": _first_arrival(conn, insp["vehicle_id"], inspection_id),
     }
+
+
+def _first_arrival(conn, vehicle_id: int, inspection_id: int) -> bool:
+    """True if this inspection is the car's first real arrival: no other completed
+    inspection and never placed in storage. A car coming back keeps its history."""
+    return not conn.execute(
+        """SELECT 1 FROM inspections WHERE vehicle_id = %(v)s AND id <> %(i)s AND status = 'completed'
+           UNION ALL
+           SELECT 1 FROM storage_assignments WHERE vehicle_id = %(v)s
+           LIMIT 1""",
+        {"v": vehicle_id, "i": inspection_id},
+    ).fetchone()
 
 
 # --------------------------------------------------------------------------- #
@@ -264,12 +278,21 @@ def complete_inspection(inspection_id: int, body: CompleteIn, conn=Depends(get_c
 
 
 @router.post("/inspections/{inspection_id}/cancel")
-def cancel_inspection(inspection_id: int, conn=Depends(get_conn)):
+def cancel_inspection(inspection_id: int, request: Request, conn=Depends(get_conn)):
+    """Cancel an arrival inspection. A car that is new to Carbonara is deleted
+    too (to Recently deleted, restorable for TRASH_DAYS); a car coming back keeps
+    its record and gets its previous status back."""
     insp = _open_inspection(conn, inspection_id)
     conn.execute(
         "UPDATE inspections SET status = 'cancelled', cancelled_at = now() WHERE id = %s",
         (inspection_id,),
     )
+    staff_id = request.state.staff["id"]
+    if _first_arrival(conn, insp["vehicle_id"], inspection_id):
+        log_event(conn, insp["vehicle_id"], "arrival_inspection_cancelled", staff_id=staff_id,
+                  inspection_id=inspection_id)
+        soft_delete_vehicle(conn, insp["vehicle_id"], reason="manual", staff_id=staff_id)
+        return {**load_inspection(conn, inspection_id), "vehicle_deleted": True}
     stored = conn.execute(
         "SELECT 1 FROM storage_assignments WHERE vehicle_id = %s AND removed_at IS NULL",
         (insp["vehicle_id"],),

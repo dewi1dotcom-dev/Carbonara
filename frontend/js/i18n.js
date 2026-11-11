@@ -323,6 +323,13 @@ const NO = {
   'Charge cancelled': 'Lading annullert', '12V charge saved': '12V-lading lagret', '12V battery charged': '12V-batteri ladet', '12V charge cancelled': '12V-lading annullert',
   'Monthly 12V charging is recorded for used cars': 'Månedlig 12V-lading registreres for bruktbiler', 'This charge is already cancelled': 'Denne ladingen er allerede annullert',
   'Battery charge': 'Batterilading', 'No photo': 'Ingen bilde', 'Open inspection': 'Åpne kontrollen',
+  // arrival inspection: cancel and delete / pause
+  'Cancel inspection and delete': 'Avbryt kontroll og slett', 'Pause inspection': 'Sett kontrollen på pause',
+  'Inspection cancelled and car deleted': 'Kontrollen er avbrutt og bilen slettet',
+  'Cancel this arrival inspection and delete the car?\n\nThe car goes to Recently deleted and can be restored from Settings for a while.':
+    'Avbryte mottakskontrollen og slette bilen?\n\nBilen flyttes til Nylig slettet og kan gjenopprettes fra Innstillinger en stund.',
+  'Cancel this arrival inspection? The car was here before, so it is kept; the inspection stays in its history as cancelled.':
+    'Avbryte mottakskontrollen? Bilen har vært her før, så den beholdes; kontrollen blir stående i historikken som avbrutt.',
   // documents per car
   'Add document': 'Legg til dokument', 'Edit document': 'Rediger dokument',
   'Contract': 'Kontrakt', 'Other document': 'Annet dokument', 'Title': 'Tittel', 'E.g. Purchase contract': 'F.eks. kjøpekontrakt',

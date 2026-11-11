@@ -412,11 +412,28 @@ export async function inspectionView(el, [id]) {
         rerenderAll();
       });
     });
-    const cancelBtn = h('button', { class: 'btn ghost danger', type: 'button' }, 'Cancel inspection');
+    // A car new to Carbonara is deleted with the inspection (server: cancel_deletes);
+    // a car coming back keeps its record and history.
+    const deletes = !!data.cancel_deletes;
+    const cancelBtn = h('button', { class: 'btn ghost danger', type: 'button' },
+      deletes ? 'Cancel inspection and delete' : 'Cancel inspection');
     cancelBtn.addEventListener('click', () => {
-      if (!confirm('Cancel this arrival inspection? It stays in the vehicle history as cancelled.')) return;
-      busy(cancelBtn, async () => { data = await api.post(`/inspections/${id}/cancel`); rerenderAll(); });
+      if (!confirm(deletes
+        ? 'Cancel this arrival inspection and delete the car?\n\nThe car goes to Recently deleted and can be restored from Settings for a while.'
+        : 'Cancel this arrival inspection? The car was here before, so it is kept; the inspection stays in its history as cancelled.')) return;
+      busy(cancelBtn, async () => {
+        data = await api.post(`/inspections/${id}/cancel`);
+        if (data.vehicle_deleted) {
+          toast('Inspection cancelled and car deleted', 'success');
+          location.hash = '#/arrivals';
+          return;
+        }
+        rerenderAll();
+      });
     });
+    // Everything entered is already saved, so pausing just leaves the page;
+    // the inspection waits under Arrivals → In progress.
+    const pauseBtn = h('a', { class: 'btn', href: '#/arrivals' }, '⏸ Pause inspection');
 
     slots.finish.replaceChildren(h('section', { class: 'card step' },
       h('div', { class: 'step-head' }, h('h2', {}, `${finishNo()}. Place in storage`)),
@@ -427,7 +444,7 @@ export async function inspectionView(el, [id]) {
       locations.length
         ? h('div', { class: 'form' }, h('label', { for: 'loc' }, 'Storage spot'), locSel)
         : h('div', { class: 'notice warn' }, 'All storage spots are full. ', h('a', { href: '#/settings' }, 'Add spots or raise capacity in settings')),
-      h('div', { class: 'actions spread' }, cancelBtn, completeBtn)));
+      h('div', { class: 'actions spread' }, cancelBtn, h('span', { class: 'row' }, pauseBtn, completeBtn))));
   }
 
   function rerenderAll() {

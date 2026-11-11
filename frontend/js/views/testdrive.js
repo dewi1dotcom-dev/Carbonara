@@ -4,7 +4,7 @@
 // TRASH_DAYS.
 import {
   api, append, busy, cameraPicker, debounce, fmtDate, fmtKm, getInspectorId, h, openDialog, pill,
-  setInspectorId, showError, toast, vehicleTitle,
+  session, setInspectorId, showError, toast, vehicleTitle,
 } from '../ui.js';
 
 // Most common by far: the spare set of wheels kept in the car is taken out.
@@ -333,9 +333,8 @@ function activeRow(d, staff, done) {
 function returnDialog(d, staff, done) {
   const odo = h('input', { type: 'number', id: 'tr-odo', min: d.odometer_out ?? 0, inputmode: 'numeric', placeholder: 'km' });
   const note = h('input', { type: 'text', id: 'tr-note', maxlength: 500, placeholder: 'e.g. winter wheels left at the customer' });
-  const staffSel = h('select', { id: 'tr-staff' }, h('option', { value: '' }, 'Select staff…'),
-    staff.map((s) => h('option', { value: s.id }, s.name)));
-  staffSel.value = staff.some((s) => String(s.id) === getInspectorId()) ? getInspectorId() : '';
+  // Received by is always the logged-in user (the server records it from the session).
+  const receivedBy = h('div', { class: 'readonly-value', id: 'tr-staff' }, session.me?.name ?? '');
   const items = [
     ...d.removed_items.map((i) => `Put back in the car: ${i}`),
     ...d.added_items.map((i) => `Taken out of the car: ${i}`),
@@ -354,7 +353,7 @@ function returnDialog(d, staff, done) {
       boxes.map((b) => h('label', { class: 'check' }, b, b.value))) : null,
     h('div', { class: 'grid' },
       h('div', { class: 'field' }, h('label', { for: 'tr-odo' }, 'Odometer in (optional)'), odo),
-      h('div', { class: 'field' }, h('label', { for: 'tr-staff' }, 'Received by'), staffSel)),
+      h('div', { class: 'field' }, h('label', { for: 'tr-staff' }, 'Received by'), receivedBy)),
     h('div', { class: 'field' }, h('label', { for: 'tr-note' }, items.length ? 'Note (required if something is missing)' : 'Note (optional)'), note),
     h('p', { class: 'muted small' },
       'The customer’s name, phone number and licence photo are moved to the trash and deleted for good after 30 days.'),
@@ -368,9 +367,7 @@ function returnDialog(d, staff, done) {
       return;
     }
     busy(submit, async () => {
-      if (staffSel.value) setInspectorId(staffSel.value);
       await api.post(`/test-drives/${d.id}/return`, {
-        staff_id: staffSel.value ? Number(staffSel.value) : null,
         odometer_in: odo.value ? Number(odo.value) : null,
         items_checked: allChecked,
         return_note: note.value,

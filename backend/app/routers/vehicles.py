@@ -178,14 +178,15 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
             WHERE t.vehicle_id = %s AND t.status = 'out'""",
         (vehicle_id,),
     ).fetchone()
-    # Photos from the latest arrival inspection that has any (a car that came back has several).
+    # Photos from the latest completed arrival inspection that has any (a car that came back
+    # has several). Cancelled ones are skipped; one in progress is used only if none is completed.
     arrival_photos = conn.execute(
         """SELECT p.id, p.kind, p.uploaded_at, i.id AS inspection_id, i.started_at AS inspected_at
              FROM inspection_photos p JOIN inspections i ON i.id = p.inspection_id
             WHERE i.id = (SELECT i2.id FROM inspections i2
-                           WHERE i2.vehicle_id = %s AND i2.kind = 'arrival'
+                           WHERE i2.vehicle_id = %s AND i2.kind = 'arrival' AND i2.status <> 'cancelled'
                              AND EXISTS (SELECT 1 FROM inspection_photos p2 WHERE p2.inspection_id = i2.id)
-                           ORDER BY i2.started_at DESC LIMIT 1)
+                           ORDER BY (i2.status = 'completed') DESC, i2.started_at DESC LIMIT 1)
             ORDER BY array_position(ARRAY['front','rear','left','right','vin','damage','other'], p.kind), p.uploaded_at""",
         (vehicle_id,),
     ).fetchall()

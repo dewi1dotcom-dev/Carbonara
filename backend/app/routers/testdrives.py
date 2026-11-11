@@ -300,9 +300,10 @@ def get_license(drive_id: int, variant: str, request: Request, conn=Depends(get_
 
 
 @router.post("/test-drives/{drive_id}/return")
-def return_test_drive(drive_id: int, body: TestDriveReturnIn, conn=Depends(get_conn)):
-    """The car is back: close the drive and move the customer details to the trash."""
-    check_staff(conn, body.staff_id)
+def return_test_drive(drive_id: int, body: TestDriveReturnIn, request: Request, conn=Depends(get_conn)):
+    """The car is back: close the drive and move the customer details to the trash.
+    Received by = the logged-in staff member (body.staff_id is ignored)."""
+    staff_id = request.state.staff["id"]
     drive = conn.execute("SELECT * FROM test_drives WHERE id = %s FOR UPDATE", (drive_id,)).fetchone()
     if not drive:
         raise not_found("Test drive")
@@ -318,9 +319,9 @@ def return_test_drive(drive_id: int, body: TestDriveReturnIn, conn=Depends(get_c
               SET status = 'returned', returned_at = now(), returned_by = %s, odometer_in = %s,
                   items_checked = %s, return_note = %s, customer_trashed_at = now()
             WHERE id = %s""",
-        (body.staff_id, body.odometer_in, body.items_checked, body.return_note, drive_id),
+        (staff_id, body.odometer_in, body.items_checked, body.return_note, drive_id),
     )
-    log_event(conn, drive["vehicle_id"], "test_drive_returned", staff_id=body.staff_id,
+    log_event(conn, drive["vehicle_id"], "test_drive_returned", staff_id=staff_id,
               data={"test_drive_id": drive_id, "odometer_in": body.odometer_in,
                     "km_driven": (body.odometer_in - drive["odometer_out"])
                     if body.odometer_in is not None and drive["odometer_out"] is not None else None,

@@ -328,6 +328,11 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   automatically by the worker's daily `housekeeping()`.
 - Starting an arrival for a VIN that sits in the trash purges the old record first.
 - A car that is out on a test drive can't be deleted.
+- **Cancelling an arrival inspection (0.22.3):** if the car is new to Carbonara (no other completed
+  inspection, never placed in storage; `inspections._first_arrival`, sent as `cancel_deletes`), the
+  button reads "Cancel inspection and delete" and the car is soft-deleted (reason `manual`). A car
+  coming back keeps its record ("Cancel inspection") and gets its old status back. "⏸ Pause
+  inspection" just goes to `#/arrivals` (fields save as they are entered).
 
 **Vehicles list:**
 - **Search** covers VIN, make, model, variant, colour, reg. no (spaces ignored) and spot.
@@ -339,7 +344,8 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   (`common.RIGHT_PHOTO_SQL` → `right_photo_id`; "No photo" box otherwise). Same `vehicleCard`
   on the storage spot pages.
 - **Vehicle page (0.21.2):** "Photos from the arrival inspection" card under the overview: every
-  photo (angles, VIN, damage, other) of the latest arrival inspection that has photos
+  photo (angles, VIN, damage, other) of the latest completed arrival inspection with photos
+  (cancelled ones skipped; one in progress only if none is completed)
   (`arrival_photos` from `GET /vehicles/{id}`); tap to enlarge, link to the inspection.
 - **Quick actions (0.22.0)** under the vehicle header (`topActions`): "🔑 Start test drive" (not
   while out), "🔧 Create PDI order" (no open order; opens `pdi.editDialog`), "📄 Add document".
@@ -362,7 +368,8 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   - Optional: items taken out (presets; the spare **winter/summer wheels** are the most
     common) and put in (e.g. trade plates), odometer, note.
   - It is one multipart POST. One active drive per car; spot and status don't change.
-- **Return:** every item ticked back, or a note about what's missing. Customer details then
+- **Return:** "Received by" is the logged-in user (0.22.4; the server uses the session, not
+  `staff_id`). Every item ticked back, or a note about what's missing. Customer details then
   move to the **trash** (`customer_trashed_at`) and show under "Returned — customer details
   in the trash" (for toll and speeding fines). The worker wipes them after `trash_days`;
   "Delete now" wipes them at once.
@@ -770,6 +777,9 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.21.1–0.21.2 | Car photo (right side) in the Vehicles list; arrival inspection photos on the vehicle page |
 | 0.22.0 | **Documents per car** (contracts, notes, files); quick actions on the vehicle page (test drive, Create PDI order, Add document) |
 | 0.22.1 | Fix: blank page in 0.22.0 (duplicate `editDialog` name in `vehicles.js`) |
+| 0.22.2 | Fix: car photos skip cancelled arrival inspections (prefer the completed one) |
+| 0.22.3 | Arrival inspection: "Cancel inspection and delete" (cars new to Carbonara go to Recently deleted) and "Pause inspection" (back to Arrivals) |
+| 0.22.4 | Test drive return: "Received by" is the logged-in user (no dropdown; server takes it from the session) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

@@ -227,10 +227,12 @@ READY_SQL = """(v.status <> 'off_site'
 
 
 # The car's right-side photo from its latest arrival inspection, shown in car lists.
+# Cancelled inspections are skipped; completed ones win over one in progress.
 # Needs the vehicles alias "v".
 RIGHT_PHOTO_SQL = """(SELECT p.id FROM inspection_photos p JOIN inspections i ON i.id = p.inspection_id
-                       WHERE i.vehicle_id = v.id AND p.kind = 'right'
-                       ORDER BY i.started_at DESC, p.uploaded_at DESC LIMIT 1) AS right_photo_id"""
+                       WHERE i.vehicle_id = v.id AND p.kind = 'right' AND i.status <> 'cancelled'
+                       ORDER BY (i.status = 'completed') DESC, i.started_at DESC, p.uploaded_at DESC
+                       LIMIT 1) AS right_photo_id"""
 
 
 TEST_DRIVE_PURGE_DUE_SQL = """
