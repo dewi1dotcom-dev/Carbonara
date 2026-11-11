@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg import errors
 
 from ..auth import PIN_MAX, PIN_MIN, STAFF_PUBLIC, hash_pin, require_admin, valid_pin
-from ..common import (bad_request, cap_name, clean_phone, conflict, insert_row, log_event, not_found, patch_fields,
+from ..common import (RIGHT_PHOTO_SQL, bad_request, cap_name, clean_phone, conflict, insert_row, log_event, not_found, patch_fields,
                       place_in_location, update_row)
 from ..db import get_conn
 from ..schemas import LocationIn, LocationPatch, PinSetIn, StaffIn, StaffPatch
@@ -172,7 +172,8 @@ def get_location(location_id: int, conn=Depends(get_conn)):
     ).fetchall()
     vehicles = conn.execute(
         """SELECT v.*, a.placed_at, a.location_id, s.own_code AS sub_code, r.eu_control_due, r.registration_status,
-                  r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code
+                  r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code,
+                  """ + RIGHT_PHOTO_SQL + """
              FROM storage_assignments a
              JOIN storage_spots s ON s.id = a.location_id
              JOIN vehicles v ON v.id = a.vehicle_id

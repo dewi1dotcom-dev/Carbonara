@@ -322,7 +322,7 @@ const NO = {
   'Next charge': 'Neste lading', 'Record charge': 'Registrer lading', 'Record 12V charge': 'Registrer 12V-lading', 'The voltages are optional.': 'Spenningene er valgfrie.',
   'Charge cancelled': 'Lading annullert', '12V charge saved': '12V-lading lagret', '12V battery charged': '12V-batteri ladet', '12V charge cancelled': '12V-lading annullert',
   'Monthly 12V charging is recorded for used cars': 'Månedlig 12V-lading registreres for bruktbiler', 'This charge is already cancelled': 'Denne ladingen er allerede annullert',
-  'Battery charge': 'Batterilading',
+  'Battery charge': 'Batterilading', 'No photo': 'Ingen bilde', 'Open inspection': 'Åpne kontrollen',
   '🖨 Storage report': '🖨 Lagerrapport', 'Storage report': 'Lagerrapport', 'Only 12V battery form': 'Bare 12V-batteriskjema', '🖨 Print / save as PDF': '🖨 Skriv ut / lagre som PDF',
   'MG storage requirements (SI-GI2022102501): a first storage check at arrival, then every month (more every 3 and 6 months) until the PDI.':
     'MGs lagringskrav (SI-GI2022102501): første lagerkontroll ved ankomst, deretter hver måned (mer hver 3. og 6. måned) frem til nybilklargjøring.',
@@ -533,6 +533,7 @@ const NO_PATTERNS = [
   ['Printed / PDF {} by {}', 'Skrevet ut / PDF {1} av {2}'], ['Printed / PDF {}', 'Skrevet ut / PDF {1}'], ['printed / PDF {}', 'skrevet ut / PDF {1}'],
   ['printed / PDF {} · enter the date when they reply', 'skrevet ut / PDF {1} · legg inn datoen når de svarer'], ['sent {} to {}', 'sendt {1} til {2}'], ['done {} by {}', 'utført {1} av {2}'], ['done {}', 'utført {1}'],
   ['{} · expected {}', '{1} · forventet {2}'], ['{} · {} · expected {}', '{1} · {2} · forventet {3}'], ['expected {}', 'forventet {1}'],
+  ['Photos from the arrival inspection ({n})', 'Bilder fra mottakskontrollen ({1})'], ['Taken {}', 'Tatt {1}'],
   // used cars: 12V charging every month
   ['last charged {}', 'sist ladet {1}'], ['Last charged {}', 'Sist ladet {1t}'], ['{} · tomorrow', '{1t} · i morgen'],
   ['Not charged since it came into storage {}', 'Ikke ladet siden den kom på lager {1}'], ['All charges ({n})', 'Alle ladinger ({1})'],

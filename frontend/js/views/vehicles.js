@@ -50,16 +50,22 @@ export async function vehiclesView(el) {
   await load();
 }
 
-/** One car in a list (vehicle list, storage spot): title, VIN, status badges.
- *  `extra` adds text to the meta line, e.g. "In spot since …". */
+/** One car in a list (vehicle list, storage spot). Text on the left (make and
+ *  model, reg. no, VIN, notifications), the right-side photo from the arrival
+ *  inspection on the right. `extra` adds text to the meta line, e.g. "In spot since …". */
 export function vehicleCard(v, extra = null) {
   const eu = euStatus(v.eu_control_due);
   const svc = serviceStatus(v.service);
-  return h('a', { class: 'card list-card', href: `#/vehicles/${v.id}` },
-    h('div', { class: 'list-main' },
-      h('div', { class: 'list-title' }, vehicleTitle(v), ' ', pill(v.status)),
+  const meta = [v.color, v.location_code && `Spot ${v.location_code}`,
+    v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`, extra].filter(Boolean).join(' · ');
+  return h('a', { class: 'card list-card car-card', href: `#/vehicles/${v.id}` },
+    h('div', { class: 'car-text' },
+      h('div', { class: 'list-title' }, vehicleTitle(v)),
+      // Always takes its line, so the cards line up when a car has no reg. no.
+      h('div', { class: 'car-reg mono' }, v.registration_number || ' '),
       h('div', { class: 'vin mono' }, v.vin),
       h('div', { class: 'badges' },
+        pill(v.status),
         readyBadge(v),
         badge(regStatus(v.registered_marked_at, v.registration_status_code, v.registration_status)),
         eu && eu.cls !== 'good' ? badge(eu, 'EU-kontroll: ') : null,
@@ -67,10 +73,12 @@ export function vehicleCard(v, extra = null) {
         v.finn_code ? h('span', { class: 'badge finn' }, 'finn.no') : null,
         v.test_drive_id ? h('span', { class: 'badge warn' }, 'On test drive') : null,
         v.pdi_status ? h('span', { class: `badge ${v.pdi_status === 'booked' ? 'good' : 'warn'}` },
-          v.pdi_status === 'booked' ? `PDI booked ${fmtDate(v.pdi_at)}` : v.pdi_status === 'sent' ? 'PDI ordered' : 'PDI not sent') : null)),
-    h('div', { class: 'list-meta' },
-      [v.registration_number, v.color, v.location_code && `Spot ${v.location_code}`,
-        v.eu_control_due && `EU-kontroll ${fmtDate(v.eu_control_due, false)}`, extra].filter(Boolean).join(' · ')));
+          v.pdi_status === 'booked' ? `PDI booked ${fmtDate(v.pdi_at)}` : v.pdi_status === 'sent' ? 'PDI ordered' : 'PDI not sent') : null),
+      meta ? h('div', { class: 'list-meta' }, meta) : null),
+    h('div', { class: 'car-photo' },
+      v.right_photo_id
+        ? h('img', { src: photoUrl(v.right_photo_id), alt: '', loading: 'lazy' })
+        : h('span', { class: 'car-photo-none muted small' }, 'No photo')));
 }
 
 const EVENT_LABELS = {
@@ -702,6 +710,24 @@ function testDriveBanner(v) {
       : h('a', { class: 'btn', href: '#/test-drive' }, 'Go to Test drive'));
 }
 
+const PHOTO_LABELS = { front: 'Front', rear: 'Rear', left: 'Left side', right: 'Right side', vin: 'VIN', damage: 'Damage', other: 'Other' };
+
+/** All photos from the latest arrival inspection; tap one to see it large. */
+function arrivalPhotosCard(v) {
+  const photos = v.arrival_photos || [];
+  if (!photos.length) return null;
+  const first = photos[0];
+  return h('section', { class: 'card' },
+    h('div', { class: 'row spread-row' },
+      h('h2', {}, `Photos from the arrival inspection (${photos.length})`),
+      h('a', { class: 'small', href: `#/inspections/${first.inspection_id}` }, 'Open inspection')),
+    h('p', { class: 'muted small' }, `Taken ${fmtDate(first.inspected_at, false)}`),
+    h('div', { class: 'photo-grid' }, photos.map((p) => h('div', { class: 'photo-tile has' },
+      h('button', { class: 'thumb', type: 'button', onClick: () => viewPhoto(p.id, PHOTO_LABELS[p.kind] ?? 'Photo') },
+        h('img', { src: photoUrl(p.id), alt: PHOTO_LABELS[p.kind] ?? 'Photo', loading: 'lazy' })),
+      h('div', { class: 'tile-foot' }, h('span', {}, PHOTO_LABELS[p.kind] ?? 'Photo'))))));
+}
+
 export async function vehicleView(el, [id]) {
   const [v, pdiData, pdiOpts, care, charging] = await Promise.all([
     api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options'),
@@ -730,6 +756,7 @@ export async function vehicleView(el, [id]) {
     pdiBanner(pdiData.current),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
+    arrivalPhotosCard(v),
     pdiCard(v, pdiData, pdiOpts, rerender),
     storageCard(v, care, rerender),
     batteryCard(v, charging, rerender),

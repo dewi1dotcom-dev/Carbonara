@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import photostore, vegvesen, vinlib
-from ..common import (READY_SQL, RETENTION_DUE_SQL, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
+from ..common import (READY_SQL, RETENTION_DUE_SQL, RIGHT_PHOTO_SQL, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
                       place_in_location, purge_vehicle, service_due, similar_vehicles, soft_delete_vehicle,
                       update_row)
 from ..config import settings
@@ -91,7 +91,7 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
                   coalesce(r.first_registered, r.first_registered_norway) AS first_registered,
                   r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code,
                   (SELECT t.id FROM test_drives t WHERE t.vehicle_id = v.id AND t.status = 'out') AS test_drive_id,
-                  po.status AS pdi_status, po.pdi_at
+                  po.status AS pdi_status, po.pdi_at, {RIGHT_PHOTO_SQL}
              FROM vehicles v
              LEFT JOIN pdi_orders po ON po.vehicle_id = v.id AND po.status NOT IN ('done', 'cancelled')
              LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
@@ -178,6 +178,17 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
             WHERE t.vehicle_id = %s AND t.status = 'out'""",
         (vehicle_id,),
     ).fetchone()
+    # Photos from the latest arrival inspection that has any (a car that came back has several).
+    arrival_photos = conn.execute(
+        """SELECT p.id, p.kind, p.uploaded_at, i.id AS inspection_id, i.started_at AS inspected_at
+             FROM inspection_photos p JOIN inspections i ON i.id = p.inspection_id
+            WHERE i.id = (SELECT i2.id FROM inspections i2
+                           WHERE i2.vehicle_id = %s AND i2.kind = 'arrival'
+                             AND EXISTS (SELECT 1 FROM inspection_photos p2 WHERE p2.inspection_id = i2.id)
+                           ORDER BY i2.started_at DESC LIMIT 1)
+            ORDER BY array_position(ARRAY['front','rear','left','right','vin','damage','other'], p.kind), p.uploaded_at""",
+        (vehicle_id,),
+    ).fetchall()
     marked_by = vehicle["registered_marked_by"] and conn.execute(
         "SELECT name FROM staff WHERE id = %s", (vehicle["registered_marked_by"],)
     ).fetchone()
@@ -188,6 +199,7 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "current_location": location,
         "active_test_drive": test_drive,
         "inspections": inspections,
+        "arrival_photos": arrival_photos,
         "open_damages": open_damages,
         "events": events,
         "registry": registry,

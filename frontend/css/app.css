@@ -109,6 +109,18 @@ main { max-width: 980px; margin: 0 auto; padding: 1rem 16px 2rem; }
 .list-card:hover { border-color: var(--primary); }
 .list-card.inner { padding: .5rem 0; border-bottom: 1px solid var(--border); justify-content: flex-start; }
 .list-title { font-weight: 600; }
+/* Car lists: text on the left, the right-side photo on the right (also on phones). */
+.list-card.car-card { flex-wrap: nowrap; align-items: stretch; }
+.car-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: .1rem; }
+.car-text .vin { overflow-wrap: anywhere; }
+.car-reg { font-weight: 600; letter-spacing: .03em; }
+.car-photo {
+  flex: 0 0 auto; width: 160px; aspect-ratio: 4 / 3; align-self: center;
+  border-radius: 8px; overflow: hidden; background: var(--bg); border: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+}
+.car-photo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+@media (max-width: 480px) { .car-photo { width: 110px; } }
 .list-meta { color: var(--muted); font-size: .85rem; }
 .mini-thumb { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; }
 

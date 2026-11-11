@@ -332,6 +332,14 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
 - **Search** covers VIN, make, model, variant, colour, reg. no (spaces ignored) and spot.
 - **Filters:** status, and **New/used** (factory new / used / not chosen).
 - A result count shows above the list.
+- **Card layout (0.21.1, user's request):** text on the left (make and model; reg. no, an empty
+  line when missing; VIN; status + notification badges; colour · spot · EU-kontroll), and
+  the **right-side photo** from the latest arrival inspection on the right
+  (`common.RIGHT_PHOTO_SQL` → `right_photo_id`; "No photo" box otherwise). Same `vehicleCard`
+  on the storage spot pages.
+- **Vehicle page (0.21.2):** "Photos from the arrival inspection" card under the overview: every
+  photo (angles, VIN, damage, other) of the latest arrival inspection that has photos
+  (`arrival_photos` from `GET /vehicles/{id}`); tap to enlarge, link to the inspection.
 
 **Test drives** (`routers/testdrives.py`, `views/testdrive.js`):
 - **Start:** car, customer name + phone (8–15 digits, optional +), **driving licence photo**,
