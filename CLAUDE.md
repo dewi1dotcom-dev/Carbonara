@@ -685,6 +685,11 @@ ORM. Match the surrounding code. Comments explain *why*.
   ("null[object HTMLElement]"). Use the `append()` helper, or
   `el.replaceChildren(...list.filter(Boolean))`. This has shipped **four** times. **Grep
   every new view for `.append(` / `.replaceChildren(` before handing over.**
+- **Pitfall #2 (0.22.0 blank page):** an imported name that is also declared in the same
+  module (e.g. importing `editDialog` from `pdi.js` into `vehicles.js`, which has its own) is a
+  SyntaxError, and the **whole app** shows only the header. Import with `as` (`editDialog as
+  pdiEditDialog`). Before handing over, check every module: imported names vs. top-level
+  declarations, and that each imported name is exported by its source.
 - `ul.rows li` is a flex row (label left, buttons right). Wrap sentences mixing text and links
   in one `<span>`, or they split into columns.
 - A card built once must redraw dependent parts through a slot element + render function (see
@@ -764,6 +769,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.21.0 | **12V charging every month for used cars** in storage: card on the vehicle page, reminder on Today |
 | 0.21.1–0.21.2 | Car photo (right side) in the Vehicles list; arrival inspection photos on the vehicle page |
 | 0.22.0 | **Documents per car** (contracts, notes, files); quick actions on the vehicle page (test drive, Create PDI order, Add document) |
+| 0.22.1 | Fix: blank page in 0.22.0 (duplicate `editDialog` name in `vehicles.js`) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

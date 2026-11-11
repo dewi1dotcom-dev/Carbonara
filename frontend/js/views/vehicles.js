@@ -1,6 +1,6 @@
 import { PANEL_LABELS } from '../diagram.js';
 import { documentDialog, documentsCard } from './documents.js';
-import { editDialog, pdiBanner, pdiCard } from './pdi.js';
+import { editDialog as pdiEditDialog, pdiBanner, pdiCard } from './pdi.js';
 import { batteryCard, storageCard } from './storagecare.js';
 import {
   api, append, badge, busy, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
@@ -701,7 +701,7 @@ function topActions(v, pdiData, pdiOpts, rerender) {
   return h('div', { class: 'actions top-actions' },
     v.active_test_drive ? null : h('a', { class: 'btn', href: `#/test-drive/new/${v.id}` }, '🔑 Start test drive'),
     pdiData.current ? null : h('button', {
-      class: 'btn', type: 'button', onClick: () => editDialog(v, null, pdiOpts, rerender),
+      class: 'btn', type: 'button', onClick: () => pdiEditDialog(v, null, pdiOpts, rerender),
     }, '🔧 Create PDI order'),
     h('button', { class: 'btn', type: 'button', onClick: () => documentDialog(v, null, rerender) }, '📄 Add document'));
 }
