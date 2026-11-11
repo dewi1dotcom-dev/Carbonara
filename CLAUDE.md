@@ -189,6 +189,8 @@ backend/
   migrations/           001…024
 frontend/               no build step; plain ES modules
   index.html, css/app.css
+  img/                  logo + app icon SVGs (favicon = carbonara-icon.svg)
+  fonts/                Space Grotesk (logo font, bundled; SIL OFL)
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
   js/ui.js              h(), append(), api, fmtDate, dateInput/timeInput, badges, shared helpers
   js/i18n.js            English/Norwegian translator + dictionary
@@ -647,6 +649,16 @@ storage, periodic checklist, 12V battery form).
 - A small inline script in `index.html` sets `<html data-theme="light|dark">` before the first
   paint; `applyTheme()` in `ui.js` does the same later and follows the device when it switches.
   `boot()` applies the account's theme (no reload).
+- **Brand colours (0.23.0)** from the user's design files (logo + `carbonara-colors.txt`):
+  - Light: background `#FBF7EC`, secondary surface `#EFE8D4` (top bar), text `#1C1B19`, muted
+    `#4A4538`. Dark: background `#1C1B19`, secondary surface `#272522` (top bar, cards), text
+    `#F3E3B3`, muted `#C9BD9A`. Accent `#F5B800` in both (primary buttons, with dark text).
+  - Yellow is too pale for text on the light background, so links / link buttons / focus use
+    `--link` (dark gold `#7A5A00` in light, the accent in dark). Use `--link` for coloured text,
+    `--primary` only for fills and borders, `--primary-text` on top of `--primary`.
+  - **Logo top left** is an inline SVG in `index.html` (not an `<img>`), coloured by
+    `--logo-bin/-car/-wheel` so it follows the theme; the text uses the bundled Space Grotesk
+    (`frontend/fonts/`, no Google Fonts request). `theme-color` is set with the theme.
 - CSS: the dark colours live under `:root[data-theme="dark"]`. **Don't use
   `@media (prefers-color-scheme)`** for colours; new colours go in both token blocks.
 
@@ -781,6 +793,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.22.3 | Arrival inspection: "Cancel inspection and delete" (cars new to Carbonara go to Recently deleted) and "Pause inspection" (back to Arrivals) |
 | 0.22.4 | Test drive return: "Received by" is the logged-in user (no dropdown; server takes it from the session) |
 | 0.22.5 | Login page: clock on the right, as when logged in |
+| 0.23.0 | **Brand look:** Carbonara logo top left, app icon as favicon, brand colours in light and dark theme |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

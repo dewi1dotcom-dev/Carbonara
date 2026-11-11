@@ -495,6 +495,8 @@ export let theme = (() => {
 function resolveTheme() {
   const dark = theme === 'dark' || (theme === 'auto' && !!darkQuery?.matches);
   document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+  // Phone browser bar colour = the top bar (--topbar in app.css).
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', dark ? '#272522' : '#EFE8D4');
 }
 export function applyTheme(t) {
   theme = ['light', 'dark'].includes(t) ? t : 'auto';

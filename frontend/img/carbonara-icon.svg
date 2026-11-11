@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" role="img" aria-label="Carbonara">
+<title>Carbonara</title>
+<rect width="160" height="160" rx="36" fill="#F5B800"/>
+<rect x="28" y="28" width="46" height="46" rx="11" fill="#1C1B19"/>
+<rect x="86" y="28" width="46" height="46" rx="11" fill="#1C1B19"/>
+<rect x="28" y="86" width="46" height="46" rx="11" fill="#1C1B19"/>
+<circle cx="109" cy="109" r="16.5" fill="none" stroke="#1C1B19" stroke-width="13"/>
+</svg>

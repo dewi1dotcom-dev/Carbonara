@@ -3,24 +3,36 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1e293b">
+  <meta name="theme-color" content="#EFE8D4">
   <title>Carbonara</title>
   <!-- Set the theme before the first paint, so a light-theme user never sees a dark flash
-       (same logic as applyTheme() in ui.js). -->
+       (same logic as applyTheme() in ui.js, which also sets theme-color). -->
   <script>
     (function () {
       var p = 'auto';
       try { p = localStorage.getItem('carbonara.theme') || 'auto'; } catch (e) { /* private mode */ }
       var dark = p === 'dark' || (p !== 'light' && window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
       document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
+      document.querySelector('meta[name=theme-color]').setAttribute('content', dark ? '#272522' : '#EFE8D4');
     })();
   </script>
   <link rel="stylesheet" href="/css/app.css">
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='7' fill='%232563eb'/><path d='M7 19l3-6h12l3 6v4H7z' fill='white'/><circle cx='11' cy='23' r='2.5' fill='%232563eb'/><circle cx='21' cy='23' r='2.5' fill='%232563eb'/></svg>">
+  <link rel="icon" type="image/svg+xml" href="/img/carbonara-icon.svg">
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="#/">Carbonara</a>
+    <!-- The logo is inline (not an <img>) so its colours follow the theme (--logo-* in
+         app.css) and the text uses the bundled Space Grotesk font.
+         Source files: img/carbonara-logo-light.svg / -dark.svg. -->
+    <a class="brand" href="#/" aria-label="Carbonara" translate="no">
+      <svg class="brand-logo" viewBox="0 0 560 128" role="img" aria-hidden="true" focusable="false">
+        <rect class="logo-bin" x="12" y="12" width="46" height="46" rx="11"/>
+        <rect class="logo-bin" x="70" y="12" width="46" height="46" rx="11"/>
+        <rect class="logo-bin" x="12" y="70" width="46" height="46" rx="11"/>
+        <circle class="logo-wheel" cx="93" cy="93" r="16.5" fill="none" stroke-width="13"/>
+        <text class="logo-text" x="150" y="90" font-size="76" letter-spacing="-1.9"><tspan class="logo-car" font-weight="700">Car</tspan><tspan class="logo-bin" font-weight="400">bonara</tspan></text>
+      </svg>
+    </a>
     <nav>
       <a href="#/" data-nav="today">Today</a>
       <a href="#/arrivals" data-nav="arrivals">Arrivals</a>
