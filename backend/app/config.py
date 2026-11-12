@@ -85,6 +85,15 @@ SETTINGS: tuple[Setting, ...] = (
             help="Shown on the kiosk's privacy notice."),
     Setting("delivery_address", "Postal address", "Customer deliveries (kiosk)",
             help="Shown on the kiosk's privacy notice."),
+    # Same for the rental cars' privacy notice (the rental business can be another company).
+    Setting("rental_company", "Company name", "Rental cars",
+            help="Responsible for the data on the rental privacy notice. Empty = the Company details above are used."),
+    Setting("rental_phone", "Phone for customers", "Rental cars",
+            help="Shown on the rental privacy notice."),
+    Setting("rental_email", "E-mail for customers", "Rental cars",
+            help="Shown on the rental privacy notice."),
+    Setting("rental_address", "Postal address", "Rental cars",
+            help="Shown on the rental privacy notice."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),

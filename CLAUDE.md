@@ -85,6 +85,7 @@ like the one above. Never write staff PINs (e.g. the Claude test account's) into
   - `TRASH_DAYS=30`, `RETENTION_YEARS=5`
   - `PRIVACY_COMPANY`, `PRIVACY_CONTACT` (phone), `PRIVACY_EMAIL`, `PRIVACY_ADDRESS`
   - `DELIVERY_COMPANY`, `DELIVERY_PHONE`, `DELIVERY_EMAIL`, `DELIVERY_ADDRESS` (kiosk privacy notice)
+  - `RENTAL_COMPANY`, `RENTAL_PHONE`, `RENTAL_EMAIL`, `RENTAL_ADDRESS` (rental privacy notice)
   - The dealer number is set on the System page only.
   - `SMTP_HOST/PORT/USER/PASSWORD/FROM/SECURITY` (empty host = staff send from their own
     e-mail app)
@@ -422,7 +423,10 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
 - **Return, trash and access log:** the same as test drives (`rentals.customer_trashed_at` → wiped
   after `trash_days` by the worker; "Delete now"; `rental_access_log`).
   - The privacy notice is its own Norwegian text (`rentalPrivacyDialog`): art. 6(1)(b) rental
-    agreement + 6(1)(f), fødselsnummer § 12, System → Company contact.
+    agreement + 6(1)(f), fødselsnummer § 12.
+  - **Contact (0.28.1):** like the kiosk. System → **Rental cars** (`rental_company/_phone/_email/_address`)
+    replaces System → Company when `rental_company` is set; never mixed. If it differs from Company, `_privacy()`
+    sends `operator` and the notice uses the two-company wording (staff of both, data processor, "Contact {company}").
 - **Removing a car:** not while it is out. A car with rental history is only hidden (`deleted_at`);
   one without is deleted. The reg. no can then be reused.
 - **Menu:** the top-menu key `rental` ("Rental cars" / "Leiebiler"). Migration 029 gave it to teams
@@ -596,6 +600,7 @@ the server is LAN-only, so no customer phones / public internet).
   - **Company:** company name, dealer number, customer phone, e-mail, postal address
   - **Customer deliveries (kiosk):** company name, phone, e-mail, postal address for the kiosk
     privacy notice (empty company name = Company is used)
+  - **Rental cars (0.28.1):** the same four fields for the rental privacy notice
   - **Data retention**
 - **Where a value comes from:** `settings.<name>` = DB `app_settings`, else env `NAME`, else
   default. Cached 20 s per process (the worker too). **Always read settings at call time;
@@ -957,6 +962,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.27.1 | Storage checklist paint check: tree sap ("kvae") added; "Iht. MG Service Information …" line removed from the storage report; MG bulletin note removed from the storage maintenance card |
 | 0.27.2 | Kiosk form: English / Norsk switch on the title line, top right (in the staff preview it saves the staff member's own language) |
 | 0.28.0 | **Rental cars** page: own fleet (not in the car database), added / edited on the page, Statens vegvesen lookup with EU-kontroll first (badges, notice, Today, nightly refresh); renting out like test drives + expected return; trash after return (migration 029) |
+| 0.28.1 | Rental privacy notice contact customizable on System → Rental cars (another company possible, two-company wording) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

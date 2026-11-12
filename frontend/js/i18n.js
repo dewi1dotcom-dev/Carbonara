@@ -389,6 +389,11 @@ const NO = {
   'Shown to test drive customers on the privacy notice.': 'Vises for prøvekjøringskunder i personvernerklæringen.',
   'Shown on the privacy notice: street, postcode and town.': 'Vises i personvernerklæringen: gate, postnummer og sted.',
   'e.g. Company name <post@example.com>': 'f.eks. Firmanavn <post@example.com>',
+  "Responsible for the data on the rental privacy notice. Empty = the Company details above are used.":
+    'Ansvarlig for opplysningene i personvernerklæringen for leiebiler. Tomt = firmaopplysningene over brukes.',
+  'Shown on the rental privacy notice.': 'Vises i personvernerklæringen for leiebiler.',
+  'The rental privacy notice has no contact details yet. A system admin can add them on the System page → Rental cars.':
+    'Personvernerklæringen for leiebiler mangler kontaktinformasjon. En systemadministrator kan legge den inn under System → Leiebiler.',
   'Customer deliveries (kiosk)': 'Kundeleveringer (kiosk)', "Shown on the kiosk's privacy notice.": 'Vises i personvernerklæringen på kiosken.',
   "Responsible for the data on the kiosk's privacy notice. Empty = the Company details above are used.": 'Ansvarlig for opplysningene i personvernerklæringen på kiosken. Tomt = firmaopplysningene over brukes.',
   'Keep deleted data (days)': 'Behold slettede data (dager)', 'Delete inactive off-site cars after (years)': 'Slett inaktive biler utenfor lageret etter (år)',

@@ -85,8 +85,17 @@ class RentalCarPatch(BaseModel):
 
 
 def _privacy() -> dict:
+    """Contact on the rental privacy notice (like the delivery kiosk's): a company set
+    under System → Rental cars replaces the whole Company block, never mixed with it.
+    operator = the company running Carbonara, which stores the data for the other one."""
+    if settings.rental_company:
+        return {"company": settings.rental_company, "phone": settings.rental_phone or None,
+                "email": settings.rental_email or None, "address": settings.rental_address or None,
+                "source": "rental",
+                "operator": settings.privacy_company if settings.privacy_company != settings.rental_company else None}
     return {"company": settings.privacy_company, "phone": settings.privacy_contact or None,
-            "email": settings.privacy_email or None, "address": settings.privacy_address or None}
+            "email": settings.privacy_email or None, "address": settings.privacy_address or None,
+            "source": "company"}
 
 
 def _clean_car(values: dict) -> dict:
