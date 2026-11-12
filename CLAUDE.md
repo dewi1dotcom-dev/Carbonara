@@ -910,6 +910,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.26.3 | Kiosk privacy notice can name another company: System → Customer deliveries (kiosk) |
 | 0.27.0 | No company / place / person names in code (usable by any dealer); kiosk notice worded for two companies under one roof; company name has no built-in default; tyre option `workshop_orders` (migration 028) |
 | 0.27.1 | Storage checklist paint check: tree sap ("kvae") added; "Iht. MG Service Information …" line removed from the storage report; MG bulletin note removed from the storage maintenance card |
+| 0.27.2 | Kiosk form: English / Norsk switch on the title line, top right (in the staff preview it saves the staff member's own language) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

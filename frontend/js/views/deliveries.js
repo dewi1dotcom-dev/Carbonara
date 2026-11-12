@@ -93,7 +93,7 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
 
 /**
  * standalone: this device is a kiosk tablet (no staff logged in); shows a
- * language switch and a "Staff login" link (onStaffLogin). Otherwise a staff
+ * "Staff login" link (onStaffLogin). Otherwise a staff
  * preview inside the app (#/kiosk).
  */
 export async function kioskView(el, _params = [], { standalone = false, onStaffLogin = null } = {}) {
@@ -107,16 +107,31 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
     standalone ? null : h('div', { class: 'card notice' },
       h('span', {}, 'Preview of the kiosk form. A delivery sent from here is real and shows up for the staff. ',
         h('a', { href: '#/deliveries' }, 'Back to Customer deliveries'))),
-    // Before anyone is logged in, the language follows the device; switchable here.
-    standalone ? h('p', { class: 'small muted lang-switch', translate: 'no' },
-      [['en', 'English'], ['no', 'Norsk']].map(([code, label]) => (code === lang
-        ? h('strong', {}, label)
-        : h('button', { class: 'link', type: 'button', onClick: () => { setLang(code); location.reload(); } }, label)))) : null,
     ...content,
     standalone && onStaffLogin ? h('p', { class: 'kiosk-foot' },
       h('button', { class: 'link small', type: 'button', onClick: () => { clearTimeout(idleTimer); clearTimeout(doneTimer); onStaffLogin(); } },
         'Staff login')) : null,
   ].filter(Boolean));
+
+  /** English / Norsk switch at the top right of the form. On a kiosk tablet the
+   * language is the device's (no one is logged in); in the staff preview it is
+   * the staff member's own setting, so it is saved for them like in the user menu. */
+  function langToggle() {
+    const choose = async (code) => {
+      if (code === lang) return;
+      if (!standalone) {
+        try { await api.post('/auth/language', { language: code }); } catch (e) { showError(e); return; }
+      }
+      clearTimeout(idleTimer);
+      setLang(code);
+      location.reload(); // every text is shown in the new language
+    };
+    return h('div', { class: 'lang-toggle', role: 'group', 'aria-label': 'Language', translate: 'no' },
+      [['en', 'English'], ['no', 'Norsk']].map(([code, label]) => h('button', {
+        type: 'button', class: code === lang ? 'on' : '', 'aria-pressed': String(code === lang),
+        lang: code === 'no' ? 'nb' : 'en', onClick: () => choose(code),
+      }, label)));
+  }
 
   function renderForm() {
     clearTimeout(doneTimer);
@@ -152,7 +167,7 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
 
     const submit = h('button', { class: 'btn primary big', type: 'submit' }, 'Register delivery');
     const form = h('form', { class: 'card kiosk-card', autocomplete: 'off' },
-      h('h1', {}, 'Deliver your car'),
+      h('div', { class: 'kiosk-head' }, h('h1', {}, 'Deliver your car'), langToggle()),
       h('p', { class: 'muted' }, 'Register the car you are leaving with us. It only takes a minute.'),
       h('div', { class: 'field' }, h('label', { for: 'kd-reg' }, 'Registration number'), reg),
       h('div', { class: 'grid' },
