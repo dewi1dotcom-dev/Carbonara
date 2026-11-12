@@ -47,7 +47,7 @@ ITEMS: tuple[Item, ...] = (
     Item("arr_electrical", "Alt elektrisk utstyr avslått", "arrival"),
     Item("arr_disconnect", "12V-batteri frakoblet (minuspol)", "arrival"),
     # Every month (bulletin: dynamic inspection > 1 month)
-    Item("surface", "Sjekk lakk for aggressive stoffer (mose, støv, fugleskitt), vask ved behov", "monthly"),
+    Item("surface", "Sjekk lakk for aggressive stoffer (mose, kvae, støv, fugleskitt), vask ved behov", "monthly"),
     Item("doors_horn", "Åpne og lukk dører, panser og bakluke; test horn 3 ganger", "monthly"),
     Item("engine_5min", "Start bilen på tomgang i minst 5 minutter, lytt etter lyder", "monthly", "engine"),
     Item("ac_on", "Skru på A/C og bruk ventilasjonen én gang (over 5 °C)", "monthly"),

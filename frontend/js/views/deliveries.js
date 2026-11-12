@@ -56,8 +56,17 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
     .filter(([, v]) => v);
   const contact = lines.length
     ? h('p', { class: 'privacy-contact' }, lines.map(([label, v]) => h('span', { class: 'block' }, `${label}: `, h('strong', {}, v))))
-    : h('p', {}, h('strong', { class: 'td-items' }, '[kontaktinfo mangler – legges inn under System → Firma]'));
+    : h('p', {}, h('strong', { class: 'td-items' }, privacy?.source === 'delivery'
+      ? '[kontaktinfo mangler – legges inn under System → Kundeleveringer (kiosk)]'
+      : '[kontaktinfo mangler – legges inn under System → Firma eller Kundeleveringer (kiosk)]'));
   const company = privacy?.company || 'Forhandleren';
+  // Two companies under one roof: the kiosk company owns the data, the company
+  // running Carbonara stores it for them (data processor, GDPR art. 28).
+  const operator = privacy?.operator;
+  const whoSees = operator
+    ? h('p', {}, `Bare ansatte hos ${company} og ${operator} som har tilgang til systemet, og som logger inn med personlig kode. `
+      + `Opplysningene lagres på en server som ${operator} drifter på vegne av ${company} (databehandler), og deles ikke med andre.`)
+    : h('p', {}, 'Bare våre ansatte, som logger inn med personlig kode. Opplysningene lagres på vår egen server og deles ikke med andre.');
   const body = h('div', { class: 'privacy-text', translate: 'no' }, // a Norwegian document
     h('p', {}, h('strong', {}, company), ' er behandlingsansvarlig for opplysningene du registrerer når du leverer bilen din til oss.'),
     h('h3', {}, 'Hva vi registrerer'),
@@ -69,10 +78,10 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
     h('h3', {}, 'Hvor lenge'),
     h('p', {}, `Registreringen slettes automatisk ${trashDays} dager etter at vi har tatt imot bilen.`),
     h('h3', {}, 'Hvem som ser dem'),
-    h('p', {}, 'Bare våre ansatte, som logger inn med personlig kode. Opplysningene lagres på vår egen server og deles ikke med andre.'),
+    whoSees,
     h('h3', {}, 'Dine rettigheter'),
     h('p', {}, 'Du kan be om innsyn, retting og sletting, og protestere mot behandlingen. '
-      + 'Du kan også klage til Datatilsynet (datatilsynet.no). Kontakt oss:'),
+      + `Du kan også klage til Datatilsynet (datatilsynet.no). Kontakt ${operator ? company : 'oss'}:`),
     contact);
   const wrap = h('div', {}, body,
     h('div', { class: 'actions no-print' },

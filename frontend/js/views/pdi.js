@@ -1,5 +1,5 @@
 // PDI order card on the vehicle page: what the customer ordered, sent to the
-// workshop (RBV) by e-mail; the workshop's date/time is entered by staff.
+// workshop by e-mail; the workshop's date/time is entered by staff.
 // Also the banner at the top of the vehicle page and the PDI page (#/pdi).
 import { tr } from '../i18n.js';
 import {
@@ -9,7 +9,7 @@ import {
 
 const WHEELS_AT_DEALER = ['in_stock', 'sales_ordered']; // the dealer has the winter wheels
 
-/** "Sent 10.11.2026 14:00 to rbv@…" or "Printed / PDF 10.11.2026 14:00". */
+/** "Sent 10.11.2026 14:00 to post@…" or "Printed / PDF 10.11.2026 14:00". */
 const sentText = (o, withTime = true) => (o.sent_via === 'print'
   ? `printed / PDF ${fmtDate(o.sent_at, withTime)}`
   : `sent ${fmtDate(o.sent_at, withTime)} to ${o.sent_to}`);
@@ -151,7 +151,7 @@ export function editDialog(v, o, opts, done) {
     const m = mode.value;
     tyreSlot.replaceChildren(...(m === 'none' ? [] : [
       m === 'in_stock' ? null : h('div', { class: 'field' }, h('label', { for: 'pdi-company' },
-        m === 'rbv_orders' ? 'Tyre company (the workshop orders from)' : 'Tyre company (optional)'), company),
+        m === 'workshop_orders' ? 'Tyre company (the workshop orders from)' : 'Tyre company (optional)'), company),
       m === 'sales_ordered' ? h('div', { class: 'field' }, h('label', { for: 'pdi-expected' }, 'Expected delivery date'), expected) : null,
       h('div', { class: 'field' }, h('label', {}, 'Tyre details (optional)'), tyreNote),
     ].filter(Boolean)));

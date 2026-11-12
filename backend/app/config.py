@@ -62,9 +62,9 @@ SETTINGS: tuple[Setting, ...] = (
             help="starttls for port 587, ssl for port 465."),
     Setting("smtp_user", "Username", "E-mail"),
     Setting("smtp_password", "Password", "E-mail", secret=True, help="Gmail: an app password, not the normal password."),
-    Setting("smtp_from", "Sender", "E-mail", help='e.g. Moss AutoCenter <post@example.no>'),
+    Setting("smtp_from", "Sender", "E-mail", help='e.g. Company name <post@example.com>'),
     # Company (privacy notice, PDI e-mails, storage reports)
-    Setting("privacy_company", "Company name", "Company", default="Moss AutoCenter",
+    Setting("privacy_company", "Company name", "Company",
             help="Shown on the privacy notice, PDI e-mails and storage reports."),
     Setting("dealer_number", "Dealer number (Forh. nr.)", "Company",
             help="Printed on the storage maintenance report."),
@@ -74,7 +74,17 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("privacy_email", "E-mail for customers", "Company",
             help="Shown to test drive customers on the privacy notice."),
     Setting("privacy_address", "Postal address", "Company",
-            help="Shown on the privacy notice, e.g. Kvaenveien 2, 1529 Moss."),
+            help="Shown on the privacy notice: street, postcode and town."),
+    # The delivery kiosk's privacy notice can name another company (e.g. the workshop).
+    # Used only when delivery_company is set; otherwise the Company group above applies.
+    Setting("delivery_company", "Company name", "Customer deliveries (kiosk)",
+            help="Responsible for the data on the kiosk's privacy notice. Empty = the Company details above are used."),
+    Setting("delivery_phone", "Phone for customers", "Customer deliveries (kiosk)",
+            help="Shown on the kiosk's privacy notice."),
+    Setting("delivery_email", "E-mail for customers", "Customer deliveries (kiosk)",
+            help="Shown on the kiosk's privacy notice."),
+    Setting("delivery_address", "Postal address", "Customer deliveries (kiosk)",
+            help="Shown on the kiosk's privacy notice."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),

@@ -11,12 +11,11 @@ CREATE TABLE app_settings (
 -- System admin: can change system settings and give/remove system admin.
 ALTER TABLE staff ADD COLUMN is_superadmin boolean NOT NULL DEFAULT false;
 
--- Moss AutoCenter's install: the owner's account "Supern" becomes system admin
--- (and admin). If there is no such account, the first administrator (lowest id,
--- with a PIN) does, so someone can always open the System page. New installs:
--- the person doing first-time setup becomes system admin.
-UPDATE staff SET is_superadmin = true, is_admin = true
- WHERE active AND pin_hash IS NOT NULL AND name = 'Supern';
+-- Existing installs: the first administrator (lowest id, with a PIN) becomes
+-- system admin, so someone can always open the System page. New installs: the
+-- person doing first-time setup becomes system admin.
+-- (Edited after this ran on the first install, where the owner's account was
+-- picked by name; it never matched anything on a new install.)
 UPDATE staff SET is_superadmin = true
  WHERE NOT EXISTS (SELECT 1 FROM staff WHERE is_superadmin)
    AND id = (SELECT min(id) FROM staff WHERE is_admin AND active AND pin_hash IS NOT NULL);

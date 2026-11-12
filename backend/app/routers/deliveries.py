@@ -124,8 +124,18 @@ def lookup_in_background(delivery_id: int, reg: str, typed_name: str) -> None:
 
 
 def _privacy() -> dict:
+    """Contact on the kiosk's privacy notice. A company set under System → Customer
+    deliveries (kiosk) replaces the whole Company block; its details are never mixed
+    with the dealership's, so a customer never gets another company's phone number."""
+    if settings.delivery_company:
+        return {"company": settings.delivery_company, "phone": settings.delivery_phone or None,
+                "email": settings.delivery_email or None, "address": settings.delivery_address or None,
+                "source": "delivery",
+                # The company running Carbonara stores the data for the other company.
+                "operator": settings.privacy_company if settings.privacy_company != settings.delivery_company else None}
     return {"company": settings.privacy_company, "phone": settings.privacy_contact or None,
-            "email": settings.privacy_email or None, "address": settings.privacy_address or None}
+            "email": settings.privacy_email or None, "address": settings.privacy_address or None,
+            "source": "company"}
 
 
 # --------------------------------------------------------------------------- #

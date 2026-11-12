@@ -1,5 +1,5 @@
 -- PDI orders: what the customer ordered for a new car, sent to the workshop
--- that does the Pre Delivery Inspection (RBV – Rygge Bilverksted).
+-- that does the Pre Delivery Inspection.
 
 -- Editable lists (Settings): order items, tyre companies, e-mail recipients.
 CREATE TABLE pdi_lists (
@@ -15,7 +15,7 @@ CREATE TABLE pdi_lists (
 );
 CREATE INDEX pdi_lists_kind_idx ON pdi_lists (kind, active, sort);
 
--- Starting lists (labels go to RBV in Norwegian; rename freely in Settings).
+-- Starting lists (labels go to the workshop in Norwegian; rename freely in Settings).
 INSERT INTO pdi_lists (kind, label, choices, sort) VALUES
     ('item', 'PDI',                    '{}',                10),
     ('item', 'Gulvmatter',             '{Gummi,Tekstil}',   20),
@@ -24,10 +24,8 @@ INSERT INTO pdi_lists (kind, label, choices, sort) VALUES
     ('item', 'LED-bar',                '{}',                50),
     ('item', 'Skiluke / lastluke',     '{}',                60),
     ('item', 'Sprutlapper',            '{}',                70);
-INSERT INTO pdi_lists (kind, label, sort) VALUES
-    ('tyre_company', 'NorgesDekk', 10),
-    ('tyre_company', 'Drivalia',   20);
--- No e-mail recipients are built in: they are added under Settings.
+-- No tyre companies or e-mail recipients are built in: they are added under Settings.
+-- (Edited after this ran on the first install, which keeps its own list; new installs start empty.)
 
 CREATE TABLE pdi_orders (
     id               bigint      GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -46,7 +44,7 @@ CREATE TABLE pdi_orders (
     sent_by          bigint      REFERENCES staff (id),
     sent_to          text,                                -- e-mail address it went to
     sent_via         text        CHECK (sent_via IN ('smtp', 'mail_app')),
-    pdi_at           timestamptz,                         -- booked date/time from RBV's reply
+    pdi_at           timestamptz,                         -- booked date/time from the workshop's reply
     booked_by        bigint      REFERENCES staff (id),
     done_at          timestamptz,
     done_by          bigint      REFERENCES staff (id),

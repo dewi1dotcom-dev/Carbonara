@@ -1,5 +1,5 @@
 """PDI orders (Pre Delivery Inspection) for new cars, sent by e-mail to the
-workshop (RBV). The workshop's reply with a date/time is entered by staff."""
+workshop. The workshop's reply with a date/time is entered by staff."""
 
 import datetime as dt
 import logging
@@ -22,7 +22,7 @@ TYRE_MODES = {
     "none": "Ingen vinterdekk",
     "in_stock": "Vinterdekk på lager",
     "sales_ordered": "Vinterdekk bestilt av selger",
-    "rbv_orders": "Vinterdekk bestilles av verkstedet",
+    "workshop_orders": "Vinterdekk bestilles av verkstedet",
 }
 
 
@@ -36,7 +36,7 @@ class OrderItem(BaseModel):
 
 
 class Tyres(BaseModel):
-    mode: Literal["none", "in_stock", "sales_ordered", "rbv_orders"] = "none"
+    mode: Literal["none", "in_stock", "sales_ordered", "workshop_orders"] = "none"
     company: Optional[str] = Field(None, max_length=80)
     expected_date: Optional[dt.date] = None
     note: Optional[str] = Field(None, max_length=300)
@@ -141,7 +141,7 @@ def compose(order: dict) -> tuple[str, str]:
     lines = [
         "Hei,",
         "",
-        f"{settings.privacy_company} bestiller nybilklargjøring med følgende for bilen under.",
+        f"{settings.privacy_company or 'Vi'} bestiller nybilklargjøring med følgende for bilen under.",  # no company set yet: "Vi …"
         "",
         "BIL",
         f"  {car}",
@@ -174,8 +174,8 @@ def compose(order: dict) -> tuple[str, str]:
         "Vennligst svar på denne e-posten med dato og klokkeslett for nybilklargjøringen.",
         "",
         "Med vennlig hilsen",
-        order.get("sender_name") or settings.privacy_company,
-        settings.privacy_company,
+        order.get("sender_name") or settings.privacy_company or "",
+        settings.privacy_company or "",
     ]
     return subject, "\n".join(lines)
 
@@ -232,7 +232,7 @@ def save_order(vehicle_id: int, body: OrderIn, request: Request, conn=Depends(ge
                         (vehicle_id,)).fetchone():
         raise not_found("Vehicle")
     t = body.tyres
-    if t.mode == "rbv_orders" and not t.company:
+    if t.mode == "workshop_orders" and not t.company:
         raise bad_request("Choose the tyre company the workshop should order from")
     if t.mode == "sales_ordered" and not t.expected_date:
         raise bad_request("Give the expected delivery date for the tyres")

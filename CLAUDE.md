@@ -37,6 +37,13 @@ Norwegian formats.
   - **No Norwegian in the English version and vice versa.** All new UI text needs both
     languages (see *Language*).
   - **No e-mail addresses built into code or migrations.** They are entered in Settings.
+  - **No company, place or person names in code or migrations (0.27.0).** Carbonara is meant to
+    be usable by other dealers, alone or several under one roof. Names such as the dealership, the
+    workshop, tyre companies, addresses, phone numbers and staff stay in this file and in
+    the System page / Settings, never in code. Say "the workshop" / "the dealer" in code and
+    comments. Check before a commit with:
+    `git grep -n -iE "rbv|rygge|autocenter|kvaenveien|norgesdekk|drivalia|supern" -- backend frontend .env.example docker-compose.yml`
+    (the only allowed hit is the comment in migration 028 that mentions the old code `rbv_orders`).
   - The full licence photo is kept (no masking); see *Login & GDPR*.
 
 ## SECURITY — the Vegvesen API key
@@ -77,6 +84,7 @@ like the one above. Never write staff PINs (e.g. the Claude test account's) into
   - `VEGVESEN_API_KEY/_URL/_AUTH_HEADER/_AUTH_SCHEME/_SYNC_DAYS`
   - `TRASH_DAYS=30`, `RETENTION_YEARS=5`
   - `PRIVACY_COMPANY`, `PRIVACY_CONTACT` (phone), `PRIVACY_EMAIL`, `PRIVACY_ADDRESS`
+  - `DELIVERY_COMPANY`, `DELIVERY_PHONE`, `DELIVERY_EMAIL`, `DELIVERY_ADDRESS` (kiosk privacy notice)
   - The dealer number is set on the System page only.
   - `SMTP_HOST/PORT/USER/PASSWORD/FROM/SECURITY` (empty host = staff send from their own
     e-mail app)
@@ -233,9 +241,13 @@ frontend/               no build step; plain ES modules
 | 025 | `customer_deliveries` | `delivery_maps`, `delivery_options` (key places / tick boxes, EN + NO), `kiosk_devices`, `car_deliveries` |
 | 026 | `delivery_registry` | `car_deliveries.svv_*` (SVV lookup by reg. no: VIN, make/model, EU-kontroll, owner name + kind), `name_match` |
 | 027 | `teams` | `teams` (name, `menu` text[]), `staff.team_id`; existing staff put in the team "All staff" with every menu item |
+| 028 | `generic_names` | stored tyre option `rbv_orders` → `workshop_orders` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
+- **The one exception (0.27.0):** to take names out of the code, 011 no longer seeds tyre
+  companies, and 012 no longer picks the system admin by the account name. This only changes
+  new installs. The live install ran the old versions and keeps its data.
 
 **Frontend routes:**
 - **Main pages:** `#/` Today · `#/arrivals` · `#/intake` · `#/inspections/:id` · `#/pdi` (PDI
@@ -459,6 +471,20 @@ the server is LAN-only, so no customer phones / public internet).
   `trash_days` by the worker ("Delete now" at once). `vehicle_events` get only `customer_delivery` /
   `customer_delivery_received` with the delivery id — never name, phone or message.
 - **Privacy:** short text on the form + `deliveryPrivacyDialog` (Norwegian document, art. 6(1)(b)).
+  - **Contact on the notice (0.26.3):** the kiosk notice can name **another company** than the
+    dealership. `_privacy()` in `routers/deliveries.py` uses System → **Customer deliveries (kiosk)**
+    (`delivery_company/_phone/_email/_address`) when `delivery_company` is set. Otherwise it uses
+    System → Company.
+  - The two blocks are **never mixed**, so a customer never sees one company's name with the other's
+    phone number.
+  - **Two companies under one roof (0.27.0).** The first install is like this: the dealer runs
+    Carbonara and the workshop receives the cars. When the kiosk company differs from System →
+    Company, `_privacy()` also sends `operator` (the Company name). The notice then says:
+    - the kiosk company is the controller
+    - staff of **both** companies with access can see the data
+    - the operator stores it on its server for the kiosk company (data processor, art. 28)
+    - "Contact {kiosk company}" instead of "Contact us"
+  - For a single dealer, the notice keeps the original "our staff / our own server" wording.
 
 **Login & GDPR (0.11.0)** (`auth.py`, `routers/session.py`, `views/login.js`):
 - **Login:** a personal **PIN** (4–8 digits, scrypt).
@@ -523,6 +549,8 @@ the server is LAN-only, so no customer phones / public internet).
   - **Statens vegvesen:** key 🔒, sync days, URL, auth header/scheme, call pause
   - **E-mail (SMTP):** password 🔒
   - **Company:** company name, dealer number, customer phone, e-mail, postal address
+  - **Customer deliveries (kiosk):** company name, phone, e-mail, postal address for the kiosk
+    privacy notice (empty company name = Company is used)
   - **Data retention**
 - **Where a value comes from:** `settings.<name>` = DB `app_settings`, else env `NAME`, else
   default. Cached 20 s per process (the worker too). **Always read settings at call time;
@@ -802,6 +830,10 @@ ORM. Match the surrounding code. Comments explain *why*.
 
 ## Open items waiting on the user
 
+- **Company name (0.27.0):** the built-in default "Moss AutoCenter" was removed from the code. The
+  name must be saved on System → Company (and the workshop under Customer deliveries (kiosk)),
+  or the privacy notices, PDI e-mails and storage reports show no company name.
+
 - **Customer contact:** fill in **E-mail for customers** and **Postal address** on System →
   Company (the phone 69269840 is set).
 - **SMTP:** not set up; PDI e-mails go via the e-mail app until it is.
@@ -875,6 +907,9 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.26.0 | **Teams:** system admins make named teams on the System page, pick the top menu items each team sees and place users (one team each); no team = Today only |
 | 0.26.1 | Fix: pages that redraw themselves (System → Teams, Customer deliveries, Test drive, vehicle page) only updated on the first action |
 | 0.26.2 | Customer delivery card: reg. no, VIN, name + phone, then EU-kontroll badge + date |
+| 0.26.3 | Kiosk privacy notice can name another company: System → Customer deliveries (kiosk) |
+| 0.27.0 | No company / place / person names in code (usable by any dealer); kiosk notice worded for two companies under one roof; company name has no built-in default; tyre option `workshop_orders` (migration 028) |
+| 0.27.1 | Storage checklist paint check: tree sap ("kvae") added; "Iht. MG Service Information …" line removed from the storage report; MG bulletin note removed from the storage maintenance card |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

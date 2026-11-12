@@ -219,7 +219,6 @@ def report(vehicle_id: int, conn=Depends(get_conn)):
         "spot": spot["code"] if spot else None,
         "items": [{"key": i.key, "label": i.label, "when": i.when} for i in sc.ITEMS],
         "level_text": sc.LEVEL_TEXT,
-        "reference": "MG Service Information SI-GI2022102501",
     }
 
 

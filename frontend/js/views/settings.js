@@ -109,7 +109,7 @@ export async function settingsView(el) {
     const itemName = h('input', { type: 'text', placeholder: 'Item, e.g. Takboks', required: true, maxlength: 80 });
     const itemChoices = h('input', { type: 'text', placeholder: 'Choices (optional), e.g. Gummi, Tekstil', maxlength: 200 });
     const tyreName = h('input', { type: 'text', placeholder: 'Tyre company', required: true, maxlength: 80 });
-    const recName = h('input', { type: 'text', placeholder: 'Name, e.g. RBV', required: true, maxlength: 80 });
+    const recName = h('input', { type: 'text', placeholder: 'Name, e.g. the workshop', required: true, maxlength: 80 });
     const recEmail = h('input', { type: 'email', placeholder: 'E-mail address', required: true, maxlength: 200 });
 
     pdiBox.replaceChildren(h('section', { class: 'card' },

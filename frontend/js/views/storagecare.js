@@ -45,7 +45,6 @@ export function storageCard(v, p, rerender) {
   const valid = p.checks.filter((c) => !c.voided_at);
   const last = valid[valid.length - 1];
   append(card,
-    h('p', { class: 'muted small' }, 'MG storage requirements (SI-GI2022102501): a first storage check at arrival, then every month (more every 3 and 6 months) until the PDI.'),
     n ? h('div', { class: `notice ${n.days < 0 ? 'bad-notice' : n.days <= 3 ? 'warn' : ''}` },
       h('strong', {}, n.title_en), ' — ', n.kind === 'arrival' ? 'not done yet' : dueText(n))
       : (p.note ? h('p', { class: 'muted' }, p.note) : null),
@@ -338,8 +337,7 @@ export async function storageReportView(el, [id]) {
     const full = !only12.checked;
     body.replaceChildren(...[
       h('div', { class: 'rep-title' },
-        h('h1', {}, full ? 'Lagringsvedlikehold – ny bil' : 'Lagerbil 12V batteri inspeksjonsskjema'),
-        h('div', { class: 'small' }, `Iht. ${r.reference} · ${r.company}`)),
+        h('h1', {}, full ? 'Lagringsvedlikehold – ny bil' : 'Lagerbil 12V batteri inspeksjonsskjema')),
       head(),
       full ? h('h2', {}, '1. Ankomstkontroll') : null,
       full ? arrivalSection() : null,
