@@ -116,6 +116,8 @@ const EVENT_LABELS = {
   document_added: 'Document added',
   document_updated: 'Document changed',
   document_deleted: 'Document deleted',
+  customer_delivery: 'Delivered by the customer (kiosk)',
+  customer_delivery_received: 'Customer delivery received',
 };
 
 const FIELD_LABELS = {

@@ -456,6 +456,52 @@ const NO = {
   'First storage check done – the monthly checks start when the car is placed in storage.': 'Første lagerkontroll utført – de månedlige kontrollene starter når bilen plasseres på lager.',
   'Licence photo': 'Førerkortbilde', 'Licence photo file': 'Førerkortbildefil', 'Photo file': 'Bildefil', 'Photo variant': 'Bildevariant', 'Storage location': 'Lagerplass',
   'Parent spot': 'Hovedplass', 'Staff member': 'Ansatt', 'Inspection': 'Kontroll', 'List entry': 'Listeelement', 'Setting': 'Innstilling', 'Storage check ': 'Lagerkontroll ',
+
+  // ---- customer car delivery (kiosk)
+  'Deliver your car': 'Lever bilen din', 'Register the car you are leaving with us. It only takes a minute.': 'Registrer bilen du leverer hos oss. Det tar bare et minutt.',
+  'Registration number': 'Registreringsnummer', 'Where did you leave the key?': 'Hvor la du nøkkelen?', 'Where is the car parked?': 'Hvor står bilen parkert?',
+  'Tap the map where you parked the car.': 'Trykk på kartet der du parkerte bilen.', 'Tick what applies': 'Kryss av for det som gjelder',
+  'Message to the workshop (optional)': 'Melding til verkstedet (valgfritt)', 'Read the privacy notice': 'Les personvernerklæringen',
+  'Register delivery': 'Registrer levering', 'Choose where you left the key': 'Velg hvor du la nøkkelen', 'Choose where the car is parked': 'Velg hvor bilen står parkert',
+  'Tap the map where the car is parked': 'Trykk på kartet der bilen står parkert', 'Thank you!': 'Takk!', 'We have registered your car': 'Vi har registrert bilen din',
+  'Remember to leave the key here': 'Husk å legge nøkkelen her', 'We will contact you if we have any questions.': 'Vi kontakter deg hvis vi har spørsmål.', 'Done': 'Ferdig',
+  'Staff login': 'Innlogging for ansatte', 'Back to the delivery form': 'Tilbake til leveringsskjemaet',
+  'Preview of the kiosk form. A delivery sent from here is real and shows up for the staff.': 'Forhåndsvisning av kiosk-skjemaet. En levering sendt herfra er ekte og vises for de ansatte.',
+  'Back to Customer deliveries': 'Tilbake til Kundeleveringer', 'Customer deliveries': 'Kundeleveringer', 'Open the kiosk form': 'Åpne kiosk-skjemaet',
+  'No customer cars waiting.': 'Ingen kundebiler venter.', 'None.': 'Ingen.', 'Received': 'Mottatt', 'Show': 'Vis', 'Key': 'Nøkkel', 'Parked': 'Parkert',
+  'Enlarge the map': 'Forstørr kartet',
+  'An administrator sets up the kiosk (maps, key places, tick boxes, tablets) on this page.': 'En administrator setter opp kiosken (kart, nøkkelsteder, avkrysningsbokser, nettbrett) på denne siden.',
+  'Kiosk setup': 'Oppsett av kiosk', 'Maps (locations)': 'Kart (steder)', 'Location name, e.g. Main lot': 'Navn på stedet, f.eks. Hovedplassen',
+  'Norwegian name (optional)': 'Norsk navn (valgfritt)', 'Add map': 'Legg til kart', 'Map added': 'Kart lagt til', 'Used by 1 delivery': 'Brukt av 1 levering',
+  'One picture per location: a drone photo, a screenshot of the lot or a simple drawing, seen from above. Customers tap where they parked. With several maps, they choose the location first. To change a picture, add a new map and remove the old one. Pictures from map services (Google, norgeskart.no) may have licence terms.':
+    'Ett bilde per sted: et dronebilde, et skjermbilde av plassen eller en enkel tegning, sett ovenfra. Kundene trykker der de parkerte. Med flere kart velger de stedet først. For å bytte bilde legger du til et nytt kart og fjerner det gamle. Bilder fra karttjenester (Google, norgeskart.no) kan ha lisensvilkår.',
+  'Name (English)': 'Navn (engelsk)', 'Name (Norwegian, optional)': 'Navn (norsk, valgfritt)',
+  'No maps yet. Without a map, customers are not asked where the car is parked.': 'Ingen kart ennå. Uten kart blir ikke kundene spurt om hvor bilen står.',
+  'English text': 'Engelsk tekst', 'Norwegian text': 'Norsk tekst', 'Key places': 'Nøkkelsteder', 'Tick boxes': 'Avkrysningsbokser',
+  'Where customers can leave the key. They choose one. Each text in English and Norwegian (the customer’s language is shown).':
+    'Hvor kundene kan legge nøkkelen. De velger ett. Hver tekst på engelsk og norsk (kundens språk vises).',
+  'Tick boxes on the form, e.g. what the car is in for. Customers tick any number. Each text in English and Norwegian.':
+    'Avkrysningsbokser på skjemaet, f.eks. hva bilen skal ha gjort. Kundene krysser av så mange de vil. Hver tekst på engelsk og norsk.',
+  'No key places. Customers are not asked where the key is.': 'Ingen nøkkelsteder. Kundene blir ikke spurt om hvor nøkkelen er.', 'No tick boxes.': 'Ingen avkrysningsbokser.',
+  'Kiosk tablets': 'Kiosk-nettbrett', 'Stopped': 'Stoppet', 'Stop': 'Stopp', 'No kiosk tablets yet.': 'Ingen kiosk-nettbrett ennå.',
+  'A kiosk tablet shows only the delivery form, with no login. To set one up, log in on the tablet as an administrator, open this page and press the button below. You are then logged out on the tablet.':
+    'Et kiosk-nettbrett viser bare leveringsskjemaet, uten innlogging. For å sette opp et: logg inn på nettbrettet som administrator, åpne denne siden og trykk på knappen under. Du blir da logget ut på nettbrettet.',
+  'Use this device as the delivery kiosk': 'Bruk denne enheten som leveringskiosk', 'Delivery kiosk': 'Leveringskiosk', 'Name of this device': 'Navn på denne enheten',
+  'e.g. Tablet at the key drop': 'f.eks. Nettbrett ved nøkkelinnleveringen', 'Make this device a kiosk': 'Gjør denne enheten til kiosk',
+  'This device will show only the customer delivery form. You are logged out here, and the rest of Carbonara can only be opened again by logging in (the "Staff login" link at the bottom of the form).':
+    'Denne enheten vil bare vise leveringsskjemaet for kunder. Du blir logget ut her, og resten av Carbonara kan bare åpnes igjen ved å logge inn (lenken «Innlogging for ansatte» nederst i skjemaet).',
+  'Customer cars delivered – not received yet': 'Kundebiler levert – ikke mottatt ennå', 'All customer deliveries': 'Alle kundeleveringer',
+  'Customer car delivery': 'Levering av kundebil', 'Open Customer deliveries': 'Åpne Kundeleveringer',
+  'The kiosk form where customers register the car they drop off: maps, key places, tick boxes and kiosk tablets.':
+    'Kiosk-skjemaet der kundene registrerer bilen de leverer: kart, nøkkelsteder, avkrysningsbokser og kiosk-nettbrett.',
+  'Delivered by the customer (kiosk)': 'Levert av kunden (kiosk)', 'Customer delivery received': 'Kundelevering mottatt',
+  // server messages
+  'This device is not set up as a delivery kiosk': 'Denne enheten er ikke satt opp som leveringskiosk',
+  'Registration number: 2–8 letters and digits': 'Registreringsnummer: 2–8 bokstaver og sifre', 'This delivery is already received': 'Denne leveringen er allerede mottatt',
+  'Mark the car as received before deleting the delivery': 'Merk bilen som mottatt før du sletter leveringen',
+  'Give both the English and the Norwegian text': 'Oppgi både engelsk og norsk tekst', 'Give the location a name': 'Gi stedet et navn',
+  'Deliveries point to this map, so it can only be removed, not deleted': 'Leveringer viser til dette kartet, så det kan bare fjernes, ikke slettes',
+  'Give the kiosk a name': 'Gi kiosken et navn', 'Delivery': 'Levering', 'Map': 'Kart', 'Map file': 'Kartfil', 'Kiosk': 'Kiosk',
 };
 
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
@@ -623,6 +669,18 @@ const NO_PATTERNS = [
   ['Could not send the e-mail: {}', 'Kunne ikke sende e-posten: {1}'], ['Spot {} deleted', 'Plass {1} slettet'],
   ['{}: give at most {n} items', '{1t}: oppgi maks {2} punkter'], ['{}: not a valid list', '{1t}: ikke en gyldig liste'], ['Removed items', 'Uttatt utstyr'], ['Added items', 'Tillagt utstyr'],
   ['Carbonara v{} · built {}', 'Carbonara v{1} · bygget {2}'], ['Error {n}', 'Feil {1}'], ['Not before {}', 'Ikke før {1}'], ['Not after {}', 'Ikke etter {1}'],
+  // customer car delivery (kiosk)
+  ['We use your name and phone number only to contact you about the car. The registration is deleted {n} days after we have received the car.',
+    'Vi bruker navnet og telefonnummeret ditt bare til å kontakte deg om bilen. Registreringen slettes {1} dager etter at vi har tatt imot bilen.'],
+  ['Waiting to be received ({n})', 'Venter på mottak ({1})'], ['Received ({n})', 'Mottatt ({1})'],
+  ["Received deliveries are deleted automatically {n} days after they were received, with the customer's details.",
+    'Mottatte leveringer slettes automatisk {1} dager etter at de ble mottatt, med kundens opplysninger.'],
+  ['Delivered {}', 'Levert {1}'], ['delivered {}', 'levert {1}'], ['Received {}', 'Mottatt {1}'], ['by {}', 'av {1}'],
+  ['deleted automatically {}', 'slettes automatisk {1}'], ['{} received', '{1} mottatt'], ['Used by {n} deliveries', 'Brukt av {1} leveringer'],
+  ["Have you got the car and the key for {}?\n\nThe delivery, with the customer's name and phone number, is deleted automatically {n} days from now.",
+    'Har du fått bilen og nøkkelen til {1}?\n\nLeveringen, med kundens navn og telefonnummer, slettes automatisk om {2} dager.'],
+  ["Delete the delivery of {} now, with the customer's details?", 'Slette leveringen av {1} nå, med kundens opplysninger?'],
+  ['Stop {} from showing the delivery form?', 'Stoppe {1} fra å vise leveringsskjemaet?'], ['Set up {}', 'Satt opp {1}'], ['last used {}', 'sist brukt {1}'],
 ];
 
 // Norwegian texts Carbonara itself uses (outside documents) -> English.

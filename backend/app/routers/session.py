@@ -51,7 +51,9 @@ def state(request: Request, conn=Depends(get_conn)):
     staff = conn.execute(
         "SELECT id, name FROM staff WHERE active AND (%s OR pin_hash IS NOT NULL) ORDER BY name", (setup,)
     ).fetchall()
-    return {"setup_needed": setup, "staff": staff, "me": auth.session_staff(conn, request.cookies.get(auth.COOKIE))}
+    return {"setup_needed": setup, "staff": staff, "me": auth.session_staff(conn, request.cookies.get(auth.COOKIE)),
+            # A delivery kiosk tablet shows the delivery form instead of the login screen.
+            "kiosk": auth.kiosk_device(conn, request.cookies.get(auth.KIOSK_COOKIE))}
 
 
 @router.post("/login")

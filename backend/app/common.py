@@ -183,6 +183,8 @@ def purge_vehicle(conn, vehicle_id: int) -> list:
         (vehicle_id, vehicle_id, vehicle_id),
     ).fetchall()
     for stmt in (
+        # Customer deliveries are kept (by reg. no) with their own retention; only unlinked.
+        "UPDATE car_deliveries SET vehicle_id = NULL WHERE vehicle_id = %s",
         "DELETE FROM vehicle_documents WHERE vehicle_id = %s",
         "DELETE FROM test_drives WHERE vehicle_id = %s",
         "DELETE FROM pdi_orders WHERE vehicle_id = %s",

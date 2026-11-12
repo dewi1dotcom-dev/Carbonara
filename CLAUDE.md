@@ -183,10 +183,11 @@ backend/
   app/mailer.py         SMTP sending (PDI orders)
   app/photostore.py     original + 1600px + 400px JPEG
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
-                        test drive customer purge)
+                        test drive customer purge, received customer deliveries)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, documents,
-                        session (login/language), pdi, dashboard (Today), system, storage_care
-  migrations/           001…024
+                        session (login/language), pdi, dashboard (Today), system, storage_care,
+                        deliveries (kiosk form + staff list + kiosk setup)
+  migrations/           001…025
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg)
@@ -197,7 +198,8 @@ frontend/               no build step; plain ES modules
   js/diagram.js         car damage diagram
   js/views/             today (start page), dashboard (= arrivals list), intake, inspection,
                         vehicles, documents, pdi (card + banner + PDI page), storagecare (card + check form
-                        + report), storage, testdrive, login, settings, system
+                        + report), storage, testdrive, deliveries (kiosk form + Customer deliveries),
+                        login, settings, system
 ```
 
 **Migrations:**
@@ -228,6 +230,7 @@ frontend/               no build step; plain ES modules
 | 022 | `theme` | `staff.theme` ('auto' / 'light' / 'dark') |
 | 023 | `battery_charges` | monthly 12V charges of used cars in storage (cancellable) |
 | 024 | `vehicle_documents` | contracts, notes and other files per car |
+| 025 | `customer_deliveries` | `delivery_maps`, `delivery_options` (key places / tick boxes, EN + NO), `kiosk_devices`, `car_deliveries` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -243,6 +246,8 @@ frontend/               no build step; plain ES modules
 - **Storage:** `#/storage` · `#/storage/:id|off-site`.
 - **Test drives:** `#/test-drive` · `#/test-drive/new/:vehicleId` (start form with the car
   preselected).
+- **Customer deliveries:** `#/deliveries` (list + kiosk setup; from Today and Settings, not in the
+  top menu) · `#/kiosk` (staff preview of the kiosk form).
 - **Admin:** `#/settings` · `#/system` (system admins only).
 
 ---
@@ -409,6 +414,36 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   - If no contact is set, it shows a red "missing" line and the Test drive page shows a
     reminder.
 
+**Customer car delivery (0.24.0)** (`routers/deliveries.py`, `views/deliveries.js`): customers dropping
+off their car for the workshop register it on a **kiosk tablet** at the dealership (the user's choice:
+the server is LAN-only, so no customer phones / public internet).
+- **Kiosk mode:** an admin logs in on the tablet → Customer deliveries → "Use this device as the
+  delivery kiosk" (`POST /kiosk-devices`). The device gets its own cookie `carbonara_kiosk` (365 days,
+  renewed on every form load; only the token's SHA-256 in `kiosk_devices`), and the admin's session on
+  it is ended. `/auth/state` returns `kiosk`; `boot()` then shows the form instead of the login screen
+  (no menu: `body.logged-out`). "Staff login" at the bottom → normal login; logging out goes back to
+  the form. Admins can stop a tablet (`revoked_at`).
+- **`/api/kiosk/*`** is the only API open without a staff session: `auth.require_kiosk_or_staff` (kiosk
+  cookie or staff). Staff can preview the form at `#/kiosk` (deliveries sent from it are real).
+- **The form:** reg. no (stored uppercase without spaces, 2–8 letters/digits; linked to the car when the
+  reg. no is in Carbonara), name (`nameInput`) + phone (`clean_phone`), **key place** (one, from the list),
+  **where the car is**: a tap on the location's map picture (pin stored as `pin_x/pin_y`, 0–1 share of
+  width/height), **tick boxes** (any), message. Key place and pin are required once the lists/maps exist.
+  Choices are stored as `{en, no}` snapshots, so renaming an option doesn't change old deliveries.
+  The form clears itself after 3 min idle and 30 s after "Thank you" (next customer must not see it).
+- **Maps:** one uploaded picture per location (`delivery_maps`, via `photostore`, served at
+  `/api/kiosk/maps/{id}/image`, `display` size). Several maps → the customer picks the location first.
+  A picture never changes: to replace it, add a new map and remove the old one. A map that deliveries
+  point to can only be removed (deactivated), never deleted.
+- **Lists:** key places and tick boxes (`delivery_options`) each have an English **and** a Norwegian label
+  (admin-entered data can't go through the translator); `optText()` picks the user's language. Map names
+  have an optional Norwegian name.
+- **Staff:** Today block "Customer cars delivered – not received yet"; `#/deliveries` lists them with
+  map + pin; "✓ Received" (received by = session user). Received deliveries are **deleted whole** after
+  `trash_days` by the worker ("Delete now" at once). `vehicle_events` get only `customer_delivery` /
+  `customer_delivery_received` with the delivery id — never name, phone or message.
+- **Privacy:** short text on the form + `deliveryPrivacyDialog` (Norwegian document, art. 6(1)(b)).
+
 **Login & GDPR (0.11.0)** (`auth.py`, `routers/session.py`, `views/login.js`):
 - **Login:** a personal **PIN** (4–8 digits, scrypt).
   - 5 wrong attempts lock the account for 15 min.
@@ -447,7 +482,8 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
 
 **Roles:**
 - **Staff:** everything day-to-day.
-- **Admin:** staff/PINs, PDI lists, deleting spots, cancelling storage checks.
+- **Admin:** staff/PINs, PDI lists, deleting spots, cancelling storage checks, delivery kiosk setup
+  (maps, key places, tick boxes, kiosk tablets).
 - **System admin** (`is_superadmin`; always also admin): the System page, and granting or
   removing system admin. Only a system admin can change another system admin.
 - **The word "super-admin" must not appear in UI text;** it is "System admin" /
@@ -741,6 +777,8 @@ ORM. Match the surrounding code. Comments explain *why*.
   (LSJWS4090SZ716243, 09.11.2026 23:13). It should be cancelled ("Test"), which moves the next
   check to 09.12.2026.
 - **Andy's admin status:** unconfirmed (see *Working with the user*).
+- **Delivery kiosk (0.24.0):** upload a map picture of the lot, check the key places / tick boxes, and
+  set up the tablet (Customer deliveries → Kiosk setup).
 
 ## Milestones
 
@@ -797,6 +835,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.23.1 | Dark theme: brighter text colour (`#FFF9E8`) |
 | 0.23.2 | Top bar: account button is just the 👤 silhouette (name on hover); clock always rightmost |
 | 0.23.3 | Top bar: clock's right edge lines up with the content boxes below on wide screens |
+| 0.24.0 | **Customer car delivery:** kiosk tablet form (reg. no, name, phone, key place, pin on a map of the lot, tick boxes, message); Customer deliveries page + Today block; kiosk setup (maps, lists in EN + NO, tablets). Phone / e-mail fields get the normal input style |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

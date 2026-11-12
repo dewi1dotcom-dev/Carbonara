@@ -10,7 +10,8 @@ Run with:  python -m app.sync_worker
    - cars in Recently deleted for more than TRASH_DAYS -> removed for good,
      including their photo files;
    - test drive customer details (name, phone, licence photo) in the trash
-     for more than TRASH_DAYS -> wiped for good.
+     for more than TRASH_DAYS -> wiped for good;
+   - customer car deliveries received more than TRASH_DAYS ago -> deleted.
 """
 
 import logging
@@ -65,6 +66,13 @@ def housekeeping() -> None:
         if photo:
             photostore.remove(photo)
         log.info("Test drive %s (vehicle %s): customer details deleted for good", drive["id"], drive["vehicle_id"])
+
+    # Customer car deliveries (name, phone, message) received more than TRASH_DAYS ago.
+    with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+        gone = conn.execute("DELETE FROM car_deliveries WHERE received_at < now() - make_interval(days => %s) "
+                            "RETURNING id", (settings.trash_days,)).fetchall()
+    if gone:
+        log.info("Deleted %d received customer deliveries for good", len(gone))
 
 
 def run_once(max_vehicles: int = 50) -> int:

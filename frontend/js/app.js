@@ -1,10 +1,11 @@
 import {
-  api, applyTheme, carText, fmtDate, h, openDialog, osloTodayIso, session, setInspectorId, showError, startClock, theme,
-  toast,
+  api, append, applyTheme, carText, fmtDate, h, openDialog, osloTodayIso, session, setInspectorId, showError, startClock,
+  theme, toast,
 } from './ui.js';
 import { lang, setLang, startTranslator } from './i18n.js';
 import { changePinForm, loginView } from './views/login.js';
 import { arrivalsView } from './views/dashboard.js';
+import { deliveriesView, kioskView } from './views/deliveries.js';
 import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
@@ -29,6 +30,8 @@ const routes = [
   [/^#\/storage$/, storageView, 'storage'],
   [/^#\/storage\/(\d+|off-site)$/, storageSpotView, 'storage'],
   [/^#\/test-drive(?:\/new\/(\d+))?$/, testDriveView, 'testdrive'],
+  [/^#\/deliveries$/, deliveriesView, 'today'],
+  [/^#\/kiosk$/, kioskView, 'today'], // staff preview of the delivery kiosk form
   [/^#\/settings$/, settingsView, 'settings'],
   [/^#\/system$/, systemView, 'system'],
 ];
@@ -150,6 +153,7 @@ function renderUser() {
             onClick: async () => {
               close();
               try { await api.post('/auth/logout'); } catch { /* already logged out */ }
+              staffLogin = false; // on a kiosk tablet: back to the delivery form
               await boot();
             },
           }, 'Log out'))));
@@ -158,7 +162,11 @@ function renderUser() {
 }
 
 let booting = null;
-/** Check the session; show the login screen or the app. */
+// A delivery kiosk tablet shows the delivery form instead of the login screen,
+// until someone taps "Staff login" (staffLogin = true).
+let staffLogin = false;
+
+/** Check the session; show the login screen (or the delivery kiosk form) or the app. */
 function boot() {
   booting ??= (async () => {
     try {
@@ -171,7 +179,17 @@ function boot() {
       document.body.classList.toggle('logged-out', !state.me);
       if (!state.me) {
         refreshNotify(); // clears the bar
-        loginView(root, state, () => { booting = null; return boot(); });
+        const again = () => { booting = null; return boot(); };
+        if (state.kiosk && !staffLogin) {
+          await kioskView(root, [], { standalone: true, onStaffLogin: () => { staffLogin = true; again(); } });
+          return;
+        }
+        loginView(root, state, again);
+        if (state.kiosk) {
+          append(root, h('p', { class: 'kiosk-foot' }, h('button', {
+            class: 'link', type: 'button', onClick: () => { staffLogin = false; again(); },
+          }, 'Back to the delivery form')));
+        }
         return;
       }
       setInspectorId(state.me.id); // staff pickers default to whoever is logged in

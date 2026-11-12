@@ -95,6 +95,46 @@ def require_staff(request: Request, conn=Depends(get_conn)) -> dict:
     return staff
 
 
+# --------------------------------------------------------------------------- #
+# Delivery kiosk: a tablet at the dealership where customers register the car
+# they drop off. An admin turns a device into a kiosk; it then has its own
+# cookie (token hash in kiosk_devices) that only opens the /kiosk routes.
+# --------------------------------------------------------------------------- #
+
+KIOSK_COOKIE = "carbonara_kiosk"
+KIOSK_DAYS = 365  # renewed whenever the kiosk loads its form
+
+
+def new_kiosk(conn, name: str, staff_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    conn.execute("INSERT INTO kiosk_devices (name, token_hash, created_by) VALUES (%s, %s, %s)",
+                 (name, token_hash(token), staff_id))
+    return token
+
+
+def kiosk_device(conn, token: str | None) -> dict | None:
+    if not token:
+        return None
+    row = conn.execute("SELECT id, name FROM kiosk_devices WHERE token_hash = %s AND revoked_at IS NULL",
+                       (token_hash(token),)).fetchone()
+    if row:
+        conn.execute("UPDATE kiosk_devices SET last_seen_at = now() WHERE id = %s "
+                     "AND (last_seen_at IS NULL OR last_seen_at < now() - interval '5 minutes')", (row["id"],))
+    return row
+
+
+def require_kiosk_or_staff(request: Request, conn=Depends(get_conn)) -> dict:
+    """The kiosk routes: a kiosk tablet, or a logged-in staff member (preview)."""
+    staff = session_staff(conn, request.cookies.get(COOKIE))
+    if staff:
+        request.state.staff = staff
+        return {"staff": staff, "kiosk": None}
+    kiosk = kiosk_device(conn, request.cookies.get(KIOSK_COOKIE))
+    if kiosk:
+        return {"staff": None, "kiosk": kiosk}
+    raise HTTPException(401, "This device is not set up as a delivery kiosk")
+
+
 def require_admin(staff: dict = Depends(require_staff)) -> dict:
     if not staff["is_admin"]:
         raise HTTPException(403, "Only an administrator can do this")

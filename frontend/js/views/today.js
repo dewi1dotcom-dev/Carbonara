@@ -2,6 +2,7 @@
 // then what needs attention, then a few numbers.
 import { lang } from '../i18n.js';
 import { api, append, boardBlock as block, boardRow as row, carText, fmtDate, h, vehicleTitle } from '../ui.js';
+import { optText } from './deliveries.js';
 
 const weekday = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', { timeZone: 'Europe/Oslo', weekday: 'long' });
 const clock = new Intl.DateTimeFormat('nb-NO', { timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -45,6 +46,12 @@ export async function todayView(el) {
     block('🔑', 'Out on test drive', d.test_drives.map((t) => (t.plate_moved_at
       ? row(`#/test-drive?return=${t.id}`, carText(t), 'trade plates moved to another car – register the return', 'bad')
       : row('#/test-drive', carText(t), `${t.customer_name} · ${since(t.started_at)}`)))),
+    // Dropped off at the delivery kiosk; the meta is separate nodes so each part translates.
+    block('🚗', 'Customer cars delivered – not received yet', d.deliveries.map((x) =>
+      row('#/deliveries', x.registration_number, [
+        h('span', { translate: 'no' }, x.customer_name), ' · ', h('span', {}, `delivered ${fmtDate(x.created_at)}`),
+        x.key_place ? [' · ', h('span', {}, 'Key: '), h('span', { translate: 'no' }, optText(x.key_place))] : null,
+      ])), { cls: 'info', more: h('a', { class: 'small', href: '#/deliveries' }, 'All customer deliveries →') }),
     block('📋', 'Arrivals in progress', d.arrivals.map((i) =>
       row(`#/inspections/${i.id}`, vehicleTitle(i), [i.inspector_name, `started ${fmtDate(i.started_at)}`].filter(Boolean).join(' · ')))),
 
