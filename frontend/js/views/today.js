@@ -1,7 +1,7 @@
 // The start page ("Today board"): what needs doing today and tomorrow first,
 // then what needs attention, then a few numbers.
 import { lang } from '../i18n.js';
-import { api, append, boardBlock as block, boardRow as row, carText, fmtDate, h, vehicleTitle } from '../ui.js';
+import { api, append, boardBlock as block, boardRow as row, canSee, carText, fmtDate, h, vehicleTitle } from '../ui.js';
 import { optText } from './deliveries.js';
 
 const weekday = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', { timeZone: 'Europe/Oslo', weekday: 'long' });
@@ -52,6 +52,9 @@ export async function todayView(el) {
         h('span', { translate: 'no' }, x.customer_name), ' · ', h('span', {}, `delivered ${fmtDate(x.created_at)}`),
         x.key_place ? [' · ', h('span', {}, 'Key: '), h('span', { translate: 'no' }, optText(x.key_place))] : null,
       ])), { cls: 'info', more: h('a', { class: 'small', href: '#/deliveries' }, 'All customer deliveries →') }),
+    canSee('rental') ? block('🚙', 'Rental cars not returned on time', d.rentals_late.map((r) =>
+      row('#/rental', carText(r), [h('span', { translate: 'no' }, r.customer_name), ' · ',
+        h('span', {}, `expected back ${fmtDate(r.expected_return_at)}`)], 'bad')), { cls: 'bad' }) : null,
     block('📋', 'Arrivals in progress', d.arrivals.map((i) =>
       row(`#/inspections/${i.id}`, vehicleTitle(i), [i.inspector_name, `started ${fmtDate(i.started_at)}`].filter(Boolean).join(' · ')))),
 
@@ -65,11 +68,14 @@ export async function todayView(el) {
       row(`#/vehicles/${o.vehicle_id}`, carText(o), `started ${fmtDate(o.created_at, false)}${o.created_by_name ? ` by ${o.created_by_name}` : ''}`))),
     block('🛂', 'EU-kontroll due', d.eu_control.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days <= 1 ? 'bad' : ''))),
+    canSee('rental') ? block('🛂', 'Rental cars – EU-kontroll due', d.rental_eu_control.map((c) =>
+      row('#/rental', carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days <= 1 ? 'bad' : ''))) : null,
     block('🛠', 'Service due', d.service.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days < -31 ? 'bad' : ''))),
     block('⚠', 'Statens vegvesen differences to check', d.registry_mismatches.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), 'open the car to confirm'))),
-    !(d.pdi_waiting.length || d.pdi_drafts.length || d.eu_control.length || d.service.length || d.registry_mismatches.length)
+    !(d.pdi_waiting.length || d.pdi_drafts.length || d.eu_control.length || d.service.length || d.registry_mismatches.length
+      || (canSee('rental') && d.rental_eu_control.length))
       ? h('p', { class: 'empty' }, 'Nothing needs attention. 👍') : null,
 
     // ---- upcoming & numbers

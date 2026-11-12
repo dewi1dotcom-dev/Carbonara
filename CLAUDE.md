@@ -191,11 +191,11 @@ backend/
   app/mailer.py         SMTP sending (PDI orders)
   app/photostore.py     original + 1600px + 400px JPEG
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
-                        test drive customer purge, received customer deliveries)
-  app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, documents,
+                        test drive + rental customer purge, rental car SVV refresh, received customer deliveries)
+  app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, rentals, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup)
-  migrations/           001…027
+  migrations/           001…029
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg)
@@ -206,7 +206,7 @@ frontend/               no build step; plain ES modules
   js/diagram.js         car damage diagram
   js/views/             today (start page), dashboard (= arrivals list), intake, inspection,
                         vehicles, documents, pdi (card + banner + PDI page), storagecare (card + check form
-                        + report), storage, testdrive, deliveries (kiosk form + Customer deliveries),
+                        + report), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
                         login, settings, system
 ```
 
@@ -242,6 +242,7 @@ frontend/               no build step; plain ES modules
 | 026 | `delivery_registry` | `car_deliveries.svv_*` (SVV lookup by reg. no: VIN, make/model, EU-kontroll, owner name + kind), `name_match` |
 | 027 | `teams` | `teams` (name, `menu` text[]), `staff.team_id`; existing staff put in the team "All staff" with every menu item |
 | 028 | `generic_names` | stored tyre option `rbv_orders` → `workshop_orders` |
+| 029 | `rental_cars` | `rental_cars` (own fleet + SVV fields), `rentals`, `rental_access_log`; teams with Test drive get menu item `rental` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -260,6 +261,7 @@ frontend/               no build step; plain ES modules
 - **Storage:** `#/storage` · `#/storage/:id|off-site`.
 - **Test drives:** `#/test-drive` · `#/test-drive/new/:vehicleId` (start form with the car
   preselected).
+- **Rental cars:** `#/rental` (fleet, rent out, cars out, trash; top menu "Rental cars").
 - **Customer deliveries:** `#/deliveries` (list + kiosk setup; top menu "Deliveries" since 0.25.1, also from
   Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
 - **Admin:** `#/settings` · `#/system` (system admins only).
@@ -382,6 +384,49 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   Delete is permanent (file removed after commit).
 - **Contracts hold personal data:** events `document_added/updated/deleted` log only id and
   type, never the title or text.
+
+**Rental cars (0.28.0)** (`routers/rentals.py`, `views/rental.js`, migration 029):
+- **The dealer's own rental / loan fleet, kept apart from the car database (the user's rule).** The
+  fleet is in its own table, `rental_cars`, not `vehicles`. Rental cars never show up in Vehicles,
+  Storage, search, arrivals or the vehicle Today lists. They are added, edited and removed on the
+  Rental cars page only.
+- **Adding a car:** type the reg. no → "Look up at Statens vegvesen" (`GET /rental-cars/lookup`)
+  fills make / model / colour / fuel / VIN and the EU-kontroll date.
+  - Saving (`POST /rental-cars`) looks the car up again.
+  - A failed lookup never blocks adding the car; the reason is saved as `registry_error` and shown
+    on the car.
+  - Without an SVV key, EU-kontroll is typed in by hand.
+- **SVV data, focused on EU-kontroll:** `refresh_registry()` always takes EU-kontroll due / last
+  approved, registration status and first registration from SVV. The descriptive fields (VIN, make,
+  model, colour, fuel) only fill gaps, so staff edits win.
+  - The worker's `housekeeping()` re-checks every car every `vegvesen_sync_days`, so EU-kontroll moves
+    on after the car has passed.
+  - "Look up again" does the same on demand.
+  - A new reg. no on edit triggers a new lookup.
+- **EU-kontroll is shown everywhere a car appears:** a badge on each car (green / amber within 60
+  days / red from the day before, as on the vehicle page). Also:
+  - an "EU-kontroll soon" notice at the top of the page
+  - the fleet is sorted by EU date
+  - Today → Needs attention "Rental cars – EU-kontroll due" (≤ 60 days)
+  - renting out: a warning when the deadline has passed (plus a confirm), or falls before the
+    expected return
+- **Renting out = the test drive flow:**
+  - customer name + phone, driving licence photo (the name is read via
+    `/test-drives/read-license`), "customer informed" checkbox
+  - items taken out / put in, odometer, handed out by, note
+  - extra: an optional **expected return** date + time (Norwegian local time, stored with `AT TIME
+    ZONE 'Europe/Oslo'`; time defaults to 16:00). It's overdue in red on the page and on Today ("Rental
+    cars not returned on time").
+  - one active rental per car
+  - no trade plates
+- **Return, trash and access log:** the same as test drives (`rentals.customer_trashed_at` → wiped
+  after `trash_days` by the worker; "Delete now"; `rental_access_log`).
+  - The privacy notice is its own Norwegian text (`rentalPrivacyDialog`): art. 6(1)(b) rental
+    agreement + 6(1)(f), fødselsnummer § 12, System → Company contact.
+- **Removing a car:** not while it is out. A car with rental history is only hidden (`deleted_at`);
+  one without is deleted. The reg. no can then be reused.
+- **Menu:** the top-menu key `rental` ("Rental cars" / "Leiebiler"). Migration 029 gave it to teams
+  that had Test drive.
 
 **Test drives** (`routers/testdrives.py`, `views/testdrive.js`):
 - **Start:** car, customer name + phone (8–15 digits, optional +), **driving licence photo**,
@@ -533,7 +578,7 @@ the server is LAN-only, so no customer phones / public internet).
 
 **Teams (0.26.0)** (`teams`, `staff.team_id`; System page → Teams; `/system/teams`, `/system/staff/{id}/team`):
 - System admins create teams with a name, tick which **top menu items** each team sees
-  (`auth.MENU_ITEMS`: arrivals, vehicles, storage, testdrive, deliveries, settings) and place users.
+  (`auth.MENU_ITEMS`: arrivals, vehicles, storage, testdrive, rental, deliveries, settings) and place users.
   **One team per user.** Today is always shown; System stays system-admin-only.
 - `auth.menu_for()` puts `menu` on the session user (`/auth/state` → `me.menu`): system admins get
   everything; others Today + their team's items; **no team = Today only** (the user's choice). New staff
@@ -911,6 +956,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.27.0 | No company / place / person names in code (usable by any dealer); kiosk notice worded for two companies under one roof; company name has no built-in default; tyre option `workshop_orders` (migration 028) |
 | 0.27.1 | Storage checklist paint check: tree sap ("kvae") added; "Iht. MG Service Information …" line removed from the storage report; MG bulletin note removed from the storage maintenance card |
 | 0.27.2 | Kiosk form: English / Norsk switch on the title line, top right (in the staff preview it saves the staff member's own language) |
+| 0.28.0 | **Rental cars** page: own fleet (not in the car database), added / edited on the page, Statens vegvesen lookup with EU-kontroll first (badges, notice, Today, nightly refresh); renting out like test drives + expected return; trash after return (migration 029) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

@@ -13,10 +13,10 @@ const REMOVED_PRESETS = ['Winter wheels', 'Summer wheels', 'Charging cable', 'Fl
 const ADDED_PRESETS = ['Charging cable', 'Fuel / charging card', 'Child seat'];
 
 const licenseUrl = (id, variant = 'thumb') => `/api/test-drives/${id}/license/${variant}`;
-const telLink = (phone) => h('a', { href: `tel:${phone}` }, phone);
+export const telLink = (phone) => h('a', { href: `tel:${phone}` }, phone);
 
 /** "1 h 20 min" since a timestamp. */
-function duration(iso) {
+export function duration(iso) {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   if (min < 60) return `${min} min`;
   const hrs = Math.floor(min / 60);
@@ -163,7 +163,7 @@ function startCard(staff, data, done, preselect) {
 }
 
 /** Checkbox chips for the presets plus an "Other…" free-text field. */
-function itemPicker(presets, label) {
+export function itemPicker(presets, label) {
   const boxes = presets.map((p) => h('input', { type: 'checkbox', value: p }));
   const other = h('input', { type: 'text', maxlength: 80, placeholder: 'Other (separate with commas)' });
   const el = h('div', { class: 'field' },

@@ -14,6 +14,7 @@ import { settingsView } from './views/settings.js';
 import { storageSpotView, storageView } from './views/storage.js';
 import { storageReportView } from './views/storagecare.js';
 import { systemView } from './views/system.js';
+import { rentalView } from './views/rental.js';
 import { testDriveView } from './views/testdrive.js';
 import { deletedView, vehiclesView, vehicleView } from './views/vehicles.js';
 
@@ -30,6 +31,7 @@ const routes = [
   [/^#\/storage$/, storageView, 'storage'],
   [/^#\/storage\/(\d+|off-site)$/, storageSpotView, 'storage'],
   [/^#\/test-drive(?:\/new\/(\d+))?$/, testDriveView, 'testdrive'],
+  [/^#\/rental$/, rentalView, 'rental'], // rental cars: their own fleet, not in the car database
   [/^#\/deliveries$/, deliveriesView, 'deliveries'],
   [/^#\/kiosk$/, kioskView, 'deliveries'], // staff preview of the delivery kiosk form
   [/^#\/settings$/, settingsView, 'settings'],

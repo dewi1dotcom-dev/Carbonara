@@ -670,6 +670,14 @@ input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospa
 .map-mini { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); flex: none; }
 .warn-text { color: var(--warn); }
 .delivery-svv > div + div { margin-top: .15rem; }
+/* Rental cars: registration number as the car's name, badges (EU-kontroll first) on one line. */
+.rc-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; letter-spacing: .04em; }
+.rc-badges { display: flex; flex-wrap: wrap; gap: .35rem; margin: .3rem 0 .15rem; }
+.rc-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; }
+.rc-row .list-main { flex: 1 1 260px; min-width: 0; }
+input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform: uppercase;
+  letter-spacing: .06em; width: auto; flex: 1 1 8rem; max-width: 12rem; }
+.field .row:has(.rc-reg-input) { margin-top: 0; align-items: center; }
 /* System → Teams */
 .team-head { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
 .team-head h3 { margin: 0 0 .4rem; }

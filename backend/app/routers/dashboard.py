@@ -75,6 +75,20 @@ def dashboard(conn=Depends(get_conn)):
     storage_due.sort(key=lambda r: r["in_days"])
     battery_due = charging_due_list(conn, today)  # used cars: 12V charged every month
 
+    # Rental cars (their own fleet, not in vehicles): EU-kontroll within 60 days, and
+    # rentals past the return time the customer gave.
+    rental_eu = conn.execute(
+        f"""SELECT id, registration_number, make, model, model_year, eu_control_due AS due,
+                   eu_control_due - {TODAY} AS in_days
+              FROM rental_cars
+             WHERE deleted_at IS NULL AND eu_control_due <= {TODAY} + 60
+             ORDER BY eu_control_due""").fetchall()
+    rentals_late = conn.execute(
+        """SELECT r.id, r.customer_name, r.expected_return_at, c.registration_number, c.make, c.model, c.model_year
+             FROM rentals r JOIN rental_cars c ON c.id = r.rental_car_id
+            WHERE r.status = 'out' AND r.expected_return_at < now()
+            ORDER BY r.expected_return_at""").fetchall()
+
     numbers = conn.execute(
         f"""SELECT
               (SELECT count(*) FROM vehicles WHERE deleted_at IS NULL AND status = 'in_storage') AS in_storage,
@@ -106,5 +120,7 @@ def dashboard(conn=Depends(get_conn)):
         "registry_mismatches": mismatches,
         "storage_due": storage_due,
         "battery_due": battery_due,
+        "rental_eu_control": rental_eu,
+        "rentals_late": rentals_late,
         "numbers": numbers,
     }

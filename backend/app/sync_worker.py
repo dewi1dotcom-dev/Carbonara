@@ -11,6 +11,9 @@ Run with:  python -m app.sync_worker
      including their photo files;
    - test drive customer details (name, phone, licence photo) in the trash
      for more than TRASH_DAYS -> wiped for good;
+   - rental customer details in the trash for more than TRASH_DAYS -> wiped;
+   - rental cars re-checked at Statens vegvesen (EU-kontroll) every
+     vegvesen_sync_days;
    - customer car deliveries received more than TRASH_DAYS ago -> deleted.
 """
 
@@ -25,6 +28,7 @@ from .common import (RETENTION_DUE_SQL, TEST_DRIVE_PURGE_DUE_SQL, purge_test_dri
                      soft_delete_vehicle)
 from .config import settings
 from .migrate import run_migrations
+from .routers.rentals import RENTAL_PURGE_DUE_SQL, purge_rental_customer, refresh_due_rental_cars
 
 log = logging.getLogger("carbonara.sync_worker")
 IDLE_SECONDS = 60
@@ -66,6 +70,23 @@ def housekeeping() -> None:
         if photo:
             photostore.remove(photo)
         log.info("Test drive %s (vehicle %s): customer details deleted for good", drive["id"], drive["vehicle_id"])
+
+    # Rental customer details (name, phone, licence photo) in the trash too long.
+    with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+        rentals = conn.execute(RENTAL_PURGE_DUE_SQL, (settings.trash_days,)).fetchall()
+    for rental in rentals:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+            photo = purge_rental_customer(conn, rental["id"])
+            conn.commit()
+        if photo:
+            photostore.remove(photo)
+        log.info("Rental %s: customer details deleted for good", rental["id"])
+
+    # Rental cars: EU-kontroll etc. from Statens vegvesen every vegvesen_sync_days.
+    try:
+        refresh_due_rental_cars(lambda: psycopg.connect(settings.database_url, row_factory=dict_row))
+    except Exception:
+        log.exception("rental car registry refresh failed")
 
     # Customer car deliveries (name, phone, message) received more than TRASH_DAYS ago.
     with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
