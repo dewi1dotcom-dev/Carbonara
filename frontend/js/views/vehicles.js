@@ -745,7 +745,9 @@ function arrivalPhotosCard(v) {
       h('div', { class: 'tile-foot' }, h('span', {}, PHOTO_LABELS[p.kind] ?? 'Photo'))))));
 }
 
-export async function vehicleView(el, [id]) {
+// host: the page's real container. A redraw renders into a fresh div and moves the result
+// into host, so every redraw (not only the first) updates the visible page.
+export async function vehicleView(el, [id], host = el) {
   const [v, pdiData, pdiOpts, care, charging, docs] = await Promise.all([
     api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options'),
     api.get(`/vehicles/${id}/storage-care`), api.get(`/vehicles/${id}/battery-charging`),
@@ -753,8 +755,8 @@ export async function vehicleView(el, [id]) {
   const rerender = async () => {
     try {
       const fresh = h('div');
-      await vehicleView(fresh, [id]);
-      el.replaceChildren(...fresh.childNodes);
+      await vehicleView(fresh, [id], host);
+      host.replaceChildren(...fresh.childNodes);
     } catch (e) { showError(e); }
   };
   append(el, // mismatchCard() is null when there is nothing to confirm

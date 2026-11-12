@@ -9,7 +9,9 @@ const SOURCE = {
   default: ['', 'Default'],
 };
 
-export async function systemView(el) {
+// host: the page's real container. A redraw renders into a fresh div and moves the result
+// into host, so every redraw (not only the first) updates the visible page.
+export async function systemView(el, _params = [], host = el) {
   if (!session.me?.is_superadmin) {
     el.append(h('h1', {}, 'System'), h('div', { class: 'card notice warn' }, 'Only a system admin can open this page.'));
     return;
@@ -19,8 +21,8 @@ export async function systemView(el) {
   const rerender = async () => {
     try {
       const fresh = h('div');
-      await systemView(fresh);
-      el.replaceChildren(...fresh.childNodes);
+      await systemView(fresh, [], host);
+      host.replaceChildren(...fresh.childNodes);
     } catch (e) { showError(e); }
   };
 

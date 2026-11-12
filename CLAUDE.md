@@ -778,6 +778,11 @@ ORM. Match the surrounding code. Comments explain *why*.
   in one `<span>`, or they split into columns.
 - A card built once must redraw dependent parts through a slot element + render function (see
   `serviceSlot` in `inspection.js`).
+- **Pitfall #3 (0.26.1): whole-page redraws.** A view that redraws itself by rendering into a fresh
+  `div` and moving the children into `el` must pass the real container on: `view(el, params, host = el)`
+  and `await view(fresh, params, host); host.replaceChildren(...fresh.childNodes)`. Otherwise the
+  buttons drawn by the first redraw redraw the detached `fresh` div, and from the second action on the
+  page doesn't update (System → Teams, Customer deliveries, Test drive, vehicle page).
 - **UI text is written in English**, and every new text gets a Norwegian entry in
   `i18n.js`. Date/time input uses `dateInput()`/`timeInput()`.
 
@@ -868,6 +873,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.25.0 | Customer deliveries: SVV lookup by reg. no in the background (VIN, EU-kontroll shown to staff, "Look up again"); owner name from SVV prepared (shown first, typed name kept, name comparison); kiosk scrolls to the top after sending |
 | 0.25.1 | Top menu item "Deliveries" (Leveringer) to the Customer deliveries page |
 | 0.26.0 | **Teams:** system admins make named teams on the System page, pick the top menu items each team sees and place users (one team each); no team = Today only |
+| 0.26.1 | Fix: pages that redraw themselves (System → Teams, Customer deliveries, Test drive, vehicle page) only updated on the first action |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

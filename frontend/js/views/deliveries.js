@@ -299,14 +299,16 @@ function openMap(d) {
     mapWithPin(d.map_id, d.pin_x, d.pin_y, 'map-large')), { wide: true });
 }
 
-export async function deliveriesView(el) {
+// host: the page's real container. A redraw renders into a fresh div and moves the result
+// into host, so every redraw (not only the first) updates the visible page.
+export async function deliveriesView(el, _params = [], host = el) {
   const data = await api.get('/deliveries');
   const admin = !!session.me?.is_admin;
   const rerender = async () => {
     try {
       const fresh = h('div');
-      await deliveriesView(fresh);
-      el.replaceChildren(...fresh.childNodes);
+      await deliveriesView(fresh, [], host);
+      host.replaceChildren(...fresh.childNodes);
     } catch (e) { showError(e); }
   };
 

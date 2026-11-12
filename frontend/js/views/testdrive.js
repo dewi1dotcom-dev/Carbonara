@@ -80,7 +80,9 @@ const itemsText = (d) => [
 /** "Trade plates P1 moved to EB12345" – the car still needs its return registered. */
 const movedText = (d) => `${d.trade_plate_name} moved to ${d.plate_moved_to_reg || d.plate_moved_to_car || 'another car'}`;
 
-export async function testDriveView(el, [preselectId]) {
+// host: the page's real container. A redraw renders into a fresh div and moves the result
+// into host, so every redraw (not only the first) updates the visible page.
+export async function testDriveView(el, [preselectId], host = el) {
   const [data, staff, plates] = await Promise.all([api.get('/test-drives'), api.get('/staff'), api.get('/trade-plates')]);
   data.plates = plates;
   // #/test-drive?return=<id>: the plates were just moved off that car, so its return is due now.
@@ -89,8 +91,8 @@ export async function testDriveView(el, [preselectId]) {
   const rerender = async () => {
     try {
       const fresh = h('div');
-      await testDriveView(fresh, []);
-      el.replaceChildren(...fresh.childNodes);
+      await testDriveView(fresh, [], host);
+      host.replaceChildren(...fresh.childNodes);
     } catch (e) { showError(e); }
   };
   const preselect = preselectId ? await api.get(`/vehicles/${preselectId}`).catch(() => null) : null;
