@@ -196,6 +196,55 @@ def overview(item: dict | None) -> dict:
     }
 
 
+# --------------------------------------------------------------------------- #
+# Owner (not sent yet)
+# --------------------------------------------------------------------------- #
+# The technical-data API Carbonara uses today has no owner. Statens vegvesen may
+# later send the registered owner too (a separate agreement). Its exact field
+# names are not known yet, so owner() tries the likely places; when real data
+# arrives, adjust OWNER_PATHS / _owner_from() here and nothing else.
+
+OWNER_PATHS = (("eierskap", "eier"), ("registrering", "eier"), ("eier",), ("registrertEier",),
+               ("eierskap",), ("eiere",))
+COMPANY_KEYS = ("foretak", "virksomhet", "organisasjon", "firma", "juridiskPerson")
+PERSON_KEYS = ("person", "privatperson", "fysiskPerson")
+COMPANY_SUFFIX = (" as", " asa", " ans", " da", " sa", " ba", " enk", " nuf", " ks")
+
+
+def _owner_from(o: dict) -> dict | None:
+    for key in PERSON_KEYS:
+        if isinstance(o.get(key), dict):
+            found = _owner_from(o[key])
+            if found:
+                return {**found, "kind": "person"}
+    for key in COMPANY_KEYS:
+        if isinstance(o.get(key), dict):
+            name = o[key].get("navn") or o[key].get("organisasjonsnavn") or o[key].get("foretaksnavn")
+            if name:
+                return {"name": str(name), "kind": "company"}
+    parts = [o.get(k) for k in ("fornavn", "mellomnavn", "etternavn")]
+    if any(isinstance(p, str) and p.strip() for p in parts):
+        return {"name": " ".join(p.strip() for p in parts if isinstance(p, str) and p.strip()), "kind": "person"}
+    name = o.get("navn") or o.get("organisasjonsnavn") or o.get("foretaksnavn")
+    if isinstance(name, str) and name.strip():
+        company = bool(o.get("organisasjonsnummer") or o.get("orgnr")) or name.lower().endswith(COMPANY_SUFFIX)
+        return {"name": name, "kind": "company" if company else "person"}
+    return None
+
+
+def owner(item: dict | None) -> dict | None:
+    """The registered owner, {'name': 'NORDMANN OLA', 'kind': 'person' | 'company'}, or None."""
+    for path in OWNER_PATHS:
+        o = dig(item or {}, *path)
+        if isinstance(o, list):
+            o = o[0] if o else None
+        if isinstance(o, dict):
+            found = _owner_from(o)
+            if found:
+                return found
+    return None
+
+
 def _num(v, unit=""):
     if v in (None, ""):
         return None

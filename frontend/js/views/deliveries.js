@@ -9,7 +9,7 @@
 // kiosk setup for admins (maps, key places, tick boxes, kiosk tablets).
 import { lang, setLang } from '../i18n.js';
 import {
-  api, append, busy, fmtDate, h, nameInput, openDialog, session, showError, toast, vehicleTitle,
+  api, append, badge, busy, euStatus, fmtDate, h, nameInput, openDialog, session, showError, toast, vehicleTitle,
 } from '../ui.js';
 
 const IDLE_MS = 3 * 60 * 1000;   // a half-filled form is cleared when the customer walks away
@@ -197,6 +197,7 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
     });
 
     frame(form);
+    window.scrollTo(0, 0); // the next customer starts at the top
     // Not on the tablet itself: the keyboard would pop up every time the form resets.
     if (!standalone) reg.focus();
   }
@@ -211,6 +212,7 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
       h('p', { class: 'muted' }, 'We will contact you if we have any questions.'),
       h('div', { class: 'actions' }, done));
     frame(card);
+    window.scrollTo(0, 0); // the button was at the bottom of a long form; show the thank-you from the top
     doneTimer = setTimeout(() => { if (card.isConnected) renderForm(); }, DONE_MS);
   }
 
@@ -219,12 +221,66 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
 
 // ---------------------------------------------------------------- staff: deliveries
 
+// How the name the customer typed compares with the owner's name from Statens vegvesen
+// (server: common.name_match). 'same' needs no badge.
+const NAME_MATCH = {
+  similar: { cls: '', text: 'Similar to the typed name' },
+  different: { cls: 'warn', text: 'Different from the typed name' },
+  company: { cls: '', text: 'Company car' },
+};
+
+/**
+ * Customer name + phone, and what Statens vegvesen says about the car (VIN,
+ * EU-kontroll). The SVV owner's name, once SVV sends it, is shown first; the
+ * name the customer typed stays visible when it differs. Redraws itself after
+ * "Look up again".
+ */
+function customerAndRegistry(first) {
+  const slot = h('div', { class: 'delivery-svv' });
+  const draw = (d) => {
+    const look = h('button', {
+      class: 'link small', type: 'button',
+      onClick: () => busy(look, async () => draw(await api.post(`/deliveries/${d.id}/registry`))),
+    }, '↻ Look up again');
+    const eu = euStatus(d.svv_eu_due);
+    const car = [d.svv_make, d.svv_model].filter(Boolean).join(' ');
+    let svv;
+    if (d.svv_status === 'ok') {
+      svv = h('div', { class: 'small' },
+        h('span', {}, 'Statens vegvesen: '), car ? h('span', { translate: 'no' }, `${car} · `) : null,
+        h('span', {}, 'VIN: '), h('span', { class: 'mono' }, d.svv_vin || '–'),
+        d.svv_eu_due ? [h('span', {}, ' · '), h('span', {}, 'EU-kontroll: '), h('strong', {}, fmtDate(d.svv_eu_due, false)), ' ', badge(eu)] : null,
+        ' ', look);
+    } else {
+      const text = {
+        not_found: 'Not found at Statens vegvesen – check the registration number',
+        error: 'Statens vegvesen lookup failed',
+        not_configured: 'Statens vegvesen is not set up (System page)',
+      }[d.svv_status] || 'Not looked up at Statens vegvesen yet';
+      svv = h('div', { class: `small ${d.svv_status === 'not_found' ? 'warn-text' : 'muted'}` },
+        h('span', { title: d.svv_error || '' }, text), ' ', d.svv_status === 'not_configured' ? null : look);
+    }
+    const match = NAME_MATCH[d.name_match];
+    slot.replaceChildren(...[
+      h('div', {}, h('span', { translate: 'no' }, d.display_name || d.customer_name), ' · ',
+        h('a', { href: `tel:${d.customer_phone}` }, d.customer_phone)),
+      d.svv_name ? h('div', { class: 'small muted' }, h('span', {}, 'Name from Statens vegvesen'),
+        match ? [' ', badge(match)] : null,
+        d.name_match !== 'same' ? h('span', { class: 'block' }, h('span', {}, 'Typed by the customer: '),
+          h('span', { translate: 'no' }, d.customer_name)) : null) : null,
+      svv,
+    ].filter(Boolean));
+  };
+  draw(first);
+  return slot;
+}
+
 function deliveryDetails(d) {
   return [
     h('div', { class: 'list-title' }, h('span', { class: 'mono strong delivery-reg' }, d.registration_number),
-      // The car is linked when it is in Carbonara (same reg. no).
+      // The car is linked when it is in Carbonara (same reg. no, or the VIN from Statens vegvesen).
       d.vehicle_id && d.make ? [' ', h('a', { href: `#/vehicles/${d.vehicle_id}` }, vehicleTitle(d))] : null),
-    h('div', {}, h('span', { translate: 'no' }, d.customer_name), ' · ', h('a', { href: `tel:${d.customer_phone}` }, d.customer_phone)),
+    customerAndRegistry(d),
     h('div', { class: 'muted small' }, `Delivered ${fmtDate(d.created_at)}`,
       d.kiosk_name ? h('span', { translate: 'no' }, ` · ${d.kiosk_name}`) : null),
     d.key_place ? h('div', {}, 'Key: ', h('strong', { translate: 'no' }, optText(d.key_place))) : null,
@@ -273,7 +329,7 @@ export async function deliveriesView(el) {
   };
 
   const receivedRow = (d) => h('li', {},
-    h('span', {}, h('span', { class: 'mono strong' }, d.registration_number), ' ', h('span', { translate: 'no' }, d.customer_name),
+    h('span', {}, h('span', { class: 'mono strong' }, d.registration_number), ' ', h('span', { translate: 'no' }, d.display_name || d.customer_name),
       h('span', { class: 'muted small block' }, `Received ${fmtDate(d.received_at)}`,
         d.received_by_name ? h('span', {}, ` by ${d.received_by_name}`) : null,
         h('span', {}, ` · deleted automatically ${fmtDate(d.purge_at, false)}`))),

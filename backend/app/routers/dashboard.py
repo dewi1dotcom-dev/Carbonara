@@ -31,7 +31,7 @@ def dashboard(conn=Depends(get_conn)):
             WHERE t.status = 'out' AND v.deleted_at IS NULL ORDER BY t.plate_moved_at NULLS LAST, t.started_at""").fetchall()
     # Customer cars dropped off at the delivery kiosk, not received by staff yet.
     deliveries = conn.execute(
-        """SELECT id, registration_number, customer_name, created_at, key_place
+        """SELECT id, registration_number, coalesce(svv_name, customer_name) AS customer_name, created_at, key_place
              FROM car_deliveries WHERE received_at IS NULL ORDER BY created_at""").fetchall()
     arrivals = conn.execute(
         """SELECT i.id, i.started_at, v.vin, v.make, v.model, v.model_year, s.name AS inspector_name

@@ -658,3 +658,5 @@ input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospa
 .delivery-msg { margin: .2rem 0; padding: .4rem .7rem; border-left: 3px solid var(--border); white-space: pre-wrap; }
 .map-row { display: flex; align-items: center; gap: .6rem; }
 .map-mini { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); flex: none; }
+.warn-text { color: var(--warn); }
+.delivery-svv > div + div { margin-top: .15rem; }

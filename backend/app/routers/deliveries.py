@@ -10,19 +10,21 @@ phone, where the key is, a pin on a picture of the lot, tick boxes, message).
 Personal data (name, phone, message) never goes into vehicle_events. A delivery
 is deleted for good TRASH_DAYS after it was received (sync_worker)."""
 
+import datetime as dt
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, Response, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from .. import auth, photostore
+from .. import auth, photostore, vegvesen
 from ..auth import require_admin, require_kiosk_or_staff
-from ..common import bad_request, cap_name, clean_phone, conflict, log_event, not_found
+from ..common import (bad_request, cap_name, clean_phone, conflict, log_event, name_match, not_found,
+                      tidy_name, update_row)
 from ..config import settings
-from ..db import get_conn
+from ..db import get_conn, pool
 
 log = logging.getLogger("carbonara.deliveries")
 kiosk_router = APIRouter(prefix="/kiosk", tags=["delivery kiosk"])
@@ -37,6 +39,9 @@ DELIVERY_SELECT = """
     SELECT d.id, d.registration_number, d.vehicle_id, d.customer_name, d.customer_phone,
            d.map_id, d.pin_x, d.pin_y, d.key_place, d.checks, d.message, d.created_at,
            d.received_at, sr.name AS received_by_name,
+           -- The owner's name from Statens vegvesen is shown first; the typed one is kept.
+           coalesce(d.svv_name, d.customer_name) AS display_name, d.svv_name, d.svv_owner_kind, d.name_match,
+           d.svv_status, d.svv_checked_at, d.svv_error, d.svv_vin, d.svv_make, d.svv_model, d.svv_eu_due,
            d.received_at + make_interval(days => %(trash_days)s) AS purge_at,
            m.name AS map_name, m.name_no AS map_name_no, k.name AS kiosk_name,
            v.make, v.model, v.model_year
@@ -56,6 +61,66 @@ def _set_kiosk_cookie(response: Response, token: str) -> None:
     # secure=False: plain HTTP on the local network for now (as the staff session).
     response.set_cookie(auth.KIOSK_COOKIE, token, max_age=auth.KIOSK_DAYS * 86400,
                         httponly=True, samesite="lax", secure=False, path="/")
+
+
+# --------------------------------------------------------------------------- #
+# Statens vegvesen lookup by registration number
+# --------------------------------------------------------------------------- #
+
+def _registry_lookup(reg: str, typed_name: str) -> dict:
+    """Ask Statens vegvesen about the car (no DB work, so no connection is held
+    while waiting). Returns the car_deliveries columns to update.
+
+    A temporary problem (error / not set up) only updates the status, so data from
+    an earlier good lookup stays; 'not found' clears it (the reg. no is probably wrong)."""
+    out = {"svv_checked_at": dt.datetime.now(dt.timezone.utc), "svv_error": None}
+    if not vegvesen.is_configured():
+        return out | {"svv_status": "not_configured"}
+    try:
+        item = vegvesen.fetch_by_regnr(reg)
+    except vegvesen.NotFound as exc:
+        return out | {"svv_status": "not_found", "svv_error": str(exc)[:300], "svv_vin": None, "svv_make": None,
+                      "svv_model": None, "svv_eu_due": None, "svv_name": None, "svv_owner_kind": None,
+                      "name_match": None}
+    except vegvesen.RegistryError as exc:
+        return out | {"svv_status": "error", "svv_error": str(exc)[:300]}
+    except Exception:  # never let a lookup problem break the delivery itself
+        log.exception("Vegvesen lookup failed for a delivery")
+        return out | {"svv_status": "error", "svv_error": "Lookup failed"}
+    values = vegvesen.vehicle_values(item)
+    own = vegvesen.owner(item)
+    svv_name = tidy_name(own["name"]) if own else None
+    return out | {
+        "svv_status": "ok",
+        "svv_vin": (vegvesen.dig(item, "kjoretoyId", "understellsnummer") or "").upper() or None,
+        "svv_make": values.get("make"),
+        "svv_model": values.get("model"),
+        "svv_eu_due": vegvesen.extract(item)["eu_control_due"],
+        "svv_name": svv_name,
+        "svv_owner_kind": own["kind"] if own else None,
+        "name_match": name_match(typed_name, svv_name, own["kind"] if own else None),
+    }
+
+
+def _save_lookup(conn, delivery_id: int, fields: dict) -> None:
+    row = update_row(conn, "car_deliveries", delivery_id, fields)
+    # Not linked by reg. no, but the car is in Carbonara by VIN (e.g. its reg. no was never typed in).
+    if row and not row["vehicle_id"] and row["svv_vin"]:
+        v = conn.execute("SELECT id FROM vehicles WHERE vin = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
+                         (row["svv_vin"],)).fetchone()
+        if v:
+            conn.execute("UPDATE car_deliveries SET vehicle_id = %s WHERE id = %s", (v["id"], delivery_id))
+            log_event(conn, v["id"], "customer_delivery", data={"delivery_id": delivery_id})
+
+
+def lookup_in_background(delivery_id: int, reg: str, typed_name: str) -> None:
+    """Runs after the kiosk has its answer, so the customer never waits for Statens vegvesen."""
+    fields = _registry_lookup(reg, typed_name)
+    try:
+        with pool.connection() as conn:  # commits on leaving the block
+            _save_lookup(conn, delivery_id, fields)
+    except Exception:
+        log.exception("Could not save the Vegvesen lookup for delivery %s", delivery_id)
 
 
 def _privacy() -> dict:
@@ -109,7 +174,8 @@ def map_image(map_id: int, _who=Depends(require_kiosk_or_staff), conn=Depends(ge
 
 
 @kiosk_router.post("/deliveries", status_code=201)
-def create_delivery(body: DeliveryIn, who=Depends(require_kiosk_or_staff), conn=Depends(get_conn)):
+def create_delivery(body: DeliveryIn, tasks: BackgroundTasks, who=Depends(require_kiosk_or_staff),
+                    conn=Depends(get_conn)):
     reg = _clean_reg(body.registration_number)
     if not 2 <= len(reg) <= 8:
         raise bad_request("Registration number: 2–8 letters and digits")
@@ -153,6 +219,9 @@ def create_delivery(body: DeliveryIn, who=Depends(require_kiosk_or_staff), conn=
     ).fetchone()
     if vehicle:  # the car's history gets the delivery, never the customer's details
         log_event(conn, vehicle["id"], "customer_delivery", data={"delivery_id": row["id"]})
+    # VIN, EU-kontroll (and later the owner's name) from Statens vegvesen. The task runs
+    # after this request has committed, so the row exists.
+    tasks.add_task(lookup_in_background, row["id"], reg, name)
     return {"id": row["id"], "created_at": row["created_at"]}
 
 
@@ -190,6 +259,18 @@ def receive_delivery(delivery_id: int, request: Request, conn=Depends(get_conn))
         log_event(conn, d["vehicle_id"], "customer_delivery_received", staff_id=staff_id,
                   data={"delivery_id": delivery_id})
     return {"ok": True}
+
+
+@router.post("/deliveries/{delivery_id}/registry")
+def lookup_delivery(delivery_id: int, conn=Depends(get_conn)):
+    """'↻ Look up again' at Statens vegvesen (e.g. after an error)."""
+    d = conn.execute("SELECT registration_number, customer_name FROM car_deliveries WHERE id = %s",
+                     (delivery_id,)).fetchone()
+    if not d:
+        raise not_found("Delivery")
+    _save_lookup(conn, delivery_id, _registry_lookup(d["registration_number"], d["customer_name"]))
+    return conn.execute(DELIVERY_SELECT + " WHERE d.id = %(id)s",
+                        {"trash_days": settings.trash_days, "id": delivery_id}).fetchone()
 
 
 @router.delete("/deliveries/{delivery_id}", status_code=204)

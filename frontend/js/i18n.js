@@ -495,6 +495,11 @@ const NO = {
   'The kiosk form where customers register the car they drop off: maps, key places, tick boxes and kiosk tablets.':
     'Kiosk-skjemaet der kundene registrerer bilen de leverer: kart, nøkkelsteder, avkrysningsbokser og kiosk-nettbrett.',
   'Delivered by the customer (kiosk)': 'Levert av kunden (kiosk)', 'Customer delivery received': 'Kundelevering mottatt',
+  'Look up again': 'Slå opp på nytt', 'Name from Statens vegvesen': 'Navn fra Statens vegvesen', 'Typed by the customer': 'Skrevet av kunden',
+  'Similar to the typed name': 'Ligner på navnet kunden skrev', 'Different from the typed name': 'Ulikt navnet kunden skrev', 'Company car': 'Firmabil',
+  'Not found at Statens vegvesen – check the registration number': 'Ikke funnet hos Statens vegvesen – sjekk registreringsnummeret',
+  'Statens vegvesen lookup failed': 'Oppslaget hos Statens vegvesen feilet', 'Statens vegvesen is not set up (System page)': 'Statens vegvesen er ikke satt opp (System-siden)',
+  'Not looked up at Statens vegvesen yet': 'Ikke slått opp hos Statens vegvesen ennå', 'Lookup failed': 'Oppslaget feilet',
   // server messages
   'This device is not set up as a delivery kiosk': 'Denne enheten er ikke satt opp som leveringskiosk',
   'Registration number: 2–8 letters and digits': 'Registreringsnummer: 2–8 bokstaver og sifre', 'This delivery is already received': 'Denne leveringen er allerede mottatt',

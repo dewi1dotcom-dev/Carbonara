@@ -1,6 +1,7 @@
 import datetime as dt
 import json
 import re
+import unicodedata
 from typing import Optional
 
 from fastapi import HTTPException
@@ -49,6 +50,65 @@ def cap_name(raw: Optional[str]) -> str:
     space or '-', in uppercase; the rest is kept as typed (so 'McDonald' stays)."""
     s = " ".join((raw or "").split())
     return re.sub(r"(^|[\s-])(\w)", lambda m: m.group(1) + m.group(2).upper(), s)
+
+
+def tidy_name(raw: Optional[str]) -> str:
+    """Registry names often come in capitals ('NORDMANN OLA'): those become
+    'Nordmann Ola'; mixed-case names are only capitalized like cap_name."""
+    s = " ".join((raw or "").split())
+    return cap_name(s.lower() if s.isupper() else s)
+
+
+def _name_tokens(name: str) -> list[str]:
+    """'Ødegård-Hansen, Kåre' -> ['odegaard', 'hansen', 'kaare']: case, accents,
+    punctuation and the æ/ø/å spellings (ae/o/aa) don't count."""
+    s = (name or "").casefold().replace("æ", "ae").replace("ø", "o").replace("å", "aa")
+    s = "".join(ch for ch in unicodedata.normalize("NFKD", s) if not unicodedata.combining(ch))
+    return [t for t in re.split(r"[^a-z0-9]+", s) if t]
+
+
+def _one_edit(a: str, b: str) -> bool:
+    """True when a and b differ by at most one letter (typo: missing, extra or wrong letter)."""
+    if abs(len(a) - len(b)) > 1:
+        return False
+    if len(a) > len(b):
+        a, b = b, a
+    i = 0
+    while i < len(a) and a[i] == b[i]:
+        i += 1
+    return a[i + (len(a) == len(b)):] == b[i + 1:]
+
+
+def name_match(typed: Optional[str], registry: Optional[str], registry_kind: Optional[str] = None) -> Optional[str]:
+    """Compare the name a customer typed with the owner's name from Statens vegvesen.
+
+    - 'same':      the same words, in any order (SVV often puts the surname first).
+    - 'similar':   every word of the shorter name is in the longer one (a middle name
+                   left out), allowing one typo per word of 4+ letters, or an initial.
+    - 'different': anything else (e.g. a spouse or friend delivering the car).
+    - 'company':   the car is owned by a company; an employee delivering it is normal.
+    None when there is nothing to compare. Both names are always kept."""
+    if not registry or not typed:
+        return None
+    if registry_kind == "company":
+        return "company"
+    a, b = _name_tokens(typed), _name_tokens(registry)
+    if not a or not b:
+        return None
+    if sorted(a) == sorted(b):
+        return "same"
+    short, long_ = (a, b) if len(a) <= len(b) else (b, a)
+    pool = list(long_)
+
+    def take(word: str) -> bool:  # each word of the longer name can be used once
+        for i, other in enumerate(pool):
+            if (word == other or (min(len(word), len(other)) >= 4 and _one_edit(word, other))
+                    or (len(word) == 1 and other.startswith(word)) or (len(other) == 1 and word.startswith(other))):
+                del pool[i]
+                return True
+        return False
+
+    return "similar" if all(take(w) for w in short) else "different"
 
 
 def clean_phone(raw: Optional[str]) -> str:

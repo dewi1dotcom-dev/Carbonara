@@ -126,13 +126,13 @@ There is no automated test suite. Verification has two parts:
 2. **Live checks after the user redeploys.**
    - Every `/api` route except `/api/health`, `/api/version` and `/api/auth/*` needs a login
      cookie.
-   - The user made a staff account **"Claude"** (staff id 5, admin, not system admin) for
+   - The user made a staff account **"Claude"** (staff id 7, shown as "Claude Claude"; admin, not system admin; recreated after id 5) for
      this. The PIN was given in chat. Never write it into the repo; if it doesn't work, ask
      the user.
 
 ```powershell
 $b='http://192.168.10.45:8080'; $jar='<scratchpad>\cookies.txt'
-'{"staff_id":5,"pin":"<PIN>"}' | Out-File -Encoding ascii "$env:TEMP\login.json"
+'{"staff_id":7,"pin":"<PIN>"}' | Out-File -Encoding ascii "$env:TEMP\login.json"
 curl.exe -s -c $jar -H "Content-Type: application/json" --data-binary "@$env:TEMP\login.json" "$b/api/auth/login"
 Remove-Item "$env:TEMP\login.json"                      # don't leave the PIN on disk
 (Invoke-RestMethod "$b/api/version").version
@@ -187,7 +187,7 @@ backend/
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup)
-  migrations/           001…025
+  migrations/           001…026
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg)
@@ -231,6 +231,7 @@ frontend/               no build step; plain ES modules
 | 023 | `battery_charges` | monthly 12V charges of used cars in storage (cancellable) |
 | 024 | `vehicle_documents` | contracts, notes and other files per car |
 | 025 | `customer_deliveries` | `delivery_maps`, `delivery_options` (key places / tick boxes, EN + NO), `kiosk_devices`, `car_deliveries` |
+| 026 | `delivery_registry` | `car_deliveries.svv_*` (SVV lookup by reg. no: VIN, make/model, EU-kontroll, owner name + kind), `name_match` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -438,6 +439,20 @@ the server is LAN-only, so no customer phones / public internet).
 - **Lists:** key places and tick boxes (`delivery_options`) each have an English **and** a Norwegian label
   (admin-entered data can't go through the translator); `optText()` picks the user's language. Map names
   have an optional Norwegian name.
+- **Statens vegvesen lookup (0.25.0):** after the form is sent, a FastAPI background task
+  (`lookup_in_background`, own pool connection, after the request commits) looks up the reg. no and
+  stores `svv_vin`, make/model and `svv_eu_due` on the delivery; the customer never waits. Staff see
+  VIN + EU-kontroll (badge) on the delivery and can "↻ Look up again" (`POST /deliveries/{id}/registry`).
+  An error / "not set up" keeps earlier data; "not found" clears it (probably a mistyped reg. no). A
+  delivery not linked by reg. no gets linked to a car in Carbonara with the same VIN.
+- **Owner name from SVV (prepared, not sent yet):** the current SVV API has no owner. `vegvesen.owner()`
+  tries likely field names (`OWNER_PATHS`, person / company); adjust only there when SVV's owner data
+  arrives. Strategy: **both names are kept** (`customer_name` as typed, `svv_name` tidied from capitals);
+  the **SVV name is shown first** everywhere (`display_name` = coalesce, Today block too), and the typed
+  name stays visible under it when they differ. `common.name_match` → `same` (same words, any order) /
+  `similar` (shorter name's words all in the longer one; one typo per 4+ letter word, initials; æ/ø/å =
+  ae/o/aa) / `different` (warn badge, e.g. a spouse delivering) / `company` (company-owned car). It never
+  blocks anything. The SVV name is personal data: only on the delivery, deleted with it.
 - **Staff:** Today block "Customer cars delivered – not received yet"; `#/deliveries` lists them with
   map + pin; "✓ Received" (received by = session user). Received deliveries are **deleted whole** after
   `trash_days` by the worker ("Delete now" at once). `vehicle_events` get only `customer_delivery` /
@@ -836,6 +851,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.23.2 | Top bar: account button is just the 👤 silhouette (name on hover); clock always rightmost |
 | 0.23.3 | Top bar: clock's right edge lines up with the content boxes below on wide screens |
 | 0.24.0 | **Customer car delivery:** kiosk tablet form (reg. no, name, phone, key place, pin on a map of the lot, tick boxes, message); Customer deliveries page + Today block; kiosk setup (maps, lists in EN + NO, tablets). Phone / e-mail fields get the normal input style |
+| 0.25.0 | Customer deliveries: SVV lookup by reg. no in the background (VIN, EU-kontroll shown to staff, "Look up again"); owner name from SVV prepared (shown first, typed name kept, name comparison); kiosk scrolls to the top after sending |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
