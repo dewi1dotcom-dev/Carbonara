@@ -187,7 +187,7 @@ backend/
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup)
-  migrations/           001…026
+  migrations/           001…027
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg)
@@ -232,6 +232,7 @@ frontend/               no build step; plain ES modules
 | 024 | `vehicle_documents` | contracts, notes and other files per car |
 | 025 | `customer_deliveries` | `delivery_maps`, `delivery_options` (key places / tick boxes, EN + NO), `kiosk_devices`, `car_deliveries` |
 | 026 | `delivery_registry` | `car_deliveries.svv_*` (SVV lookup by reg. no: VIN, make/model, EU-kontroll, owner name + kind), `name_match` |
+| 027 | `teams` | `teams` (name, `menu` text[]), `staff.team_id`; existing staff put in the team "All staff" with every menu item |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -503,6 +504,19 @@ the server is LAN-only, so no customer phones / public internet).
   removing system admin. Only a system admin can change another system admin.
 - **The word "super-admin" must not appear in UI text;** it is "System admin" /
   "Systemadministrator".
+
+**Teams (0.26.0)** (`teams`, `staff.team_id`; System page → Teams; `/system/teams`, `/system/staff/{id}/team`):
+- System admins create teams with a name, tick which **top menu items** each team sees
+  (`auth.MENU_ITEMS`: arrivals, vehicles, storage, testdrive, deliveries, settings) and place users.
+  **One team per user.** Today is always shown; System stays system-admin-only.
+- `auth.menu_for()` puts `menu` on the session user (`/auth/state` → `me.menu`): system admins get
+  everything; others Today + their team's items; **no team = Today only** (the user's choice). New staff
+  have no team until a system admin places them. Migration 027 put existing staff in "All staff".
+- **Not a server lock (the user's choice):** `canSee(nav)` in `ui.js` hides menu items (`renderUser`) and
+  `render()` shows "Not available" for a route whose nav key isn't allowed. The API and Today board
+  still return everything. A new menu item = add its key to `MENU_ITEMS`, `MENU_LABEL` (`system.js`)
+  and the route's nav key.
+- A change applies when the user next opens or reloads the app.
 
 **System page (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`, `views/system.js`):
 - **Groups:**
@@ -853,6 +867,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.24.0 | **Customer car delivery:** kiosk tablet form (reg. no, name, phone, key place, pin on a map of the lot, tick boxes, message); Customer deliveries page + Today block; kiosk setup (maps, lists in EN + NO, tablets). Phone / e-mail fields get the normal input style |
 | 0.25.0 | Customer deliveries: SVV lookup by reg. no in the background (VIN, EU-kontroll shown to staff, "Look up again"); owner name from SVV prepared (shown first, typed name kept, name comparison); kiosk scrolls to the top after sending |
 | 0.25.1 | Top menu item "Deliveries" (Leveringer) to the Customer deliveries page |
+| 0.26.0 | **Teams:** system admins make named teams on the System page, pick the top menu items each team sees and place users (one team each); no team = Today only |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

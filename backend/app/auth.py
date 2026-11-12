@@ -30,6 +30,20 @@ STAFF_PUBLIC = ("id, name, first_name, last_name, phone, active, is_admin, is_su
                 "last_login_at, (pin_hash IS NOT NULL) AS has_pin")
 
 
+# Top menu items a team can be given (keys = data-nav in index.html). Today is
+# always there; System is for system admins only, so neither is listed.
+MENU_ITEMS = ("arrivals", "vehicles", "storage", "testdrive", "deliveries", "settings")
+
+
+def menu_for(staff: dict) -> list[str]:
+    """The menu items this person sees. System admins: all (they can't lock
+    themselves out). Others: Today + their team's items; no team = Today only.
+    The frontend hides the rest and blocks their pages (not a server lock)."""
+    if staff.get("is_superadmin"):
+        return ["today", *MENU_ITEMS, "system"]
+    return ["today", *[m for m in MENU_ITEMS if m in (staff.get("team_menu") or [])]]
+
+
 def valid_pin(pin: str) -> bool:
     return isinstance(pin, str) and pin.isdigit() and PIN_MIN <= len(pin) <= PIN_MAX
 
@@ -76,12 +90,15 @@ def session_staff(conn, token: str | None) -> dict | None:
         return None
     row = conn.execute(
         """SELECT s.id, s.name, s.active, s.is_admin, s.is_superadmin, s.language, s.theme, s.created_at, s.last_login_at,
-                  (s.pin_hash IS NOT NULL) AS has_pin
+                  (s.pin_hash IS NOT NULL) AS has_pin, s.team_id, t.name AS team_name, t.menu AS team_menu
               FROM sessions x JOIN staff s ON s.id = x.staff_id
+              LEFT JOIN teams t ON t.id = s.team_id
              WHERE x.token_hash = %s AND x.expires_at > now() AND s.active""",
         (token_hash(token),),
     ).fetchone()
     if row:
+        row["menu"] = menu_for(row)
+        del row["team_menu"]
         conn.execute("UPDATE sessions SET last_seen_at = now() WHERE token_hash = %s AND last_seen_at < now() - interval '5 minutes'",
                      (token_hash(token),))
     return row

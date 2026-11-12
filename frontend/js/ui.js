@@ -42,6 +42,10 @@ async function request(method, path, body) {
 /** The logged-in staff member ({id, name, is_admin, …}); set by app.js. */
 export const session = { me: null };
 
+/** Does the user's team give them this top menu item? (server: auth.menu_for; Today always.)
+ *  Only hides menu items and blocks pages in the app; the server doesn't lock the data. */
+export const canSee = (nav) => !session.me || nav === 'today' || (session.me.menu ?? []).includes(nav);
+
 export const api = {
   get: (p) => request('GET', p),
   post: (p, b) => request('POST', p, b ?? {}),

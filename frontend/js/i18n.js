@@ -500,6 +500,17 @@ const NO = {
   'Not found at Statens vegvesen – check the registration number': 'Ikke funnet hos Statens vegvesen – sjekk registreringsnummeret',
   'Statens vegvesen lookup failed': 'Oppslaget hos Statens vegvesen feilet', 'Statens vegvesen is not set up (System page)': 'Statens vegvesen er ikke satt opp (System-siden)',
   'Not looked up at Statens vegvesen yet': 'Ikke slått opp hos Statens vegvesen ennå', 'Lookup failed': 'Oppslaget feilet',
+  // ---- teams (System page)
+  'Teams': 'Team', 'Add team': 'Legg til team', 'Team added': 'Team lagt til', 'No teams yet.': 'Ingen team ennå.', 'No members.': 'Ingen medlemmer.',
+  'Remove from team': 'Fjern fra teamet', 'Add a user': 'Legg til en bruker', 'Add a user to the team': 'Legg til en bruker i teamet',
+  'Team name': 'Teamnavn', 'New team name, e.g. Sales': 'Navn på nytt team, f.eks. Salg', 'Team': 'Team',
+  'Menu items this team sees (Today is always shown)': 'Menypunkter dette teamet ser (I dag vises alltid)',
+  'System admin – sees everything': 'Systemadministrator – ser alt',
+  'Each user is in one team. The team decides which items they see in the top menu; other pages show “not available”. Users without a team see only Today. System admins always see everything. A change takes effect the next time the user opens or reloads Carbonara.':
+    'Hver bruker er i ett team. Teamet bestemmer hvilke punkter brukeren ser i toppmenyen; andre sider viser «ikke tilgjengelig». Brukere uten team ser bare I dag. Systemadministratorer ser alltid alt. En endring gjelder neste gang brukeren åpner eller laster Carbonara på nytt.',
+  'Not available': 'Ikke tilgjengelig',
+  'This page is not available for your team. Ask a system admin if you need it.': 'Denne siden er ikke tilgjengelig for teamet ditt. Spør en systemadministrator hvis du trenger den.',
+  'Give the team a name': 'Gi teamet et navn',
   // server messages
   'This device is not set up as a delivery kiosk': 'Denne enheten er ikke satt opp som leveringskiosk',
   'Registration number: 2–8 letters and digits': 'Registreringsnummer: 2–8 bokstaver og sifre', 'This delivery is already received': 'Denne leveringen er allerede mottatt',
@@ -685,6 +696,12 @@ const NO_PATTERNS = [
   ["Have you got the car and the key for {}?\n\nThe delivery, with the customer's name and phone number, is deleted automatically {n} days from now.",
     'Har du fått bilen og nøkkelen til {1}?\n\nLeveringen, med kundens navn og telefonnummer, slettes automatisk om {2} dager.'],
   ["Delete the delivery of {} now, with the customer's details?", 'Slette leveringen av {1} nå, med kundens opplysninger?'],
+  // teams (System page)
+  ['There is already a team called {}', 'Det finnes allerede et team som heter {1}'], ['Unknown menu item: {}', 'Ukjent menypunkt: {1}'],
+  ['Members ({n})', 'Medlemmer ({1})'], ['{} (now in {})', '{1} (nå i {2})'], ['Without a team (only Today): {}', 'Uten team (bare I dag): {1}'],
+  ['Delete the team {}? Its {n} member(s) will only see Today until you place them in another team.',
+    'Slette teamet {1}? Medlemmene ({2}) ser bare I dag til du plasserer dem i et annet team.'],
+  ['Delete the team {}?', 'Slette teamet {1}?'],
   ['Stop {} from showing the delivery form?', 'Stoppe {1} fra å vise leveringsskjemaet?'], ['Set up {}', 'Satt opp {1}'], ['last used {}', 'sist brukt {1}'],
 ];
 

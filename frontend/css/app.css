@@ -660,3 +660,8 @@ input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospa
 .map-mini { width: 64px; height: 48px; object-fit: cover; border-radius: 6px; border: 1px solid var(--border); flex: none; }
 .warn-text { color: var(--warn); }
 .delivery-svv > div + div { margin-top: .15rem; }
+/* System → Teams */
+.team-head { display: flex; justify-content: space-between; align-items: baseline; gap: .5rem; flex-wrap: wrap; }
+.team-head h3 { margin: 0 0 .4rem; }
+.team-members-label { margin-top: .75rem; }
+.team-box select { margin-top: .5rem; }

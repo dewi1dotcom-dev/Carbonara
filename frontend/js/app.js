@@ -1,5 +1,5 @@
 import {
-  api, append, applyTheme, carText, fmtDate, h, openDialog, osloTodayIso, session, setInspectorId, showError, startClock,
+  api, append, applyTheme, canSee, carText, fmtDate, h, openDialog, osloTodayIso, session, setInspectorId, showError, startClock,
   theme, toast,
 } from './ui.js';
 import { lang, setLang, startTranslator } from './i18n.js';
@@ -56,7 +56,14 @@ async function render() {
     container.replaceChildren(h('h1', {}, 'Not found'), h('a', { href: '#/' }, 'Back to Today'));
     return;
   }
-  const [m, view] = match;
+  const [m, view, nav] = match;
+  if (nav !== 'system' && !canSee(nav)) { // System checks its own rights
+    container.replaceChildren(
+      h('h1', {}, 'Not available'),
+      h('div', { class: 'card notice warn' }, 'This page is not available for your team. Ask a system admin if you need it.'),
+      h('a', { href: '#/' }, 'Back to Today'));
+    return;
+  }
   const content = h('div');
   try {
     await view(content, m.slice(1));
@@ -104,6 +111,10 @@ const userMenu = document.getElementById('user-menu');
 function renderUser() {
   const me = session.me;
   document.getElementById('nav-system').hidden = !me?.is_superadmin;
+  // The team decides which menu items show (System page → Teams).
+  document.querySelectorAll('nav [data-nav]').forEach((a) => {
+    if (a.dataset.nav !== 'system') a.hidden = !canSee(a.dataset.nav);
+  });
   if (!me) { userMenu.replaceChildren(); return; }
   userMenu.replaceChildren(h('button', {
     // Silhouette only (user's request); the name shows on hover and as the dialog title.
