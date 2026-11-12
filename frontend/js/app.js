@@ -30,8 +30,8 @@ const routes = [
   [/^#\/storage$/, storageView, 'storage'],
   [/^#\/storage\/(\d+|off-site)$/, storageSpotView, 'storage'],
   [/^#\/test-drive(?:\/new\/(\d+))?$/, testDriveView, 'testdrive'],
-  [/^#\/deliveries$/, deliveriesView, 'today'],
-  [/^#\/kiosk$/, kioskView, 'today'], // staff preview of the delivery kiosk form
+  [/^#\/deliveries$/, deliveriesView, 'deliveries'],
+  [/^#\/kiosk$/, kioskView, 'deliveries'], // staff preview of the delivery kiosk form
   [/^#\/settings$/, settingsView, 'settings'],
   [/^#\/system$/, systemView, 'system'],
 ];

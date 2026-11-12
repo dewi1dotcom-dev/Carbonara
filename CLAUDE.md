@@ -247,8 +247,8 @@ frontend/               no build step; plain ES modules
 - **Storage:** `#/storage` · `#/storage/:id|off-site`.
 - **Test drives:** `#/test-drive` · `#/test-drive/new/:vehicleId` (start form with the car
   preselected).
-- **Customer deliveries:** `#/deliveries` (list + kiosk setup; from Today and Settings, not in the
-  top menu) · `#/kiosk` (staff preview of the kiosk form).
+- **Customer deliveries:** `#/deliveries` (list + kiosk setup; top menu "Deliveries" since 0.25.1, also from
+  Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
 - **Admin:** `#/settings` · `#/system` (system admins only).
 
 ---
@@ -852,6 +852,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.23.3 | Top bar: clock's right edge lines up with the content boxes below on wide screens |
 | 0.24.0 | **Customer car delivery:** kiosk tablet form (reg. no, name, phone, key place, pin on a map of the lot, tick boxes, message); Customer deliveries page + Today block; kiosk setup (maps, lists in EN + NO, tablets). Phone / e-mail fields get the normal input style |
 | 0.25.0 | Customer deliveries: SVV lookup by reg. no in the background (VIN, EU-kontroll shown to staff, "Look up again"); owner name from SVV prepared (shown first, typed name kept, name comparison); kiosk scrolls to the top after sending |
+| 0.25.1 | Top menu item "Deliveries" (Leveringer) to the Customer deliveries page |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

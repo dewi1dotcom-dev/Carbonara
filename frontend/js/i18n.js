@@ -36,7 +36,7 @@ export function setLang(l) {
 /* eslint-disable quote-props */
 const NO = {
   // ---- menu, general
-  'Today': 'I dag', 'Arrivals': 'Ankomster', 'Vehicles': 'Biler', 'Storage': 'Lager', 'Test drive': 'Prøvekjøring',
+  'Deliveries': 'Leveringer', 'Today': 'I dag', 'Arrivals': 'Ankomster', 'Vehicles': 'Biler', 'Storage': 'Lager', 'Test drive': 'Prøvekjøring',
   'Settings': 'Innstillinger', 'System': 'System', 'Account': 'Konto', 'Log in': 'Logg inn', 'Log out': 'Logg ut',
   'Save': 'Lagre', 'Cancel': 'Avbryt', 'Close': 'Lukk', 'Delete': 'Slett', 'Edit': 'Rediger', 'Add': 'Legg til',
   'Remove': 'Fjern', 'Rename': 'Gi nytt navn', 'Restore': 'Gjenopprett', 'Reset': 'Tilbakestill', 'Undo': 'Angre',
