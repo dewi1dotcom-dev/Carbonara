@@ -230,26 +230,30 @@ const NAME_MATCH = {
 };
 
 /**
- * Customer name + phone, and what Statens vegvesen says about the car (VIN,
- * EU-kontroll). The SVV owner's name, once SVV sends it, is shown first; the
- * name the customer typed stays visible when it differs. Redraws itself after
- * "Look up again".
+ * The top of a delivery card, in the order staff asked for (0.26.2):
+ * 1. registration number (+ the car: linked when it is in Carbonara, else make/model from SVV)
+ * 2. VIN from Statens vegvesen
+ * 3. name(s) and phone: the SVV owner's name first once SVV sends it, the typed name under it
+ *    when it differs
+ * 4. EU-kontroll: green / amber / red badge and the deadline (or why there is no SVV data)
+ * Redraws itself after "Look up again".
  */
-function customerAndRegistry(first) {
+function cardTop(first) {
   const slot = h('div', { class: 'delivery-svv' });
   const draw = (d) => {
     const look = h('button', {
       class: 'link small', type: 'button',
       onClick: () => busy(look, async () => draw(await api.post(`/deliveries/${d.id}/registry`))),
     }, '↻ Look up again');
-    const eu = euStatus(d.svv_eu_due);
     const car = [d.svv_make, d.svv_model].filter(Boolean).join(' ');
-    let svv;
+    const match = NAME_MATCH[d.name_match];
+
+    let eu;
     if (d.svv_status === 'ok') {
-      svv = h('div', { class: 'small' },
-        h('span', {}, 'Statens vegvesen: '), car ? h('span', { translate: 'no' }, `${car} · `) : null,
-        h('span', {}, 'VIN: '), h('span', { class: 'mono' }, d.svv_vin || '–'),
-        d.svv_eu_due ? [h('span', {}, ' · '), h('span', {}, 'EU-kontroll: '), h('strong', {}, fmtDate(d.svv_eu_due, false)), ' ', badge(eu)] : null,
+      eu = h('div', {}, h('span', {}, 'EU-kontroll: '),
+        d.svv_eu_due
+          ? [badge(euStatus(d.svv_eu_due)), ' ', h('strong', {}, fmtDate(d.svv_eu_due, false))]
+          : h('span', { class: 'muted' }, 'no deadline from Statens vegvesen'),
         ' ', look);
     } else {
       const text = {
@@ -257,18 +261,23 @@ function customerAndRegistry(first) {
         error: 'Statens vegvesen lookup failed',
         not_configured: 'Statens vegvesen is not set up (System page)',
       }[d.svv_status] || 'Not looked up at Statens vegvesen yet';
-      svv = h('div', { class: `small ${d.svv_status === 'not_found' ? 'warn-text' : 'muted'}` },
+      eu = h('div', { class: `small ${d.svv_status === 'not_found' ? 'warn-text' : 'muted'}` },
         h('span', { title: d.svv_error || '' }, text), ' ', d.svv_status === 'not_configured' ? null : look);
     }
-    const match = NAME_MATCH[d.name_match];
+
     slot.replaceChildren(...[
+      h('div', { class: 'list-title' }, h('span', { class: 'mono strong delivery-reg' }, d.registration_number),
+        // Linked when the car is in Carbonara (same reg. no, or the VIN from Statens vegvesen).
+        d.vehicle_id && d.make ? [' ', h('a', { href: `#/vehicles/${d.vehicle_id}` }, vehicleTitle(d))]
+          : car ? [' ', h('span', { translate: 'no' }, car)] : null),
+      d.svv_vin ? h('div', {}, h('span', {}, 'VIN: '), h('span', { class: 'mono' }, d.svv_vin)) : null,
       h('div', {}, h('span', { translate: 'no' }, d.display_name || d.customer_name), ' · ',
         h('a', { href: `tel:${d.customer_phone}` }, d.customer_phone)),
       d.svv_name ? h('div', { class: 'small muted' }, h('span', {}, 'Name from Statens vegvesen'),
         match ? [' ', badge(match)] : null,
         d.name_match !== 'same' ? h('span', { class: 'block' }, h('span', {}, 'Typed by the customer: '),
           h('span', { translate: 'no' }, d.customer_name)) : null) : null,
-      svv,
+      eu,
     ].filter(Boolean));
   };
   draw(first);
@@ -277,10 +286,7 @@ function customerAndRegistry(first) {
 
 function deliveryDetails(d) {
   return [
-    h('div', { class: 'list-title' }, h('span', { class: 'mono strong delivery-reg' }, d.registration_number),
-      // The car is linked when it is in Carbonara (same reg. no, or the VIN from Statens vegvesen).
-      d.vehicle_id && d.make ? [' ', h('a', { href: `#/vehicles/${d.vehicle_id}` }, vehicleTitle(d))] : null),
-    customerAndRegistry(d),
+    cardTop(d),
     h('div', { class: 'muted small' }, `Delivered ${fmtDate(d.created_at)}`,
       d.kiosk_name ? h('span', { translate: 'no' }, ` · ${d.kiosk_name}`) : null),
     d.key_place ? h('div', {}, 'Key: ', h('strong', { translate: 'no' }, optText(d.key_place))) : null,

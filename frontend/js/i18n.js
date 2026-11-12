@@ -500,6 +500,7 @@ const NO = {
   'Not found at Statens vegvesen – check the registration number': 'Ikke funnet hos Statens vegvesen – sjekk registreringsnummeret',
   'Statens vegvesen lookup failed': 'Oppslaget hos Statens vegvesen feilet', 'Statens vegvesen is not set up (System page)': 'Statens vegvesen er ikke satt opp (System-siden)',
   'Not looked up at Statens vegvesen yet': 'Ikke slått opp hos Statens vegvesen ennå', 'Lookup failed': 'Oppslaget feilet',
+  'no deadline from Statens vegvesen': 'ingen frist fra Statens vegvesen',
   // ---- teams (System page)
   'Teams': 'Team', 'Add team': 'Legg til team', 'Team added': 'Team lagt til', 'No teams yet.': 'Ingen team ennå.', 'No members.': 'Ingen medlemmer.',
   'Remove from team': 'Fjern fra teamet', 'Add a user': 'Legg til en bruker', 'Add a user to the team': 'Legg til en bruker i teamet',

@@ -874,6 +874,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.25.1 | Top menu item "Deliveries" (Leveringer) to the Customer deliveries page |
 | 0.26.0 | **Teams:** system admins make named teams on the System page, pick the top menu items each team sees and place users (one team each); no team = Today only |
 | 0.26.1 | Fix: pages that redraw themselves (System → Teams, Customer deliveries, Test drive, vehicle page) only updated on the first action |
+| 0.26.2 | Customer delivery card: reg. no, VIN, name + phone, then EU-kontroll badge + date |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
