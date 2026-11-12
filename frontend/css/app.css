@@ -113,6 +113,12 @@ section { margin-bottom: 1rem; }
 .clock { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.15; white-space: nowrap; }
 .clock-time { font-weight: 700; font-variant-numeric: tabular-nums; }
 .clock-date { font-size: .78rem; color: var(--topbar-muted); }
+/* Wide screens: the clock's right edge lines up with the content column of <main> (max 980px incl.
+   16px padding, centred). Percent padding is of the body width, so the scrollbar doesn't skew it.
+   Only from 1440px: narrower, the extra padding would squeeze the nav into scrolling. */
+@media (min-width: 1440px) {
+  .topbar { padding-right: calc((100% - 948px) / 2); }
+}
 @media (max-width: 640px) {
   .topbar { gap: .6rem; }
   .brand-logo { height: 24px; }
