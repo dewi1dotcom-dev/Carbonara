@@ -103,7 +103,8 @@ function renderUser() {
   document.getElementById('nav-system').hidden = !me?.is_superadmin;
   if (!me) { userMenu.replaceChildren(); return; }
   userMenu.replaceChildren(h('button', {
-    class: 'user-btn', type: 'button', title: 'Account',
+    // Silhouette only (user's request); the name shows on hover and as the dialog title.
+    class: 'user-btn', type: 'button', title: me.name, 'aria-label': me.name, translate: 'no',
     onClick: () => {
       // Light / dark / device: applied at once, then saved on the account.
       const themeRow = h('div', { class: 'row' });
@@ -153,7 +154,7 @@ function renderUser() {
             },
           }, 'Log out'))));
     },
-  }, '👤 ', me.name));
+  }, '👤'));
 }
 
 let booting = null;

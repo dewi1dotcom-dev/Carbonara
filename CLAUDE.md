@@ -795,6 +795,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.22.5 | Login page: clock on the right, as when logged in |
 | 0.23.0 | **Brand look:** Carbonara logo top left, app icon as favicon, brand colours in light and dark theme |
 | 0.23.1 | Dark theme: brighter text colour (`#FFF9E8`) |
+| 0.23.2 | Top bar: account button is just the 👤 silhouette (name on hover); clock always rightmost |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
