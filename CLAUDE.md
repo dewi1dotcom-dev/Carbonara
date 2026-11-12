@@ -652,7 +652,7 @@ storage, periodic checklist, 12V battery form).
 - **Brand colours (0.23.0)** from the user's design files (logo + `carbonara-colors.txt`):
   - Light: background `#FBF7EC`, secondary surface `#EFE8D4` (top bar), text `#1C1B19`, muted
     `#4A4538`. Dark: background `#1C1B19`, secondary surface `#272522` (top bar, cards), text
-    `#F3E3B3`, muted `#C9BD9A`. Accent `#F5B800` in both (primary buttons, with dark text).
+    `#FFF9E8` (brighter since 0.23.1), muted `#C9BD9A`. Accent `#F5B800` in both (primary buttons, with dark text).
   - Yellow is too pale for text on the light background, so links / link buttons / focus use
     `--link` (dark gold `#7A5A00` in light, the accent in dark). Use `--link` for coloured text,
     `--primary` only for fills and borders, `--primary-text` on top of `--primary`.
@@ -794,6 +794,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.22.4 | Test drive return: "Received by" is the logged-in user (no dropdown; server takes it from the session) |
 | 0.22.5 | Login page: clock on the right, as when logged in |
 | 0.23.0 | **Brand look:** Carbonara logo top left, app icon as favicon, brand colours in light and dark theme |
+| 0.23.1 | Dark theme: brighter text colour (`#FFF9E8`) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
