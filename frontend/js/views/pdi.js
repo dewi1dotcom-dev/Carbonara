@@ -3,7 +3,7 @@
 // Also the banner at the top of the vehicle page and the PDI page (#/pdi).
 import { tr } from '../i18n.js';
 import {
-  api, append, boardBlock, boardRow, busy, carText, dateInput, fmtDate, h, openDialog, session, showError, spotLabel,
+  api, append, boardBlock, boardRow, busy, canSee, carText, dateInput, fmtDate, h, openDialog, session, showError, spotLabel,
   timeInput, toast,
 } from '../ui.js';
 
@@ -14,10 +14,10 @@ const sentText = (o, withTime = true) => (o.sent_via === 'print'
   ? `printed / PDF ${fmtDate(o.sent_at, withTime)}`
   : `sent ${fmtDate(o.sent_at, withTime)} to ${o.sent_to}`);
 
-const STATUS_TEXT = { draft: 'Not sent', sent: 'Sent – waiting for date', booked: 'PDI booked', done: 'PDI done', cancelled: 'Cancelled' };
-const STATUS_CLS = { draft: 'warn', sent: 'warn', booked: 'good', done: 'good', cancelled: '' };
+export const STATUS_TEXT = { draft: 'Not sent', sent: 'Sent – waiting for date', booked: 'PDI booked', done: 'PDI done', cancelled: 'Cancelled' };
+export const STATUS_CLS = { draft: 'warn', sent: 'warn', booked: 'good', done: 'good', cancelled: '' };
 
-function itemsList(o, opts) {
+export function itemsList(o, opts) {
   const lines = (o.items || []).map((i) => `${i.label}${i.choice ? `: ${i.choice}` : ''}`);
   const t = o.tyres || {};
   if (t.mode && t.mode !== 'none') {
@@ -51,7 +51,8 @@ export async function pdiListView(el) {
   const inWeek = new Set(d.week.map((o) => o.id));
   const now = Date.now();
   const link = (o, meta, cls = '') => boardRow(`#/vehicles/${o.vehicle_id}`, carText(o), meta, cls);
-  const when = (o) => [fmtDate(o.pdi_at), o.location_code && `spot ${o.location_code}`].filter(Boolean).join(' · ');
+  const when = (o) => [fmtDate(o.pdi_at), o.location_code && `spot ${o.location_code}`,
+    o.status === 'booked' && !o.pdi_confirmed_at && 'date not confirmed'].filter(Boolean).join(' · ');
   const booked = d.open.filter((o) => o.status === 'booked' && !inWeek.has(o.id));
   const passed = booked.filter((o) => new Date(o.pdi_at).getTime() < now);
   const later = booked.filter((o) => new Date(o.pdi_at).getTime() >= now);
@@ -59,7 +60,8 @@ export async function pdiListView(el) {
 
   append(el,
     h('div', { class: 'page-head' },
-      h('div', {}, h('h1', {}, 'PDI'), h('div', { class: 'muted' }, 'New cars booked for PDI at the workshop'))),
+      h('div', {}, h('h1', {}, 'PDI'), h('div', { class: 'muted' }, 'New cars booked for PDI at the workshop')),
+      canSee('pdi_orders') ? h('a', { class: 'btn', href: '#/pdi-orders' }, 'PDI orders with car details') : null),
     boardBlock('📅', 'This week', d.week.map((o) => link(o,
       [when(o), o.status === 'done' ? 'done' : !o.sent_at ? 'order not sent' : null].filter(Boolean).join(' · '),
       o.status === 'booked' && !o.sent_at ? 'bad' : '')), { cls: 'info', empty: 'No PDIs this week.' }),
@@ -89,6 +91,8 @@ export function pdiCard(v, data, opts, rerender) {
       h('div', { class: 'pdi-status' },
         h('span', { class: `badge ${STATUS_CLS[o.status]}` }, STATUS_TEXT[o.status]),
         o.status === 'booked' ? h('strong', {}, fmtDate(o.pdi_at)) : null,
+        o.status === 'booked' && o.expected_done_date ? h('span', { class: 'small' }, `expected done ${fmtDate(o.expected_done_date, false)}`) : null,
+        confirmedText(o),
         o.sent_at ? h('span', { class: 'muted small' }, o.sent_via === 'print'
           ? `Printed / PDF ${fmtDate(o.sent_at)}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}`
           : `Sent ${fmtDate(o.sent_at)} to ${o.sent_to}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}${o.sent_via === 'mail_app' ? ' (e-mail app)' : ''}`) : null),
@@ -110,6 +114,8 @@ export function pdiCard(v, data, opts, rerender) {
           // Always available: the date may be agreed with the workshop in person or by phone.
           h('button', { class: o.status === 'sent' ? 'btn primary' : 'btn', type: 'button', onClick: () => bookingDialog(o, rerender) },
             o.status === 'booked' ? 'Change PDI date' : 'Enter PDI date'),
+          o.status === 'booked' && !o.pdi_confirmed_at
+            ? h('button', { class: 'btn', type: 'button', onClick: () => confirmDate(o, rerender) }, '✓ Confirm PDI date') : null,
           o.status === 'booked' ? h('button', { class: o.prepared_at ? 'btn' : 'btn primary', type: 'button', onClick: () => prepDialog(o, rerender) },
             o.prepared_at ? 'Edit preparation' : 'Prepare for PDI') : null,
           o.status === 'booked' ? h('button', { class: 'btn', type: 'button', onClick: () => doneOrder(o, rerender) }, '✓ PDI done') : null)));
@@ -402,16 +408,24 @@ function sendDialog(o, opts, done) {
 
 // ---------------------------------------------------------------- booking / done / cancel
 
-function bookingDialog(o, done) {
+export function bookingDialog(o, done) {
   const [d0, t0] = (o.pdi_local || '').split('T');
   const date = dateInput({ id: 'pdi-date', required: true, value: d0 || '' });
   const time = timeInput({ id: 'pdi-time', required: true, value: (t0 || '').slice(0, 5) || '08:00' });
+  // Expected completion: the day after the PDI date, following the date until it is changed by hand.
+  const expected = dateInput({ id: 'pdi-expected-done', value: o.expected_done_date || (d0 ? nextDay(d0) : '') });
+  let followDate = !o.expected_done_date || !d0 || o.expected_done_date === nextDay(d0);
+  date.addEventListener('change', () => { if (followDate && date.value) expected.value = nextDay(date.value); });
+  expected.addEventListener('change', () => { followDate = false; });
   const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save PDI date');
   const form = h('form', {},
     h('p', { class: 'muted' }, 'Enter the date and time the workshop replied with. Everyone sees it on the Today page, with a reminder the day before.'),
     h('div', { class: 'grid' },
       h('div', { class: 'field' }, h('label', { for: 'pdi-date' }, 'Date'), date),
       h('div', { class: 'field' }, h('label', { for: 'pdi-time' }, 'Time'), time)),
+    h('div', { class: 'field' }, h('label', { for: 'pdi-expected-done' }, 'Expected completion date'), expected,
+      h('div', { class: 'muted small' }, 'The day after the PDI date unless you change it.')),
+    o.pdi_confirmed_at ? h('p', { class: 'muted small' }, 'A new date or time must be confirmed again.') : null,
     h('div', { class: 'actions spread' },
       o.pdi_at ? h('button', {
         class: 'link danger', type: 'button',
@@ -423,7 +437,7 @@ function bookingDialog(o, done) {
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(save, async () => {
-      await api.post(`/pdi/${o.id}/booking`, { date: date.value, time: time.value });
+      await api.post(`/pdi/${o.id}/booking`, { date: date.value, time: time.value, expected_done: expected.value || null });
       close();
       toast('PDI date saved', 'success');
       window.dispatchEvent(new Event('carbonara:pdi-changed'));
@@ -431,6 +445,31 @@ function bookingDialog(o, done) {
     });
   });
   const { close } = openDialog('PDI date and time', form);
+}
+
+/** "2026-11-13" → "2026-11-14" (calendar day, no time zone shift). */
+function nextDay(iso) {
+  const d = new Date(`${iso}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+/** "✓ Date confirmed 13.11.2026 14:02 by …" or "Date not confirmed" (booked orders only). */
+export function confirmedText(o) {
+  if (o.status !== 'booked') return null;
+  return o.pdi_confirmed_at
+    ? h('span', { class: 'badge good' }, `✓ Date confirmed ${fmtDate(o.pdi_confirmed_at)}${o.pdi_confirmed_by_name ? ` by ${o.pdi_confirmed_by_name}` : ''}`)
+    : h('span', { class: 'badge warn' }, 'Date not confirmed');
+}
+
+/** Confirm the PDI date (e.g. the workshop agrees to it). */
+export async function confirmDate(o, done) {
+  if (!confirm(`Confirm the PDI date ${fmtDate(o.pdi_at)}?`)) return;
+  try {
+    await api.post(`/pdi/${o.id}/confirm`);
+    toast('PDI date confirmed', 'success');
+    await done();
+  } catch (e) { showError(e); }
 }
 
 async function doneOrder(o, done) {

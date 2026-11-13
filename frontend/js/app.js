@@ -10,6 +10,7 @@ import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
 import { pdiListView, prepDialog } from './views/pdi.js';
+import { pdiOrdersView } from './views/pdiorders.js';
 import { settingsView } from './views/settings.js';
 import { storageSpotView, storageView } from './views/storage.js';
 import { storageReportView } from './views/storagecare.js';
@@ -22,6 +23,7 @@ const routes = [
   [/^#?\/?$/, todayView, 'today'],
   [/^#\/arrivals$/, arrivalsView, 'arrivals'],
   [/^#\/pdi$/, pdiListView, 'today'],
+  [/^#\/pdi-orders$/, pdiOrdersView, 'pdi_orders'], // PDI orders with car details + history, until registered and off site
   [/^#\/intake$/, intakeView, 'arrivals'],
   [/^#\/inspections\/(\d+)$/, inspectionView, 'arrivals'],
   [/^#\/vehicles$/, vehiclesView, 'vehicles'],

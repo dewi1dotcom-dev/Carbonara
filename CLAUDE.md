@@ -196,7 +196,7 @@ backend/
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, rentals, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup)
-  migrations/           001…030
+  migrations/           001…031
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -208,7 +208,7 @@ frontend/               no build step; plain ES modules
   js/i18n.js            English/Norwegian translator + dictionary
   js/diagram.js         car damage diagram
   js/views/             today (start page), dashboard (= arrivals list), intake, inspection,
-                        vehicles, documents, pdi (card + banner + PDI page), storagecare (card + check form
+                        vehicles, documents, pdi (card + banner + PDI page), pdiorders (PDI orders page), storagecare (card + check form
                         + report), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
                         login, settings, system
 ```
@@ -247,6 +247,7 @@ frontend/               no build step; plain ES modules
 | 028 | `generic_names` | stored tyre option `rbv_orders` → `workshop_orders` |
 | 029 | `rental_cars` | `rental_cars` (own fleet + SVV fields), `rentals`, `rental_access_log`; teams with Test drive get menu item `rental` |
 | 030 | `wheels` | `vehicles.wheels`, `rental_cars.wheels` ('summer' / 'winter', NULL = not recorded) |
+| 031 | `pdi_confirm` | `pdi_orders.expected_done_date / pdi_confirmed_at / pdi_confirmed_by`; teams with Vehicles get menu item `pdi_orders` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -256,7 +257,8 @@ frontend/               no build step; plain ES modules
 
 **Frontend routes:**
 - **Main pages:** `#/` Today · `#/arrivals` · `#/intake` · `#/inspections/:id` · `#/pdi` (PDI
-  page, opened from the "PDIs this week" tile and the vehicle banner; not in the top menu).
+  page, opened from the "PDIs this week" tile and the vehicle banner; not in the top menu) · `#/pdi-orders`
+  (PDI orders page, top menu "PDI orders").
 - **Vehicles:**
   - `#/vehicles` — filters are kept in the hash, e.g. `#/vehicles?q=…&status=…&condition=new`
   - `#/vehicles/:id`
@@ -603,7 +605,7 @@ the server is LAN-only, so no customer phones / public internet).
 
 **Teams (0.26.0)** (`teams`, `staff.team_id`; System page → Teams; `/system/teams`, `/system/staff/{id}/team`):
 - System admins create teams with a name, tick which **top menu items** each team sees
-  (`auth.MENU_ITEMS`: arrivals, vehicles, storage, testdrive, rental, deliveries, settings) and place users.
+  (`auth.MENU_ITEMS`: arrivals, vehicles, pdi_orders, storage, testdrive, rental, deliveries, settings) and place users.
   **One team per user.** Today is always shown; System stays system-admin-only.
 - `auth.menu_for()` puts `menu` on the session user (`/auth/state` → `me.menu`): system admins get
   everything; others Today + their team's items; **no team = Today only** (the user's choice). New staff
@@ -691,6 +693,28 @@ the server is LAN-only, so no customer phones / public internet).
   - PDI page `#/pdi` (`GET /pdi` → `open`, `week`, `done`): this week (booked + done; the same
     rule as the Today tile, `pdi.THIS_WEEK_SQL`), date passed, later, waiting for a date, not
     sent, recently done.
+- **Expected completion + confirmed date (0.30.0)** (migration 031):
+  - `pdi_orders.expected_done_date`: set with the PDI date ("Enter / Change PDI date"). It defaults to
+    **the day after the PDI date** (the user's rule): the dialog follows the date until it's changed by hand,
+    and the server uses date + 1 when none is sent (e.g. from "given to the workshop?"). Not before the PDI date.
+  - `pdi_confirmed_at / _by`: "✓ Confirm PDI date" (`POST /pdi/{id}/confirm`, booked orders only; event
+    `pdi_date_confirmed`). **A new date or time clears it**; saving the same date keeps it. Removing the date
+    clears both. Shown as a badge ("✓ Date confirmed …" / "Date not confirmed") on the PDI card and the PDI
+    orders page; the PDI page says "date not confirmed".
+- **PDI orders page (0.30.0)** (`#/pdi-orders`, `views/pdiorders.js`, `GET /pdi/orders`; top menu "PDI orders" /
+  "Nybilklargjøring", team menu key `pdi_orders`; migration 031 gave it to teams that see Vehicles):
+  - **Which cars:** every car with a PDI order (its open one, else its latest done one; cancelled ones don't
+    count) **until the car is both marked as registered and taken off site** (the user's rule). Open orders
+    first (by PDI date), then "PDI done – waiting for registration or delivery".
+  - **Per car:** make / model, reg. no, VIN, status + registered + wheels badges, the **right-side photo**
+    (`RIGHT_PHOTO_SQL`, tap to enlarge), colour / fuel / new-used / spot / wheels, the order (items, tyres,
+    other, note, preparation), PDI date, expected completion, sent / done, and the car's **history**
+    (folded; `EVENT_LABELS` / `eventDetail` exported from `vehicles.js`).
+  - **No documents (the user's rule):** no document list, and `document_*` events are left out of the history
+    on the server (`HIDDEN_EVENTS`).
+  - Actions: "✓ Confirm PDI date", "Enter / Change PDI date" (the same `bookingDialog`), "Open car page"
+    (only for teams that see Vehicles). Made so a workshop team can be given only this page, but like all
+    teams it's a menu filter, not a server lock.
 
 **Storage maintenance for new cars (0.13.0)** (`storagecare.py`, `routers/storage_care.py`,
 `views/storagecare.js`). Source: MG bulletin **SI-GI2022102501** plus MG's sheets (long-term
@@ -992,6 +1016,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.29.1 | Rental cars: wheels dropdown only in the Edit dialog (fleet list shows the wheels as text + warning badge) |
 | 0.29.2 | Rental cars: each car in the fleet list in its own box, with space under the heading |
 | 0.29.3 | Login always opens Today (the login screen resets the address to `#/`, so the next user doesn't land on the previous user's page, e.g. System) |
+| 0.30.0 | **PDI orders page** (top menu): cars with a PDI order until registered and off site, with car details, right-side photo, order and history (no documents); PDI **expected completion date** (default the day after) and **confirm PDI date** (migration 031) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

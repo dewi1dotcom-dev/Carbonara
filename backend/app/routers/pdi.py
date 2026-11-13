@@ -11,7 +11,8 @@ from pydantic import BaseModel, Field, field_validator
 
 from .. import mailer
 from ..auth import require_admin
-from ..common import bad_request, conflict, log_event, not_found, place_in_location
+from ..common import (RIGHT_PHOTO_SQL, bad_request, conflict, log_event, not_found, place_in_location, tyre_season,
+                      tyre_warning)
 from ..config import settings
 from ..db import get_conn
 
@@ -57,6 +58,7 @@ class SendIn(BaseModel):
 class BookingIn(BaseModel):
     date: Optional[dt.date] = None   # None clears the booking
     time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    expected_done: Optional[dt.date] = None  # None = the day after the PDI date
 
 
 class ListIn(BaseModel):
@@ -87,8 +89,10 @@ class ListPatch(BaseModel):
 ORDER_SELECT = """
     SELECT o.*, (o.pdi_at AT TIME ZONE 'Europe/Oslo') AS pdi_local,
            cb.name AS created_by_name, sb.name AS sent_by_name, bb.name AS booked_by_name, db.name AS done_by_name,
+           cf.name AS pdi_confirmed_by_name,
            (o.sent_at IS NOT NULL AND o.updated_at > o.sent_at + interval '2 seconds') AS changed_since_sent,
            v.vin, v.make, v.model, v.model_year, v.color, v.registration_number, v.condition, v.status AS vehicle_status,
+           v.fuel_type, v.wheels, v.registered_marked_at,
            loc.id AS location_id, loc.code AS location_code,
            pp.name AS prep_plate_name, pb.name AS prepared_by_name
       FROM pdi_orders o
@@ -100,7 +104,8 @@ ORDER_SELECT = """
       LEFT JOIN staff sb ON sb.id = o.sent_by
       LEFT JOIN staff bb ON bb.id = o.booked_by
       LEFT JOIN staff db ON db.id = o.done_by
-      LEFT JOIN staff pb ON pb.id = o.prepared_by"""
+      LEFT JOIN staff pb ON pb.id = o.prepared_by
+      LEFT JOIN staff cf ON cf.id = o.pdi_confirmed_by"""
 
 
 # PDIs booked or done in the current week (Monday–Sunday, Oslo time).
@@ -303,18 +308,74 @@ def set_booking(order_id: int, body: BookingIn, request: Request, conn=Depends(g
     """The workshop's reply: date and time of the PDI (entered by staff)."""
     row = _open_order(conn, order_id)
     if body.date is None:
-        conn.execute("UPDATE pdi_orders SET pdi_at = NULL, booked_by = NULL, "
+        conn.execute("UPDATE pdi_orders SET pdi_at = NULL, booked_by = NULL, expected_done_date = NULL, "
+                     "pdi_confirmed_at = NULL, pdi_confirmed_by = NULL, "
                      "status = CASE WHEN sent_at IS NULL THEN 'draft' ELSE 'sent' END WHERE id = %s", (order_id,))
         log_event(conn, row["vehicle_id"], "pdi_booking_cleared", staff_id=_me(request))
         return _order(conn, order_id)
+    expected = body.expected_done or body.date + dt.timedelta(days=1)
+    if expected < body.date:
+        raise bad_request("The expected completion date can't be before the PDI date")
     local = f"{body.date.isoformat()} {body.time or '08:00'}"
+    # A new date or time needs a new confirmation; the same one keeps it.
     conn.execute(
-        """UPDATE pdi_orders SET pdi_at = (%s::timestamp AT TIME ZONE 'Europe/Oslo'), booked_by = %s, status = 'booked'
-            WHERE id = %s""",
-        (local, _me(request), order_id),
+        """UPDATE pdi_orders o SET pdi_at = x.at, booked_by = %s, status = 'booked', expected_done_date = %s,
+                  pdi_confirmed_at = CASE WHEN o.pdi_at = x.at THEN o.pdi_confirmed_at END,
+                  pdi_confirmed_by = CASE WHEN o.pdi_at = x.at THEN o.pdi_confirmed_by END
+             FROM (SELECT (%s::timestamp AT TIME ZONE 'Europe/Oslo') AS at) x
+            WHERE o.id = %s""",
+        (_me(request), expected, local, order_id),
     )
-    log_event(conn, row["vehicle_id"], "pdi_booked", staff_id=_me(request), data={"pdi_at": local})
+    log_event(conn, row["vehicle_id"], "pdi_booked", staff_id=_me(request),
+              data={"pdi_at": local, "expected_done": expected})
     return _order(conn, order_id)
+
+
+@router.post("/pdi/{order_id}/confirm")
+def confirm_date(order_id: int, request: Request, conn=Depends(get_conn)):
+    """Confirm the PDI date (e.g. the workshop agrees to it). A new date clears it."""
+    row = _open_order(conn, order_id)
+    if row["status"] != "booked" or row["pdi_at"] is None:
+        raise conflict("Enter the PDI date first")
+    conn.execute("UPDATE pdi_orders SET pdi_confirmed_at = now(), pdi_confirmed_by = %s WHERE id = %s",
+                 (_me(request), order_id))
+    log_event(conn, row["vehicle_id"], "pdi_date_confirmed", staff_id=_me(request),
+              data={"pdi_at": row["pdi_at"].isoformat()})
+    return _order(conn, order_id)
+
+
+# Events left out of the PDI orders page: documents (contracts hold personal data;
+# the page shows no documents).
+HIDDEN_EVENTS = ("document_added", "document_updated", "document_deleted")
+
+
+@router.get("/pdi/orders")
+def pdi_orders_page(conn=Depends(get_conn)):
+    """The PDI orders page: every car with a PDI order (open or done; cancelled
+    ones don't count) until the car is both marked as registered and taken off
+    site. Car details, the right-side photo, the order and the car's history.
+    No documents."""
+    rows = conn.execute(
+        ORDER_SELECT.replace("SELECT o.*,", f"SELECT o.*, {RIGHT_PHOTO_SQL},", 1) + """
+         WHERE v.deleted_at IS NULL
+           AND o.id = (SELECT o2.id FROM pdi_orders o2 WHERE o2.vehicle_id = v.id AND o2.status <> 'cancelled'
+                        ORDER BY (o2.status <> 'done') DESC, o2.created_at DESC LIMIT 1)
+           AND NOT (v.registered_marked_at IS NOT NULL AND v.status = 'off_site')
+         ORDER BY (o.status = 'done'), o.pdi_at NULLS LAST, o.created_at""").fetchall()
+    events: dict[int, list] = {r["vehicle_id"]: [] for r in rows}
+    if rows:
+        for e in conn.execute(
+                """SELECT e.*, s.name AS staff_name
+                     FROM vehicle_events e LEFT JOIN staff s ON s.id = e.staff_id
+                    WHERE e.vehicle_id = ANY(%s) AND e.event_type <> ALL(%s)
+                    ORDER BY e.occurred_at DESC, e.id DESC""",
+                (list(events), list(HIDDEN_EVENTS))).fetchall():
+            events[e["vehicle_id"]].append(e)
+    season = tyre_season()
+    for r in rows:
+        r["events"] = events[r["vehicle_id"]]
+        r["tyre_warning"] = tyre_warning(r["wheels"], season) if r["vehicle_status"] != "off_site" else None
+    return rows
 
 
 @router.post("/pdi/{order_id}/done")

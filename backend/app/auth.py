@@ -32,7 +32,7 @@ STAFF_PUBLIC = ("id, name, first_name, last_name, phone, active, is_admin, is_su
 
 # Top menu items a team can be given (keys = data-nav in index.html). Today is
 # always there; System is for system admins only, so neither is listed.
-MENU_ITEMS = ("arrivals", "vehicles", "storage", "testdrive", "rental", "deliveries", "settings")
+MENU_ITEMS = ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive", "rental", "deliveries", "settings")
 
 
 def menu_for(staff: dict) -> list[str]:

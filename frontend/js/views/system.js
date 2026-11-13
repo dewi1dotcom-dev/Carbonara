@@ -41,7 +41,7 @@ export async function systemView(el, _params = [], host = el) {
 
 // Top menu items a team can be given (server: auth.MENU_ITEMS). Today is always there.
 const MENU_LABEL = {
-  arrivals: 'Arrivals', vehicles: 'Vehicles', storage: 'Storage', testdrive: 'Test drive', rental: 'Rental cars',
+  arrivals: 'Arrivals', vehicles: 'Vehicles', pdi_orders: 'PDI orders', storage: 'Storage', testdrive: 'Test drive', rental: 'Rental cars',
   deliveries: 'Deliveries', settings: 'Settings',
 };
 

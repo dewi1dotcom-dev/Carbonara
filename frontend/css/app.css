@@ -679,6 +679,17 @@ input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospa
 /* Fleet list: each car in its own box, set apart from the heading and the Add button. */
 .rc-list { margin-top: 1rem; gap: .75rem; }
 .rc-box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem 1rem; }
+
+/* PDI orders page: one card per car, text on the left and the right-side photo on the right. */
+.po-group { display: flex; align-items: center; gap: .5rem; margin: 1.5rem 0 .75rem; }
+.po-list { display: flex; flex-direction: column; gap: 1rem; }
+.po-group .count { font-size: .85rem; font-weight: 500; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: .1rem .55rem; }
+.po-head { display: flex; gap: 1rem; align-items: flex-start; margin-bottom: .75rem; }
+.po-head .list-title { margin: 0; font-size: 1.15rem; }
+.po-card h3 { margin: 1rem 0 .5rem; }
+.po-card .po-head h3 { margin: 0; }
+.po-card .kv { margin-bottom: .5rem; }
+button.po-photo { padding: 0; cursor: zoom-in; font: inherit; color: inherit; }
 input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform: uppercase;
   letter-spacing: .06em; width: auto; flex: 1 1 8rem; max-width: 12rem; }
 .field .row:has(.rc-reg-input) { margin-top: 0; align-items: center; }

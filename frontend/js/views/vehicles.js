@@ -83,7 +83,7 @@ export function vehicleCard(v, extra = null) {
         : h('span', { class: 'car-photo-none muted small' }, 'No photo')));
 }
 
-const EVENT_LABELS = {
+export const EVENT_LABELS = {
   vehicle_created: 'Added to the system',
   arrival_inspection_started: 'Arrival inspection started',
   arrival_inspection_completed: 'Arrival inspection completed',
@@ -107,6 +107,7 @@ const EVENT_LABELS = {
   pdi_order_sent: 'PDI order sent',
   pdi_booked: 'PDI booked',
   pdi_booking_cleared: 'PDI date removed',
+  pdi_date_confirmed: 'PDI date confirmed',
   pdi_done: 'PDI done',
   pdi_prepared: 'Prepared for PDI',
   pdi_cancelled: 'PDI order cancelled',
@@ -132,7 +133,7 @@ const changeText = (obj) => Object.entries(obj || {})
   .map(([k, [a, b]]) => [k, k === 'wheels' ? [WHEELS[a] ?? a, WHEELS[b] ?? b] : [a, b]])
   .map(([k, [a, b]]) => `${FIELD_LABELS[k] ?? k}: ${a ?? '–'} → ${b ?? '–'}`).join(', ');
 
-function eventDetail(e) {
+export function eventDetail(e) {
   const d = e.data || {};
   switch (e.event_type) {
     case 'placed_in_storage': return `Spot ${d.location_code}`;
@@ -141,8 +142,10 @@ function eventDetail(e) {
         d.resent ? 'sent again' : null].filter(Boolean).join(' · ');
     case 'pdi_booked': {
       const [day, time] = String(d.pdi_at || '').split(' ');
-      return day ? `${fmtDate(day, false)} ${time || ''}`.trim() : '';
+      const when = day ? `${fmtDate(day, false)} ${time || ''}`.trim() : '';
+      return [when, d.expected_done && `expected done ${fmtDate(d.expected_done, false)}`].filter(Boolean).join(' · ');
     }
+    case 'pdi_date_confirmed': return d.pdi_at ? fmtDate(d.pdi_at) : '';
     case 'storage_check':
       return [d.kind === 'arrival' ? 'First storage check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
         d.v12 != null && `12V ${d.v12} V`, d.battery_action && d.battery_action !== 'none' && `battery ${d.battery_action}`,
