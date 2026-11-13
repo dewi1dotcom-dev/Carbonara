@@ -109,6 +109,7 @@ export const EVENT_LABELS = {
   pdi_booking_cleared: 'PDI date removed',
   pdi_date_confirmed: 'PDI date confirmed',
   pdi_done: 'PDI done',
+  pdi_sheet_made: 'PDI sheet made',
   pdi_prepared: 'Prepared for PDI',
   pdi_cancelled: 'PDI order cancelled',
   storage_check: 'Storage check',
@@ -146,6 +147,8 @@ export function eventDetail(e) {
       return [when, d.expected_done && `expected done ${fmtDate(d.expected_done, false)}`].filter(Boolean).join(' · ');
     }
     case 'pdi_date_confirmed': return d.pdi_at ? fmtDate(d.pdi_at) : '';
+    case 'pdi_done': return [d.km != null && fmtKm(d.km), d.sheet && 'PDI sheet filled in'].filter(Boolean).join(' · ');
+    case 'pdi_sheet_made': return [d.km != null && fmtKm(d.km), d.again && 'made again'].filter(Boolean).join(' · ');
     case 'storage_check':
       return [d.kind === 'arrival' ? 'First storage check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
         d.v12 != null && `12V ${d.v12} V`, d.battery_action && d.battery_action !== 'none' && `battery ${d.battery_action}`,

@@ -9,12 +9,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, field_validator
 
-from .. import mailer
+from .. import mailer, pdisheet
 from ..auth import require_admin
 from ..common import (RIGHT_PHOTO_SQL, bad_request, conflict, log_event, not_found, place_in_location, tyre_season,
                       tyre_warning)
 from ..config import settings
 from ..db import get_conn
+from . import pdi_sheets
 
 log = logging.getLogger("carbonara.pdi")
 router = APIRouter(tags=["pdi"])
@@ -378,13 +379,33 @@ def pdi_orders_page(conn=Depends(get_conn)):
     return rows
 
 
+class DoneIn(BaseModel):
+    """Optional: fill in the model's PDI sheet at the same time (see pdi_sheets)."""
+    template_id: Optional[int] = None
+    km: Optional[int] = Field(None, ge=0, le=2_000_000)
+    date: Optional[dt.date] = None
+    stamp_id: Optional[int] = None
+
+
 @router.post("/pdi/{order_id}/done")
-def mark_done(order_id: int, request: Request, conn=Depends(get_conn)):
+def mark_done(order_id: int, request: Request, body: Optional[DoneIn] = None, conn=Depends(get_conn)):
     row = _open_order(conn, order_id)
-    conn.execute("UPDATE pdi_orders SET status = 'done', done_at = now(), done_by = %s WHERE id = %s",
-                 (_me(request), order_id))
-    log_event(conn, row["vehicle_id"], "pdi_done", staff_id=_me(request))
-    return _order(conn, order_id)
+    body = body or DoneIn()
+    conn.execute("UPDATE pdi_orders SET status = 'done', done_at = now(), done_by = %s, done_km = %s WHERE id = %s",
+                 (_me(request), body.km, order_id))
+    old = None
+    if body.template_id is not None:
+        if body.km is None:
+            raise bad_request("Enter the mileage for the PDI sheet")
+        old = pdi_sheets.make_sheet(conn, order_id, request.state.staff, pdi_sheets.SheetIn(
+            template_id=body.template_id, km=body.km, date=body.date or dt.date.today(), stamp_id=body.stamp_id))
+    log_event(conn, row["vehicle_id"], "pdi_done", staff_id=_me(request),
+              data={"km": body.km, "sheet": body.template_id is not None})
+    result = _order(conn, order_id)
+    if old:
+        conn.commit()  # remove the old file only once the change is final
+        pdisheet.remove(old, "pdf")
+    return result
 
 
 # --------------------------------------------------------------------------- #

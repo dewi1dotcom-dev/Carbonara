@@ -6,6 +6,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg import errors
 
+from .. import pdisheet
 from ..auth import PIN_MAX, PIN_MIN, STAFF_PUBLIC, hash_pin, require_admin, valid_pin
 from ..common import (RIGHT_PHOTO_SQL, add_tyre_warnings, bad_request, cap_name, clean_phone, conflict, insert_row, log_event, not_found, patch_fields,
                       place_in_location, update_row)
@@ -61,16 +62,20 @@ def delete_staff(staff_id: int, conn=Depends(get_conn), admin=Depends(require_ad
     try:
         with conn.transaction():  # savepoint: a reference anywhere makes this fail
             conn.execute("DELETE FROM staff WHERE id = %s", (staff_id,))
-        return {"result": "removed"}
+        result = "removed"
     except errors.ForeignKeyViolation:
-        pass
-    conn.execute(
-        """UPDATE staff SET deleted_at = now(), deleted_by = %s, phone = NULL, pin_hash = NULL,
-                  pin_failures = 0, pin_locked_until = NULL, is_admin = false, is_superadmin = false
-            WHERE id = %s""",
-        (admin["id"], staff_id),
-    )
-    return {"result": "hidden"}
+        # The signature goes too (sheets already signed keep it in their own PDF).
+        conn.execute(
+            """UPDATE staff SET deleted_at = now(), deleted_by = %s, phone = NULL, pin_hash = NULL,
+                      pin_failures = 0, pin_locked_until = NULL, is_admin = false, is_superadmin = false,
+                      signature_key = NULL, signature_updated_at = NULL
+                WHERE id = %s""",
+            (admin["id"], staff_id),
+        )
+        result = "hidden"
+    conn.commit()  # remove the signature file only once the change is final
+    pdisheet.remove(target["signature_key"], "png")
+    return {"result": result}
 
 
 @router.patch("/staff/{staff_id}")

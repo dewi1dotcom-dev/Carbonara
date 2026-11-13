@@ -11,6 +11,7 @@ import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
 import { pdiListView, prepDialog } from './views/pdi.js';
 import { pdiOrdersView } from './views/pdiorders.js';
+import { signatureDialog } from './views/pdisheet.js';
 import { settingsView } from './views/settings.js';
 import { storageSpotView, storageView } from './views/storage.js';
 import { storageReportView } from './views/storagecare.js';
@@ -163,6 +164,8 @@ function renderUser() {
               const d = openDialog('Change PIN', changePinForm(() => { d.close(); toast('PIN changed', 'success'); }));
             },
           }, 'Change PIN'),
+          // Put on the PDI sheets this person marks as done (also under Settings).
+          h('button', { class: 'btn', type: 'button', onClick: () => { close(); signatureDialog(); } }, 'My signature'),
           h('button', {
             class: 'btn danger', type: 'button',
             onClick: async () => {

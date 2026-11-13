@@ -9,10 +9,12 @@ WORKDIR /app
 COPY backend/requirements.txt backend/requirements.txt
 # RapidOCR is installed without its own dependency list (it would pull the
 # full, GUI-enabled opencv-python); its real dependencies are in
-# requirements.txt. The last line fails the build early if OCR can't load.
+# requirements.txt. The last two lines fail the build early if OCR or the PDF
+# libraries (PDI sheets) can't load.
 RUN pip install --no-cache-dir -r backend/requirements.txt \
  && pip install --no-cache-dir --no-deps rapidocr-onnxruntime==1.3.24 \
- && python -c "import rapidocr_onnxruntime, cv2, onnxruntime; print('OCR runtime OK')"
+ && python -c "import rapidocr_onnxruntime, cv2, onnxruntime; print('OCR runtime OK')" \
+ && python -c "import pypdf, reportlab, pypdfium2; print('PDF libraries OK')"
 
 COPY backend backend
 COPY frontend frontend

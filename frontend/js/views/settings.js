@@ -1,4 +1,5 @@
 import { api, busy, fmtDate, h, nameInput, openDialog, session, showError, spotLabel, toast } from '../ui.js';
+import { renderPdiSheetSettings, signatureCard } from './pdisheet.js';
 
 export async function settingsView(el) {
   const staffBox = h('div');
@@ -7,14 +8,17 @@ export async function settingsView(el) {
   const retentionBox = h('div');
   const pdiBox = h('div');
   const plateBox = h('div');
+  const sheetBox = h('div'); // PDI sheets: each model's PDF form + company stamps
   // Customer car delivery has its own page (deliveries + kiosk setup); linked from here.
   const deliveryBox = h('section', { class: 'card' },
     h('h2', {}, 'Customer car delivery'),
     h('p', { class: 'muted small' },
       'The kiosk form where customers register the car they drop off: maps, key places, tick boxes and kiosk tablets.'),
     h('a', { href: '#/deliveries' }, 'Open Customer deliveries →'));
-  el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), staffBox, locBox, plateBox, pdiBox, deliveryBox, registryBox, retentionBox);
-  await Promise.all([renderStaff(), renderLocations(), renderPlates(), renderPdiLists(), renderRegistry(), renderRetention()]);
+  el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), signatureCard(), staffBox, locBox, plateBox, pdiBox, sheetBox,
+    deliveryBox, registryBox, retentionBox);
+  await Promise.all([renderStaff(), renderLocations(), renderPlates(), renderPdiLists(), renderPdiSheetSettings(sheetBox),
+    renderRegistry(), renderRetention()]);
 
   // Trade plates (prøvekjennemerker) for test drives. Named freely, so a set can
   // be renamed when a plate is replaced. A set is on at most one car at a time.

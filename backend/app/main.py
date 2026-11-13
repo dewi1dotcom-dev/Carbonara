@@ -11,8 +11,8 @@ from .config import settings
 from .db import pool
 from .migrate import run_migrations
 from .auth import require_staff
-from .routers import (admin, dashboard, deliveries, documents, inspections, pdi, rentals, session, storage_care,
-                      system, testdrives, vehicles, vin)
+from .routers import (admin, dashboard, deliveries, documents, inspections, pdi, pdi_sheets, rentals, session,
+                      storage_care, system, testdrives, vehicles, vin)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -33,8 +33,8 @@ app = FastAPI(title="Carbonara", version=settings.version, lifespan=lifespan)
 # form (/api/kiosk/…: a kiosk tablet or staff, checked per route).
 app.include_router(session.router, prefix="/api")
 app.include_router(deliveries.kiosk_router, prefix="/api")
-for module in (admin, vin, inspections, vehicles, testdrives, rentals, pdi, dashboard, system, storage_care, documents,
-               deliveries):
+for module in (admin, vin, inspections, vehicles, testdrives, rentals, pdi, pdi_sheets, dashboard, system, storage_care,
+               documents, deliveries):
     app.include_router(module.router, prefix="/api", dependencies=[Depends(require_staff)])
 
 

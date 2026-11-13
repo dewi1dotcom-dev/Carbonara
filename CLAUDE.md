@@ -117,6 +117,7 @@ Dockerfile notes. These were learned the hard way, so don't undo them:
   own dependency list pulls in the GUI `opencv-python` and numpy 2.
 - **numpy must stay at 1.26.4 (< 2).** Use `opencv-python-headless`, never `opencv-python`.
 - System packages: `tesseract-ocr libzbar0 libdmtx0b`.
+- PDI sheets need `pypdf`, `reportlab`, `pypdfium2` (pip wheels, no system packages).
 - `BUILD_TIME` is stamped in ISO UTC at build time; `VERSION` is copied in. Both are served at
   `/api/version`.
 
@@ -190,13 +191,16 @@ backend/
   app/licenselib.py     name from a driving licence photo (fields 1./2., restores dropped spaces)
   app/storagecare.py    MG storage programme: checklist ITEMS, schedule (next_check)
   app/mailer.py         SMTP sending (PDI orders)
+  app/pdisheet.py       PDI sheets: fill a model's PDF form (reportlab overlay + pypdf), page pictures (pypdfium2),
+                        OCR field suggestions, stamp / signature pictures
   app/photostore.py     original + 1600px + 400px JPEG
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
                         test drive + rental customer purge, rental car SVV refresh, received customer deliveries)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, rentals, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
-                        deliveries (kiosk form + staff list + kiosk setup)
-  migrations/           001…031
+                        deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
+                        the order's sheet)
+  migrations/           001…032
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -208,7 +212,8 @@ frontend/               no build step; plain ES modules
   js/i18n.js            English/Norwegian translator + dictionary
   js/diagram.js         car damage diagram
   js/views/             today (start page), dashboard (= arrivals list), intake, inspection,
-                        vehicles, documents, pdi (card + banner + PDI page), pdiorders (PDI orders page), storagecare (card + check form
+                        vehicles, documents, pdi (card + banner + PDI page), pdiorders (PDI orders page), pdisheet (PDI sheets,
+                        stamps, signature, PDI done dialog), storagecare (card + check form
                         + report), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
                         login, settings, system
 ```
@@ -248,6 +253,7 @@ frontend/               no build step; plain ES modules
 | 029 | `rental_cars` | `rental_cars` (own fleet + SVV fields), `rentals`, `rental_access_log`; teams with Test drive get menu item `rental` |
 | 030 | `wheels` | `vehicles.wheels`, `rental_cars.wheels` ('summer' / 'winter', NULL = not recorded) |
 | 031 | `pdi_confirm` | `pdi_orders.expected_done_date / pdi_confirmed_at / pdi_confirmed_by`; teams with Vehicles get menu item `pdi_orders` |
+| 032 | `pdi_sheets` | `pdi_templates` (model PDFs + field positions), `pdi_stamps`, `staff.signature_key`, `pdi_orders.done_km / sheet_*` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -596,7 +602,7 @@ the server is LAN-only, so no customer phones / public internet).
 
 **Roles:**
 - **Staff:** everything day-to-day.
-- **Admin:** staff/PINs, PDI lists, deleting spots, cancelling storage checks, delivery kiosk setup
+- **Admin:** staff/PINs, PDI lists, PDI sheets + stamps, deleting spots, cancelling storage checks, delivery kiosk setup
   (maps, key places, tick boxes, kiosk tablets).
 - **System admin** (`is_superadmin`; always also admin): the System page, and granting or
   removing system admin. Only a system admin can change another system admin.
@@ -715,6 +721,41 @@ the server is LAN-only, so no customer phones / public internet).
   - Actions: "✓ Confirm PDI date", "Enter / Change PDI date" (the same `bookingDialog`), "Open car page"
     (only for teams that see Vehicles). Made so a workshop team can be given only this page, but like all
     teams it's a menu filter, not a server lock.
+- **PDI sheets (0.31.0)** (migration 032; `app/pdisheet.py`, `routers/pdi_sheets.py`, `views/pdisheet.js`):
+  - **What:** when a PDI is marked done, the **car model's own PDI form (a PDF)** is filled in with reg. no
+    (formatted "AB 12345"; empty if not registered yet), VIN, mileage, date, the signer's name, a **company
+    stamp** and the **signature of the person marking it done**, and stored on the order
+    (`pdi_orders.sheet_file_key`, `done_km`, `sheet_template_id / _stamp_id / _date / _made_at / _made_by`).
+  - **"✓ PDI done" dialog** (`doneDialog`, on the PDI card and the PDI orders page, booked orders): PDI sheet
+    (the template matching the car preselected; "No PDI sheet" allowed), mileage (required with a sheet; the
+    arrival inspection's km shown as a hint), date, stamp (default preselected), your signature (or "Add my
+    signature"). One request: `POST /pdi/{id}/done` with `{template_id, km, date, stamp_id}`; nothing is saved if
+    the sheet fails. Afterwards "📄 Open PDI sheet" (a tap, so no popup blocker).
+  - **Done orders:** "📄 PDI sheet" (`GET /pdi/{id}/sheet`, inline, `no-store`) and "Make PDI sheet" / "Make
+    sheet again" (`POST /pdi/{id}/sheet`, e.g. once the car has its reg. no; the old file is removed after
+    commit; event `pdi_sheet_made`). The signer is whoever makes the sheet.
+  - **Templates = the user's chosen approach "tap positions" (Settings → PDI sheets, admins):** upload the
+    model's PDF with a name and **car models** (comma-separated; `match_template` picks the longest name found in
+    make + model, ignoring case/spaces/punctuation). Then "Place fields" (`placeDialog`): pick a field, tap the
+    page picture (`GET /pdi-templates/{id}/pages/{n}`, rendered by pypdfium2 at 1400 px and cached as
+    `<key>_p<n>.png`). Text: x, y = start of the text, middle of the line, size in pt. Stamp / signature: centred,
+    `w` = share of the page width. Stored as shares of the page in `pdi_templates.fields`, so it doesn't depend on
+    the picture size. **OCR suggests positions** (`suggest`: RapidOCR `scene_text` on the page pictures, labels like
+    VIN / Reg.nr / Km / Dato / Signatur / Stempel in `LABELS`, the shortest matching text wins) automatically on the
+    first open and with "Suggest positions"; they only fill empty fields. "Test" (`GET /pdi-templates/{id}/test`)
+    fills it with made-up values, the default stamp and your own signature.
+  - **Filling** (`fill`): a reportlab overlay per page merged onto the original with pypdf (the form is never
+    changed); rotated pages are straightened first (`transfer_rotation_to_content`); Helvetica (æøå OK).
+  - **Stamps** (`pdi_stamps`, admins; several, one default) and **my signature** (`staff.signature_key`; every user
+    their own, drawn on a signature pad or an uploaded picture; Settings → My signature and the 👤 menu;
+    `GET/PUT/DELETE /my-signature`, never readable by others). Uploaded pictures go through `clean_image`:
+    near-white → transparent, margins cropped, PNG.
+  - **Files** (photostore's `{file_key, original_ext}` pattern): `pdi/templates/…pdf`, `pdi/stamps/…png`,
+    `pdi/signatures/…png`, `pdi/sheets/yyyy/mm/…pdf`. `purge_vehicle` deletes the car's sheets; deleting a staff
+    member deletes their signature (signed sheets keep it in their own PDF). A template or stamp used by a sheet is
+    only hidden (`deleted_at`) when removed.
+  - **Build:** `pypdf`, `reportlab`, `pypdfium2` (BSD / Apache) in `requirements.txt`; the Dockerfile's import check
+    covers them.
 
 **Storage maintenance for new cars (0.13.0)** (`storagecare.py`, `routers/storage_care.py`,
 `views/storagecare.js`). Source: MG bulletin **SI-GI2022102501** plus MG's sheets (long-term
@@ -940,6 +981,8 @@ ORM. Match the surrounding code. Comments explain *why*.
   (LSJWS4090SZ716243, 09.11.2026 23:13). It should be cancelled ("Test"), which moves the next
   check to 09.12.2026.
 - **Andy's admin status:** unconfirmed (see *Working with the user*).
+- **PDI sheets (0.31.0):** upload each model's PDI PDF (Settings → PDI sheets) and place the fields, upload the
+  company stamp(s), and have everyone who marks PDIs done add their signature (👤 menu → My signature).
 - **Delivery kiosk (0.24.0):** upload a map picture of the lot, check the key places / tick boxes, and
   set up the tablet (Customer deliveries → Kiosk setup).
 
@@ -1017,6 +1060,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.29.2 | Rental cars: each car in the fleet list in its own box, with space under the heading |
 | 0.29.3 | Login always opens Today (the login screen resets the address to `#/`, so the next user doesn't land on the previous user's page, e.g. System) |
 | 0.30.0 | **PDI orders page** (top menu): cars with a PDI order until registered and off site, with car details, right-side photo, order and history (no documents); PDI **expected completion date** (default the day after) and **confirm PDI date** (migration 031) |
+| 0.31.0 | **PDI sheets:** "PDI done" dialog fills in the model's own PDF form (reg. no, VIN, mileage, date, stamp, signature) and stores it on the order; templates uploaded per model with tap-to-place fields and OCR suggestions; company stamps; each user's own signature (drawn or uploaded) (migration 032) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

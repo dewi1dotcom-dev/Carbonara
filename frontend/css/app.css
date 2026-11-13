@@ -30,6 +30,12 @@
   --warn-bg: #fef9c3;
   --bad: #b91c1c;
   --bad-bg: #fee2e2;
+  /* PDI sheets: the PDF page is white paper in both themes; field markers in blue. */
+  --paper: #fff;
+  --paper-ink: #4A4538;
+  --mark: #1d4ed8;
+  --mark-bg: rgb(29 78 216 / .08);
+  --mark-line: rgb(29 78 216 / .55);
   --sev-minor: #eab308;
   --sev-moderate: #f97316;
   --sev-severe: #dc2626;
@@ -67,6 +73,11 @@
     --warn-bg: #2a2306;
     --bad: #f87171;
     --bad-bg: #3b0d0d;
+    --paper: #fff;
+    --paper-ink: #4A4538;
+    --mark: #1d4ed8;
+    --mark-bg: rgb(29 78 216 / .08);
+    --mark-line: rgb(29 78 216 / .55);
     --panel: #3D3A34;
     --panel-hover: #6B5410;
     --topbar: #272522;
@@ -690,6 +701,36 @@ input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospa
 .po-card .po-head h3 { margin: 0; }
 .po-card .kv { margin-bottom: .5rem; }
 button.po-photo { padding: 0; cursor: zoom-in; font: inherit; color: inherit; }
+
+/* PDI sheets. Signatures and stamps are dark ink on white in both themes. */
+.sig-pad { display: block; width: 100%; aspect-ratio: 3 / 1; background: var(--paper); border: 1px dashed var(--border);
+  border-radius: 8px; touch-action: none; cursor: crosshair; }
+.sig-current { background: var(--paper); border: 1px solid var(--border); border-radius: 8px; padding: .5rem; display: inline-block;
+  max-width: 100%; }
+.sig-current img { display: block; max-height: 90px; max-width: 100%; }
+.sig-current p { margin: 0; color: var(--paper-ink); }
+.stamp-row { display: inline-flex; align-items: center; gap: .6rem; flex-wrap: wrap; }
+.stamp-thumb { height: 44px; max-width: 110px; object-fit: contain; background: var(--paper); border: 1px solid var(--border);
+  border-radius: 6px; padding: 2px; }
+.pdi-sheet-form { margin-top: .5rem; }
+.pdi-done-list { margin-top: .75rem; }
+/* Placing fields: the page picture with the fields drawn where they will be printed. */
+.ps-fields { margin: .5rem 0; }
+.ps-pages { margin: .25rem 0 .5rem; }
+.ps-controls label { margin: 0; }
+.ps-controls input.ps-size { width: 5.5rem; }
+.ps-controls input[type=range] { width: 12rem; max-width: 100%; }
+.ps-stage { position: relative; margin: .5rem 0; border: 1px solid var(--border); background: var(--paper); line-height: 0; }
+.ps-page { display: block; width: 100%; height: auto; cursor: crosshair; user-select: none; }
+.ps-markers { position: absolute; inset: 0; pointer-events: none; }
+.ps-mark { position: absolute; line-height: 1.1; white-space: nowrap; }
+.ps-text { transform: translateY(-50%); color: var(--mark); font-family: Helvetica, Arial, sans-serif;
+  background: var(--mark-bg); outline: 1px dashed var(--mark-line); }
+.ps-img { transform: translate(-50%, -50%); outline: 1px dashed var(--mark-line); }
+.ps-img img { display: block; width: 100%; height: auto; }
+.ps-img.empty { aspect-ratio: 3 / 1; display: flex; align-items: center; justify-content: center; color: var(--mark);
+  font-size: .75rem; line-height: 1.2; background: var(--mark-bg); }
+.ps-mark.sel { outline: 2px solid var(--primary); }
 input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform: uppercase;
   letter-spacing: .06em; width: auto; flex: 1 1 8rem; max-width: 12rem; }
 .field .row:has(.rc-reg-input) { margin-top: 0; align-items: center; }

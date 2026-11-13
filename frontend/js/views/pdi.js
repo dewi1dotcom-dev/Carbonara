@@ -2,6 +2,7 @@
 // workshop by e-mail; the workshop's date/time is entered by staff.
 // Also the banner at the top of the vehicle page and the PDI page (#/pdi).
 import { tr } from '../i18n.js';
+import { doneDialog, sheetActions } from './pdisheet.js';
 import {
   api, append, boardBlock, boardRow, busy, canSee, carText, dateInput, fmtDate, h, openDialog, session, showError, spotLabel,
   timeInput, toast,
@@ -118,12 +119,14 @@ export function pdiCard(v, data, opts, rerender) {
             ? h('button', { class: 'btn', type: 'button', onClick: () => confirmDate(o, rerender) }, '✓ Confirm PDI date') : null,
           o.status === 'booked' ? h('button', { class: o.prepared_at ? 'btn' : 'btn primary', type: 'button', onClick: () => prepDialog(o, rerender) },
             o.prepared_at ? 'Edit preparation' : 'Prepare for PDI') : null,
-          o.status === 'booked' ? h('button', { class: 'btn', type: 'button', onClick: () => doneOrder(o, rerender) }, '✓ PDI done') : null)));
+          // Mileage, date, stamp and signature for the model's PDI sheet (pdisheet.js).
+          o.status === 'booked' ? h('button', { class: 'btn', type: 'button', onClick: () => doneDialog(o, rerender) }, '✓ PDI done') : null)));
   }
   const done = data.history.filter((x) => x.status === 'done');
   if (done.length) {
-    card.append(h('p', { class: 'muted small' },
-      done.map((x) => `PDI done ${fmtDate(x.done_at, false)}${x.done_by_name ? ` (${x.done_by_name})` : ''}`).join(' · ')));
+    append(card, h('ul', { class: 'plain rows pdi-done-list' }, done.map((x) => h('li', {},
+      h('span', { class: 'muted small' }, `PDI done ${fmtDate(x.done_at, false)}${x.done_by_name ? ` (${x.done_by_name})` : ''}`),
+      h('span', { class: 'row-actions' }, sheetActions(x, rerender))))));
   }
   return card;
 }
@@ -472,14 +475,6 @@ export async function confirmDate(o, done) {
   } catch (e) { showError(e); }
 }
 
-async function doneOrder(o, done) {
-  if (!confirm('Mark the PDI as done?')) return;
-  try {
-    await api.post(`/pdi/${o.id}/done`);
-    toast('PDI done – the car is ready for registration and delivery', 'success');
-    await done();
-  } catch (e) { showError(e); }
-}
 
 async function cancelOrder(o, done) {
   if (!confirm(o.sent_at

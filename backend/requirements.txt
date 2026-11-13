@@ -20,3 +20,9 @@ pytesseract==0.3.13
 pyzbar==0.1.9
 pylibdmtx==0.1.10
 httpx==0.28.1
+# PDI sheets: read the model's PDF form (pypdf), draw the values / stamp /
+# signature onto it (reportlab), and render its pages as pictures for placing
+# the fields and for OCR suggestions (pypdfium2). All BSD/Apache licensed.
+pypdf==4.3.1
+reportlab==4.2.5
+pypdfium2==4.30.0

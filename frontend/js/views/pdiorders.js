@@ -3,9 +3,10 @@
 // the order, the PDI date (confirm / change, expected completion) and the car's history.
 // No documents (contracts hold personal data; the server leaves their events out too).
 import {
-  api, append, canSee, CONDITION, fmtDate, h, photoUrl, pill, showError, tyreBadge, vehicleTitle, viewPhoto, WHEELS,
+  api, append, canSee, CONDITION, fmtDate, fmtKm, h, photoUrl, pill, showError, tyreBadge, vehicleTitle, viewPhoto, WHEELS,
 } from '../ui.js';
 import { bookingDialog, confirmDate, confirmedText, itemsList, STATUS_CLS, STATUS_TEXT } from './pdi.js';
+import { doneDialog, sheetActions } from './pdisheet.js';
 import { EVENT_LABELS, eventDetail } from './vehicles.js';
 
 // host: the page's real container (a redraw renders into a fresh div, then moves it into host).
@@ -69,6 +70,7 @@ function orderCard(o, opts, rerender) {
       ['Ordered', `${fmtDate(o.created_at, false)}${o.created_by_name ? ` (${o.created_by_name})` : ''}`],
       ['Sent to the workshop', o.sent_at && (o.sent_via === 'print' ? `${fmtDate(o.sent_at)} (printed / PDF)` : fmtDate(o.sent_at))],
       ['PDI done', o.done_at && `${fmtDate(o.done_at)}${o.done_by_name ? ` (${o.done_by_name})` : ''}`],
+      ['Mileage at the PDI', o.done_km != null && fmtKm(o.done_km)],
     ]),
     o.changed_since_sent ? h('div', { class: 'notice warn small' }, 'Changed since it was sent — send it again so the workshop has the latest order.') : null,
     o.prepared_at ? h('div', { class: 'notice small' },
@@ -84,7 +86,12 @@ function orderCard(o, opts, rerender) {
       isOpen ? h('button', { class: 'btn', type: 'button', onClick: () => bookingDialog(o, rerender) },
         o.pdi_at ? 'Change PDI date' : 'Enter PDI date') : null,
       o.status === 'booked' && !o.pdi_confirmed_at
-        ? h('button', { class: 'btn primary', type: 'button', onClick: () => confirmDate(o, rerender) }, '✓ Confirm PDI date') : null),
+        ? h('button', { class: 'btn primary', type: 'button', onClick: () => confirmDate(o, rerender) }, '✓ Confirm PDI date') : null,
+      // Mileage, date, stamp and signature for the model's PDI sheet.
+      o.status === 'booked' ? h('button', {
+        class: o.pdi_confirmed_at ? 'btn primary' : 'btn', type: 'button', onClick: () => doneDialog(o, rerender),
+      }, '✓ PDI done') : null,
+      o.status === 'done' ? sheetActions(o, rerender) : null),
 
     h('details', { class: 'more' }, h('summary', {}, `History (${o.events.length})`),
       o.events.length ? h('ol', { class: 'timeline' }, o.events.map((e) => h('li', {},

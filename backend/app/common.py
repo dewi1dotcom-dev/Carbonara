@@ -241,8 +241,11 @@ def purge_vehicle(conn, vehicle_id: int) -> list:
             WHERE vehicle_id = %s AND license_file_key IS NOT NULL
            UNION ALL
            SELECT file_key, original_ext FROM vehicle_documents
-            WHERE vehicle_id = %s AND file_key IS NOT NULL""",
-        (vehicle_id, vehicle_id, vehicle_id),
+            WHERE vehicle_id = %s AND file_key IS NOT NULL
+           UNION ALL
+           SELECT sheet_file_key, 'pdf' FROM pdi_orders  -- filled-in PDI sheets
+            WHERE vehicle_id = %s AND sheet_file_key IS NOT NULL""",
+        (vehicle_id, vehicle_id, vehicle_id, vehicle_id),
     ).fetchall()
     for stmt in (
         # Customer deliveries are kept (by reg. no) with their own retention; only unlinked.
