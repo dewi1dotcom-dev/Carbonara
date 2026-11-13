@@ -990,6 +990,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.28.3 | Installed app (Chrome) shows the Carbonara icon instead of a "C": web app manifest + PNG icons |
 | 0.29.0 | **Summer / winter wheels:** dropdown on the vehicle page and rental cars, required for used cars at the arrival inspection; warnings from the studded tyre season (region on the System page) on cars, lists and Today (migration 030) |
 | 0.29.1 | Rental cars: wheels dropdown only in the Edit dialog (fleet list shows the wheels as text + warning badge) |
+| 0.29.2 | Rental cars: each car in the fleet list in its own box, with space under the heading |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

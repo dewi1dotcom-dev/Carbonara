@@ -133,13 +133,13 @@ function fleetCard(data, done) {
     data.registry ? null : h('p', { class: 'muted small' },
       'Statens vegvesen is not set up (System page), so EU-kontroll must be typed in by hand.'),
     data.cars.length
-      ? h('div', { class: 'list' }, data.cars.map((c) => fleetRow(c, data, done)))
+      ? h('div', { class: 'list rc-list' }, data.cars.map((c) => fleetRow(c, data, done)))
       : h('p', { class: 'empty' }, 'No rental cars yet. Add the first one with “+ Add rental car”.'));
 }
 
 // Wheels are changed in the car's Edit dialog (the user's choice); the list only shows them.
 function fleetRow(c, data, done) {
-  return h('div', { class: 'list-card inner rc-row' },
+  return h('div', { class: 'list-card rc-row rc-box' },
     h('div', { class: 'list-main' },
       h('div', { class: 'list-title' }, h('span', { class: 'rc-reg', translate: 'no' }, c.registration_number), ' ',
         h('span', { translate: 'no' }, carName(c)), c.color ? h('span', { class: 'muted', translate: 'no' }, ` · ${c.color}`) : null),

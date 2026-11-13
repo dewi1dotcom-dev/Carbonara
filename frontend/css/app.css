@@ -676,6 +676,9 @@ input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospa
 .rc-badges { display: flex; flex-wrap: wrap; gap: .35rem; margin: .3rem 0 .15rem; }
 .rc-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; }
 .rc-row .list-main { flex: 1 1 260px; min-width: 0; }
+/* Fleet list: each car in its own box, set apart from the heading and the Add button. */
+.rc-list { margin-top: 1rem; gap: .75rem; }
+.rc-box { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: .75rem 1rem; }
 input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform: uppercase;
   letter-spacing: .06em; width: auto; flex: 1 1 8rem; max-width: 12rem; }
 .field .row:has(.rc-reg-input) { margin-top: 0; align-items: center; }
