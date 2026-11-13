@@ -8,10 +8,7 @@ import {
   FUEL_TYPES, api, append, busy, cameraPicker, dateInput, euStatus, fmtDate, fmtKm, getInspectorId, h,
   openDialog, osloTodayIso, session, setInspectorId, showError, timeInput, toast,
 } from '../ui.js';
-import { duration, itemPicker, telLink } from './testdrive.js';
-
-const REMOVED_PRESETS = ['Winter wheels', 'Summer wheels', 'Charging cable', 'Floor mats', 'Cargo cover / parcel shelf'];
-const ADDED_PRESETS = ['Charging cable', 'Fuel / charging card', 'Child seat', 'Roof box', 'Ski rack'];
+import { duration, telLink } from './testdrive.js';
 
 const licenseUrl = (id, variant = 'thumb') => `/api/rentals/${id}/license/${variant}`;
 const carName = (c) => [c.make, c.model, c.model_year].filter(Boolean).join(' ');
@@ -305,8 +302,6 @@ function rentForm(c, staff, data, done, cancel) {
   const staffSel = h('select', { id: 'rt-staff' }, h('option', { value: '' }, 'Select staff…'),
     staff.map((s) => h('option', { value: s.id }, s.name)));
   staffSel.value = staff.some((s) => String(s.id) === getInspectorId()) ? getInspectorId() : '';
-  const removed = itemPicker(REMOVED_PRESETS, 'Taken out of the car for the rental');
-  const added = itemPicker(ADDED_PRESETS, 'Put into the car for the rental');
 
   // EU-kontroll: warn when it has passed, or runs out before the car is due back.
   const euWarn = h('div');
@@ -379,8 +374,6 @@ function rentForm(c, staff, data, done, cancel) {
     h('div', { class: 'grid' },
       h('div', { class: 'field' }, h('label', { for: 'rt-back-date' }, 'Expected back (optional)'), backDate),
       h('div', { class: 'field' }, h('label', { for: 'rt-back-time' }, 'Time'), backTime)),
-    removed.el,
-    added.el,
     h('div', { class: 'grid' },
       h('div', { class: 'field' }, h('label', { for: 'rt-odo' }, 'Odometer out (optional)'), odo),
       h('div', { class: 'field' }, h('label', { for: 'rt-staff' }, 'Handed out by'), staffSel)),
@@ -408,8 +401,6 @@ function rentForm(c, staff, data, done, cancel) {
       if (backDate.value) fd.append('expected_return', `${backDate.value}T${backTime.value || '16:00'}`);
       if (staffSel.value) { fd.append('staff_id', staffSel.value); setInspectorId(staffSel.value); }
       if (odo.value) fd.append('odometer_out', odo.value);
-      fd.append('removed_items', JSON.stringify(removed.value()));
-      fd.append('added_items', JSON.stringify(added.value()));
       if (note.value.trim()) fd.append('items_note', note.value);
       fd.append('customer_informed', 'true');
       await api.postForm('/rentals', fd);

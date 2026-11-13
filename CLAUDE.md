@@ -414,7 +414,8 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
 - **Renting out = the test drive flow:**
   - customer name + phone, driving licence photo (the name is read via
     `/test-drives/read-license`), "customer informed" checkbox
-  - items taken out / put in, odometer, handed out by, note
+  - odometer, handed out by, note (no items taken out / put in since 0.28.2, the user's request; old
+    rentals with items still show them and ask for them at return)
   - extra: an optional **expected return** date + time (Norwegian local time, stored with `AT TIME
     ZONE 'Europe/Oslo'`; time defaults to 16:00). It's overdue in red on the page and on Today ("Rental
     cars not returned on time").
@@ -963,6 +964,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.27.2 | Kiosk form: English / Norsk switch on the title line, top right (in the staff preview it saves the staff member's own language) |
 | 0.28.0 | **Rental cars** page: own fleet (not in the car database), added / edited on the page, Statens vegvesen lookup with EU-kontroll first (badges, notice, Today, nightly refresh); renting out like test drives + expected return; trash after return (migration 029) |
 | 0.28.1 | Rental privacy notice contact customizable on System → Rental cars (another company possible, two-company wording) |
+| 0.28.2 | Rental cars: "Taken out of / Put into the car" item pickers removed from the rent-out form |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
