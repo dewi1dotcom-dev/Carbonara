@@ -180,7 +180,7 @@ main { max-width: 980px; margin: 0 auto; padding: 1rem 16px 2rem; }
 .toolbar { display: flex; gap: .5rem; margin-bottom: .5rem; flex-wrap: wrap; }
 /* Search gets its own full row on phones; on wider screens it takes most of the row. */
 .toolbar input[type=search] { flex: 1 1 100%; width: auto; min-width: 0; }
-.inline select.wheels-select, .rc-wheels select.wheels-select { width: auto; min-width: 11rem; }
+.inline select.wheels-select { width: auto; min-width: 11rem; }
 .toolbar select { flex: 1 1 10rem; width: auto; min-width: 0; }
 @media (min-width: 760px) { .toolbar input[type=search] { flex: 3 1 20rem; min-width: 16rem; } .toolbar select { flex: 1 1 11rem; } }
 
@@ -674,7 +674,6 @@ input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospa
 /* Rental cars: registration number as the car's name, badges (EU-kontroll first) on one line. */
 .rc-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; letter-spacing: .04em; }
 .rc-badges { display: flex; flex-wrap: wrap; gap: .35rem; margin: .3rem 0 .15rem; }
-.rc-wheels { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; margin: .3rem 0; }
 .rc-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; }
 .rc-row .list-main { flex: 1 1 260px; min-width: 0; }
 input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform: uppercase;

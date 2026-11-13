@@ -6,7 +6,7 @@
 // and are deleted for good after TRASH_DAYS.
 import {
   FUEL_TYPES, api, append, busy, cameraPicker, dateInput, euStatus, fmtDate, fmtKm, getInspectorId, h,
-  openDialog, osloTodayIso, session, setInspectorId, showError, timeInput, toast, tyreBadge, wheelsSelect,
+  openDialog, osloTodayIso, session, setInspectorId, showError, timeInput, toast, tyreBadge, WHEELS, wheelsSelect,
 } from '../ui.js';
 import { duration, telLink } from './testdrive.js';
 
@@ -137,23 +137,7 @@ function fleetCard(data, done) {
       : h('p', { class: 'empty' }, 'No rental cars yet. Add the first one with “+ Add rental car”.'));
 }
 
-/** Summer / winter wheels dropdown (saves at once) with the season warning beside it. */
-function wheelsLine(c, done) {
-  // Not busy(): it resets textContent, which would wipe a <select>'s options.
-  const sel = wheelsSelect(c.wheels, async (wheels) => {
-    sel.disabled = true;
-    try {
-      await api.patch(`/rental-cars/${c.id}`, { wheels });
-      toast('Wheels saved', 'success');
-      await done();
-    } catch (err) {
-      sel.value = c.wheels ?? '';
-      showError(err);
-    } finally { sel.disabled = false; }
-  }, { class: 'wheels-select', 'aria-label': 'Wheels' });
-  return h('div', { class: 'rc-wheels' }, sel, tyreBadge(c.tyre_warning));
-}
-
+// Wheels are changed in the car's Edit dialog (the user's choice); the list only shows them.
 function fleetRow(c, data, done) {
   return h('div', { class: 'list-card inner rc-row' },
     h('div', { class: 'list-main' },
@@ -162,9 +146,10 @@ function fleetRow(c, data, done) {
       h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c),
         c.rental_id
           ? h('span', { class: 'badge warn' }, h('span', {}, 'Rented out'), ' · ', h('span', { translate: 'no' }, c.rented_to))
-          : h('span', { class: 'badge good' }, 'Available')),
-      wheelsLine(c, done),
+          : h('span', { class: 'badge good' }, 'Available'),
+        tyreBadge(c.tyre_warning)),
       h('div', { class: 'list-meta' }, [
+        c.wheels && h('span', {}, WHEELS[c.wheels]),
         c.eu_control_last_approved && h('span', {}, `last approved ${fmtDate(c.eu_control_last_approved, false)}`),
         c.registry_checked_at && h('span', {}, `Statens vegvesen checked ${fmtDate(c.registry_checked_at, false)}`),
         c.vin && h('span', { class: 'mono', translate: 'no' }, c.vin),

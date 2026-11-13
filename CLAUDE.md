@@ -321,8 +321,8 @@ before** the deadline. Service: green / amber (± 31 days) / red.
 **Summer / winter wheels (0.29.0)** (`vehicles.wheels`, `rental_cars.wheels`; `common.tyre_season` /
 `tyre_warning` / `add_tyre_warnings`; `WHEELS`, `tyreText`, `tyreBadge`, `wheelsSelect` in `ui.js`):
 - **Recorded with a dropdown** ("Not recorded / Summer wheels / Winter wheels", saves at once): the
-  "Wheels" row of the vehicle page overview (every car), each rental car in the fleet list, and the
-  rental car add/edit dialog. **Used cars** get a required "Summer or winter wheels? *" field and
+  "Wheels" row of the vehicle page overview (every car) and the rental car add/edit dialog (only there,
+  0.29.1: the fleet list shows the wheels as text + the warning badge). **Used cars** get a required "Summer or winter wheels? *" field and
   checklist item in the arrival inspection (`inspections._checklist`, key `wheels`).
 - **The studded tyre season** (piggdekksesongen; the user's rules), region on System → Wheels:
   - South and Central Norway (default `south`): 1 November up to and including the first Sunday after
@@ -989,6 +989,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.28.2 | Rental cars: "Taken out of / Put into the car" item pickers removed from the rent-out form |
 | 0.28.3 | Installed app (Chrome) shows the Carbonara icon instead of a "C": web app manifest + PNG icons |
 | 0.29.0 | **Summer / winter wheels:** dropdown on the vehicle page and rental cars, required for used cars at the arrival inspection; warnings from the studded tyre season (region on the System page) on cars, lists and Today (migration 030) |
+| 0.29.1 | Rental cars: wheels dropdown only in the Edit dialog (fleet list shows the wheels as text + warning badge) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
