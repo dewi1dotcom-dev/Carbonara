@@ -18,3 +18,5 @@ dist/
 *.tif
 *.tiff
 *.pdf
+# ...except the app icons (drawn from frontend/img/carbonara-icon.svg)
+!frontend/img/*.png

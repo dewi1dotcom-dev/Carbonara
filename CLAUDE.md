@@ -199,7 +199,9 @@ backend/
   migrations/           001…029
 frontend/               no build step; plain ES modules
   index.html, css/app.css
-  img/                  logo + app icon SVGs (favicon = carbonara-icon.svg)
+  img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
+                        apple-touch-icon (drawn from the SVG; `.gitignore` allows only frontend/img/*.png)
+  manifest.json         installed app (Chrome "Install"): name + PNG icons; without them Chrome shows a "C"
   fonts/                Space Grotesk (logo font, bundled; SIL OFL)
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
   js/ui.js              h(), append(), api, fmtDate, dateInput/timeInput, badges, shared helpers
@@ -965,6 +967,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.28.0 | **Rental cars** page: own fleet (not in the car database), added / edited on the page, Statens vegvesen lookup with EU-kontroll first (badges, notice, Today, nightly refresh); renting out like test drives + expected return; trash after return (migration 029) |
 | 0.28.1 | Rental privacy notice contact customizable on System → Rental cars (another company possible, two-company wording) |
 | 0.28.2 | Rental cars: "Taken out of / Put into the car" item pickers removed from the rent-out form |
+| 0.28.3 | Installed app (Chrome) shows the Carbonara icon instead of a "C": web app manifest + PNG icons |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
