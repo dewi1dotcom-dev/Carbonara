@@ -1,8 +1,16 @@
 // The start page ("Today board"): what needs doing today and tomorrow first,
 // then what needs attention, then a few numbers.
 import { lang } from '../i18n.js';
-import { api, append, boardBlock as block, boardRow as row, canSee, carText, fmtDate, h, vehicleTitle } from '../ui.js';
+import { api, append, boardBlock as block, boardRow as row, canSee, carText, fmtDate, h, tyreText, vehicleTitle } from '../ui.js';
 import { optText } from './deliveries.js';
+
+// Summer / winter wheels against the studded tyre season: cars here, plus rental cars for users
+// who see Rental cars. The meta is separate nodes so each part translates.
+const tyreRows = (list) => list.filter((t) => !t.rental || canSee('rental')).map((t) => row(
+  t.rental ? '#/rental' : `#/vehicles/${t.id}`, carText(t),
+  [t.rental ? [h('span', {}, 'rental car'), ' · '] : null,
+    h('span', {}, tyreText(t).replace(/^(Summer|Winter) wheels – /, ''))],
+  t.level === 'bad' ? 'bad' : ''));
 
 const weekday = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', { timeZone: 'Europe/Oslo', weekday: 'long' });
 const clock = new Intl.DateTimeFormat('nb-NO', { timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
@@ -70,12 +78,16 @@ export async function todayView(el) {
       row(`#/vehicles/${c.id}`, carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days <= 1 ? 'bad' : ''))),
     canSee('rental') ? block('🛂', 'Rental cars – EU-kontroll due', d.rental_eu_control.map((c) =>
       row('#/rental', carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days <= 1 ? 'bad' : ''))) : null,
+    block('🛞', 'Summer wheels – change to winter wheels', tyreRows(d.tyres_summer),
+      { cls: d.tyres_summer.some((t) => t.level === 'bad') ? 'bad' : 'warn' }),
+    block('🛞', 'Winter wheels – the studded tyre season has ended', tyreRows(d.tyres_winter), { cls: 'info' }),
     block('🛠', 'Service due', d.service.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days < -31 ? 'bad' : ''))),
     block('⚠', 'Statens vegvesen differences to check', d.registry_mismatches.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), 'open the car to confirm'))),
     !(d.pdi_waiting.length || d.pdi_drafts.length || d.eu_control.length || d.service.length || d.registry_mismatches.length
-      || (canSee('rental') && d.rental_eu_control.length))
+      || (canSee('rental') && d.rental_eu_control.length)
+      || tyreRows(d.tyres_summer).length || tyreRows(d.tyres_winter).length)
       ? h('p', { class: 'empty' }, 'Nothing needs attention. 👍') : null,
 
     // ---- upcoming & numbers

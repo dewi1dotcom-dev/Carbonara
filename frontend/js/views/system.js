@@ -127,10 +127,13 @@ function teamsCard(data, done) {
     form);
 }
 
+// Readable names for settings stored as short keys (others show the value itself).
+const CHOICE_LABEL = { south: 'South and Central Norway', north: 'Nordland, Troms and Finnmark' };
+
 function settingRow(r, done) {
   let input;
   if (r.choices.length) {
-    input = h('select', {}, r.choices.map((c) => h('option', { value: c }, c)));
+    input = h('select', {}, r.choices.map((c) => h('option', { value: c }, CHOICE_LABEL[c] ?? c)));
     input.value = r.value ?? r.default ?? r.choices[0];
   } else {
     input = h('input', {

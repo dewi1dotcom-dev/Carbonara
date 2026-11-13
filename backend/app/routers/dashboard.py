@@ -4,7 +4,7 @@ what needs attention, and a few numbers. One request, small queries."""
 from fastapi import APIRouter, Depends
 
 from .. import vegvesen
-from ..common import READY_SQL, service_due
+from ..common import READY_SQL, service_due, tyre_season, tyre_warning
 from ..db import get_conn
 from .pdi import ORDER_SELECT, THIS_WEEK_SQL
 from .storage_care import charging_due_list, programme
@@ -56,6 +56,19 @@ def dashboard(conn=Depends(get_conn)):
             service.append({**car, "due": due, "in_days": (due - today).days})
         if c["registry_data"] and vegvesen.mismatch_list(c, c["registry_data"], c["kept_values"]):
             mismatches.append(car)
+    # Summer / winter wheels against the studded tyre season: cars here and the rental fleet.
+    season = tyre_season()
+    tyres = []
+    for c in cars:
+        w = tyre_warning(c["wheels"], season)
+        if w:
+            tyres.append({**{k: c[k] for k in ("id", "vin", "make", "model", "model_year", "registration_number")},
+                          **w, "rental": False})
+    for c in conn.execute("""SELECT id, registration_number, make, model, model_year, wheels
+                               FROM rental_cars WHERE deleted_at IS NULL AND wheels IS NOT NULL""").fetchall():
+        w = tyre_warning(c["wheels"], season)
+        if w:
+            tyres.append({**c, **w, "rental": True})
     eu.sort(key=lambda r: r["in_days"])
     service.sort(key=lambda r: r["in_days"])
 
@@ -122,5 +135,9 @@ def dashboard(conn=Depends(get_conn)):
         "battery_due": battery_due,
         "rental_eu_control": rental_eu,
         "rentals_late": rentals_late,
+        "tyres_summer": sorted((t for t in tyres if t["kind"] != "winter_after_season"),
+                               key=lambda t: t["level"] != "bad"),  # red (in the season) first, then amber
+        "tyres_winter": [t for t in tyres if t["kind"] == "winter_after_season"],  # just a notice
+        "tyre_season": season,
         "numbers": numbers,
     }

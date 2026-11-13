@@ -337,6 +337,31 @@ export function euStatus(due) {
   return { cls: 'good', days, text: 'Valid' };
 }
 
+/** Summer / winter wheels on a car (vehicles.wheels, rental_cars.wheels). */
+export const WHEELS = { summer: 'Summer wheels', winter: 'Winter wheels' };
+
+/** The server's tyre_warning ({level, kind, date}) as one sentence (one string, so it translates). */
+export function tyreText(w) {
+  if (!w) return '';
+  const d = fmtDate(w.date, false);
+  if (w.kind === 'summer_in_season') return `Summer wheels – studded tyre season since ${d}`;
+  if (w.kind === 'summer_soon') return `Summer wheels – studded tyre season starts ${d}`;
+  return `Winter wheels – studded tyre season ended ${d}`;
+}
+
+/** Red / amber badge for summer wheels, a plain (neutral) one for winter wheels after the season. */
+export const tyreBadge = (w) => (w
+  ? h('span', { class: `badge ${w.level === 'info' ? '' : w.level}`.trim() }, tyreText(w)) : null);
+
+/** "Not recorded / Summer wheels / Winter wheels"; onChange gets 'summer', 'winter' or null. */
+export function wheelsSelect(value, onChange, attrs = {}) {
+  const sel = h('select', attrs, h('option', { value: '' }, 'Not recorded'),
+    Object.entries(WHEELS).map(([k, l]) => h('option', { value: k }, l)));
+  sel.value = value ?? '';
+  if (onChange) sel.addEventListener('change', () => onChange(sel.value || null));
+  return sel;
+}
+
 /** Registration: amber when not registered, red when Vegvesen says anything
  *  other than registered (deregistered, scrapped…), green when registered. */
 export function regStatus(markedAt, code, name) {

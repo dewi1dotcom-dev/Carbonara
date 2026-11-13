@@ -196,7 +196,7 @@ backend/
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, rentals, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup)
-  migrations/           001…029
+  migrations/           001…030
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -246,6 +246,7 @@ frontend/               no build step; plain ES modules
 | 027 | `teams` | `teams` (name, `menu` text[]), `staff.team_id`; existing staff put in the team "All staff" with every menu item |
 | 028 | `generic_names` | stored tyre option `rbv_orders` → `workshop_orders` |
 | 029 | `rental_cars` | `rental_cars` (own fleet + SVV fields), `rentals`, `rental_access_log`; teams with Test drive get menu item `rental` |
+| 030 | `wheels` | `vehicles.wheels`, `rental_cars.wheels` ('summer' / 'winter', NULL = not recorded) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -316,6 +317,23 @@ header `SVV-Authorization: Apikey <key>`.
 
 **Status badges:** EU-kontroll and registration show amber within 60 days and **red from 1 day
 before** the deadline. Service: green / amber (± 31 days) / red.
+
+**Summer / winter wheels (0.29.0)** (`vehicles.wheels`, `rental_cars.wheels`; `common.tyre_season` /
+`tyre_warning` / `add_tyre_warnings`; `WHEELS`, `tyreText`, `tyreBadge`, `wheelsSelect` in `ui.js`):
+- **Recorded with a dropdown** ("Not recorded / Summer wheels / Winter wheels", saves at once): the
+  "Wheels" row of the vehicle page overview (every car), each rental car in the fleet list, and the
+  rental car add/edit dialog. **Used cars** get a required "Summer or winter wheels? *" field and
+  checklist item in the arrival inspection (`inspections._checklist`, key `wheels`).
+- **The studded tyre season** (piggdekksesongen; the user's rules), region on System → Wheels:
+  - South and Central Norway (default `south`): 1 November up to and including the first Sunday after
+    Easter Monday (= Easter Sunday + 7; `easter_sunday()`).
+  - Nordland, Troms and Finnmark (`north`): 16 October up to and including 30 April.
+- **Warnings (the user's rule):** summer wheels turn **amber a month before** the season (1 Oct / 16 Sep)
+  and **red once it has started**; winter wheels after the season get only a **neutral notice** (plain
+  badge, "info" block on Today), since that isn't strict. Shown as a badge on the vehicle header, vehicle
+  cards (Vehicles list + storage spots), rental cars (fleet, chooser, rent-out form), and on Today.
+  Cars taken off site get no warning; rental cars always do.
+- The server sends `tyre_warning` = `{level: bad|warn|info, kind, date}`; the frontend only formats it.
 
 **Service due** (`common.service_due`):
 - Last service + 1 year.
@@ -604,6 +622,7 @@ the server is LAN-only, so no customer phones / public internet).
   - **Customer deliveries (kiosk):** company name, phone, e-mail, postal address for the kiosk
     privacy notice (empty company name = Company is used)
   - **Rental cars (0.28.1):** the same four fields for the rental privacy notice
+  - **Wheels (0.29.0):** studded tyre region (`tyre_region` south / north; readable names via `CHOICE_LABEL` in `system.js`)
   - **Data retention**
 - **Where a value comes from:** `settings.<name>` = DB `app_settings`, else env `NAME`, else
   default. Cached 20 s per process (the worker too). **Always read settings at call time;
@@ -738,7 +757,8 @@ storage, periodic checklist, 12V battery form).
 - **Today/tomorrow:** PDI tomorrow (warn), PDI today, PDI date passed, storage checks due,
   12V charging due (used cars), out on test drive, arrivals in progress.
 - **Needs attention:** PDI orders waiting for reply, unsent orders, EU-kontroll ≤ 60 days,
-  service ≤ 31 days, SVV differences.
+  service ≤ 31 days, SVV differences, summer wheels (amber / red) and winter wheels after the season
+  (notice), cars here + rental cars (rental rows only for users who see Rental cars).
 - **Then:** upcoming PDIs and number tiles. Attention lists only cover cars that aren't off
   site.
 
@@ -968,6 +988,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.28.1 | Rental privacy notice contact customizable on System → Rental cars (another company possible, two-company wording) |
 | 0.28.2 | Rental cars: "Taken out of / Put into the car" item pickers removed from the rent-out form |
 | 0.28.3 | Installed app (Chrome) shows the Carbonara icon instead of a "C": web app manifest + PNG icons |
+| 0.29.0 | **Summer / winter wheels:** dropdown on the vehicle page and rental cars, required for used cars at the arrival inspection; warnings from the studded tyre season (region on the System page) on cars, lists and Today (migration 030) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

@@ -77,6 +77,8 @@ class VehicleDetails(_Clean):
     condition: Optional[Literal["new", "used"]] = None
     last_service_date: Optional[dt.date] = None
     last_service_km: Optional[int] = Field(None, ge=0, le=5_000_000)
+    # Wheels on the car now (studded tyre season warnings, common.tyre_warning).
+    wheels: Optional[Literal["summer", "winter"]] = None
     # The ad on finn.no: a pasted link or just the FINN code; stored as the code.
     finn_code: Optional[str] = Field(None, max_length=500)
 

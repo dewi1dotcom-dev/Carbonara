@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg import errors
 
 from ..auth import PIN_MAX, PIN_MIN, STAFF_PUBLIC, hash_pin, require_admin, valid_pin
-from ..common import (RIGHT_PHOTO_SQL, bad_request, cap_name, clean_phone, conflict, insert_row, log_event, not_found, patch_fields,
+from ..common import (RIGHT_PHOTO_SQL, add_tyre_warnings, bad_request, cap_name, clean_phone, conflict, insert_row, log_event, not_found, patch_fields,
                       place_in_location, update_row)
 from ..db import get_conn
 from ..schemas import LocationIn, LocationPatch, PinSetIn, StaffIn, StaffPatch
@@ -182,7 +182,7 @@ def get_location(location_id: int, conn=Depends(get_conn)):
             ORDER BY a.placed_at DESC""",
         {"id": location_id},
     ).fetchall()
-    return {**location, "children": children, "vehicles": vehicles}
+    return {**location, "children": children, "vehicles": add_tyre_warnings(vehicles)}
 
 
 @router.post("/storage-locations", status_code=201)

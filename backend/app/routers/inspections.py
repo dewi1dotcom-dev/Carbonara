@@ -73,11 +73,15 @@ def _checklist(insp: dict, vehicle: dict, photos: list, damages: list, storage: 
     missing = [a for a in ANGLES if a not in have]
     storage_item = [{"key": "storage_check", "label": "First storage check done (new car)",
                      "done": storage["done"]}] if storage else []
+    # Used cars: record which wheels are on (summer / winter), for the season warnings.
+    wheels_item = [{"key": "wheels", "label": "Summer or winter wheels recorded (used car)",
+                    "done": vehicle["wheels"] is not None}] if vehicle["condition"] == "used" else []
     return [
         {"key": "vehicle", "label": "Make and model recorded",
          "done": bool(vehicle["make"] and vehicle["model"])},
         {"key": "condition", "label": "New or used car selected",
          "done": vehicle["condition"] is not None},
+        *wheels_item,
         {"key": "odometer", "label": "Odometer reading recorded",
          "done": insp["odometer_km"] is not None},
         {"key": "photos", "label": "Photos from all four sides",

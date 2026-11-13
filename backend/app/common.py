@@ -8,6 +8,8 @@ from fastapi import HTTPException
 from psycopg import sql
 from psycopg.types.json import Jsonb
 
+from .config import settings
+
 
 def not_found(what: str) -> HTTPException:
     return HTTPException(status_code=404, detail=f"{what} not found")
@@ -350,3 +352,77 @@ def service_due(vehicle: dict, first_registered: dt.date | None) -> dict:
         years += 1
     return {"due": add_years(first_registered, years), "basis": "registration_anniversary",
             "note": "No service history recorded; based on the registration date."}
+
+
+# --------------------------------------------------------------------------- #
+# Summer / winter wheels and the studded tyre season (piggdekksesongen)
+#   South and Central Norway: 1 November up to and including the first Sunday
+#     after Easter Monday.
+#   Nordland, Troms and Finnmark: 16 October up to and including 30 April.
+# --------------------------------------------------------------------------- #
+
+def easter_sunday(year: int) -> dt.date:
+    """Gregorian Easter Sunday (anonymous Gregorian algorithm)."""
+    a, b, c = year % 19, year // 100, year % 100
+    d, e = divmod(b, 4)
+    f = (b + 8) // 25
+    g = (b - f + 1) // 3
+    h = (19 * a + b - d - g + 15) % 30
+    i, k = divmod(c, 4)
+    l = (32 + 2 * e + 2 * i - h - k) % 7
+    m = (a + 11 * h + 22 * l) // 451
+    month, day = divmod(h + l - 7 * m + 114, 31)
+    return dt.date(year, month, day + 1)
+
+
+def _season_from(year: int, region: str) -> tuple[dt.date, dt.date]:
+    """The studded tyre season that starts in the autumn of `year`: (first day, last day)."""
+    if region == "north":
+        return dt.date(year, 10, 16), dt.date(year + 1, 4, 30)
+    # First Sunday after Easter Monday = Easter Sunday + 7 days.
+    return dt.date(year, 11, 1), easter_sunday(year + 1) + dt.timedelta(days=7)
+
+
+def tyre_season(today: dt.date | None = None, region: str | None = None) -> dict:
+    """The current or next season (the first one that hasn't ended), the last one
+    that has ended, and whether today is inside the season."""
+    today = today or dt.date.today()
+    region = region or settings.tyre_region
+    start, end = _season_from(today.year - 1, region)
+    if today > end:
+        start, end = _season_from(today.year, region)
+    prev_end = _season_from(start.year - 1, region)[1]
+    # "A month before": the same day in the previous month (1 Oct / 16 Sep).
+    warn_from = start.replace(month=start.month - 1)
+    return {"start": start, "end": end, "previous_end": prev_end, "warn_from": warn_from,
+            "in_season": start <= today <= end}
+
+
+def tyre_warning(wheels: str | None, season: dict | None = None) -> dict | None:
+    """Warning for the wheels on a car, or None when they suit the season.
+      summer wheels in the season               -> bad  (since the season started)
+      summer wheels the month before the season -> warn (the season starts soon)
+      winter wheels after the season            -> info (just a notice; not strict)"""
+    if wheels not in ("summer", "winter"):
+        return None
+    s = season or tyre_season()
+    today = dt.date.today()
+    if wheels == "summer":
+        if s["in_season"]:
+            return {"level": "bad", "kind": "summer_in_season", "date": s["start"]}
+        if today >= s["warn_from"]:
+            return {"level": "warn", "kind": "summer_soon", "date": s["start"]}
+        return None
+    if not s["in_season"] and today < s["warn_from"]:
+        return {"level": "info", "kind": "winter_after_season", "date": s["previous_end"]}
+    return None
+
+
+def add_tyre_warnings(rows: list[dict], only_here: bool = True) -> list[dict]:
+    """Sets row["tyre_warning"] on each row. only_here: cars taken off site
+    (delivered) get no warning."""
+    season = tyre_season()
+    for row in rows:
+        here = not only_here or row.get("status") != "off_site"
+        row["tyre_warning"] = tyre_warning(row.get("wheels"), season) if here else None
+    return rows

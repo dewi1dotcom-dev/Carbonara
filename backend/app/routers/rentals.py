@@ -12,7 +12,7 @@ trash on return and are wiped for good after TRASH_DAYS (see sync_worker).
 import datetime as dt
 import logging
 import time
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
@@ -20,7 +20,7 @@ from psycopg.errors import UniqueViolation
 from pydantic import BaseModel, Field
 
 from .. import photostore, vegvesen
-from ..common import bad_request, check_staff, clean_phone, conflict, insert_row, not_found
+from ..common import add_tyre_warnings, bad_request, check_staff, clean_phone, conflict, insert_row, not_found
 from ..config import settings
 from ..db import get_conn
 from ..schemas import TestDriveReturnIn
@@ -29,7 +29,7 @@ from .testdrives import _items, _read_image
 log = logging.getLogger("carbonara.rentals")
 router = APIRouter(tags=["rental cars"])
 
-CAR_FIELDS = ("registration_number", "vin", "make", "model", "model_year", "color", "fuel", "note",
+CAR_FIELDS = ("registration_number", "vin", "make", "model", "model_year", "color", "fuel", "note", "wheels",
               "eu_control_due", "eu_control_last_approved", "registration_status", "registration_status_code",
               "first_registered", "registry_checked_at", "registry_error")
 
@@ -70,6 +70,7 @@ class RentalCarIn(BaseModel):
     fuel: Optional[str] = Field(None, max_length=40)
     note: Optional[str] = Field(None, max_length=500)
     eu_control_due: Optional[dt.date] = None
+    wheels: Optional[Literal["summer", "winter"]] = None  # on the car now (season warnings)
 
 
 class RentalCarPatch(BaseModel):
@@ -82,6 +83,7 @@ class RentalCarPatch(BaseModel):
     fuel: Optional[str] = Field(None, max_length=40)
     note: Optional[str] = Field(None, max_length=500)
     eu_control_due: Optional[dt.date] = None
+    wheels: Optional[Literal["summer", "winter"]] = None  # on the car now (season warnings)
 
 
 def _privacy() -> dict:
@@ -119,7 +121,7 @@ def _car(conn, car_id: int) -> dict:
     row = conn.execute(CAR_SELECT + " WHERE c.id = %s AND c.deleted_at IS NULL", (car_id,)).fetchone()
     if not row:
         raise not_found("Rental car")
-    return row
+    return add_tyre_warnings([row], only_here=False)[0]
 
 
 def _rental(conn, rental_id: int) -> dict:
@@ -237,7 +239,7 @@ def list_rental_cars(conn=Depends(get_conn)):
                           params).fetchall()
     trash = conn.execute(RENTAL_SELECT + """ WHERE r.status = 'returned' AND r.customer_purged_at IS NULL
                                              ORDER BY r.returned_at DESC""", params).fetchall()
-    return {"cars": cars, "active": active, "trash": trash, "trash_days": settings.trash_days,
+    return {"cars": add_tyre_warnings(cars, only_here=False), "active": active, "trash": trash, "trash_days": settings.trash_days,
             "privacy": _privacy(), "registry": vegvesen.is_configured()}
 
 

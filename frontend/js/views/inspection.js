@@ -4,7 +4,7 @@ import { carDiagram, DIAGRAM_PANELS, EXTRA_PANELS, PANEL_LABELS } from '../diagr
 import { checkDialog } from './storagecare.js';
 import {
   api, busy, cameraPicker, CONDITION, dateInput, osloTodayIso, duplicateNotice, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
-  showError, spotLabel, toast, vehicleTitle, viewPhoto,
+  showError, spotLabel, toast, vehicleTitle, viewPhoto, wheelsSelect,
 } from '../ui.js';
 
 const ANGLES = [
@@ -124,6 +124,9 @@ export async function inspectionView(el, [id]) {
       const cur = data.vehicle;
       serviceSlot.replaceChildren(...(condition === 'used'
         ? [h('div', { class: 'grid' },
+          // Used cars: which wheels are on (required; the season warnings use it).
+          field('vehicle', 'wheels', 'Summer or winter wheels? *', wheelsSelect(cur.wheels))),
+        h('div', { class: 'grid' },
           field('vehicle', 'last_service_date', 'Last service date',
             dateInput({ value: cur.last_service_date ?? '', max: today })),
           field('vehicle', 'last_service_km', 'Odometer at last service (km)', num(cur.last_service_km, { min: 0 }))),

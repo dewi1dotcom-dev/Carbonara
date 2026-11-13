@@ -559,6 +559,16 @@ const NO = {
   'Registration number is required': 'Registreringsnummer må fylles inn', 'Expected return: not a valid date and time': 'Ventes tilbake: ikke en gyldig dato og tid',
   'Statens vegvesen is not set up (API key on the System page)': 'Statens vegvesen er ikke satt opp (API-nøkkel på System-siden)',
   'Not found at Statens vegvesen': 'Ikke funnet hos Statens vegvesen',
+  // Summer / winter wheels (0.29.0)
+  'Not recorded': 'Ikke registrert', 'Wheels': 'Hjul',
+  'Wheels saved': 'Hjul lagret', 'Wheels on the car': 'Hjul på bilen', 'Summer or winter wheels? *': 'Sommer- eller vinterhjul? *',
+  'Summer or winter wheels recorded (used car)': 'Sommer- eller vinterhjul registrert (bruktbil)',
+  'Summer wheels – change to winter wheels': 'Sommerhjul – bytt til vinterhjul',
+  'Winter wheels – the studded tyre season has ended': 'Vinterhjul – piggdekksesongen er over', 'rental car': 'leiebil',
+  'Studded tyre region': 'Piggdekkregion', 'South and Central Norway': 'Sør- og Midt-Norge',
+  'Nordland, Troms and Finnmark': 'Nordland, Troms og Finnmark',
+  'The studded tyre season for the summer / winter wheels warnings. South and Central Norway: 1 November to the first Sunday after Easter Monday. Nordland, Troms and Finnmark: 16 October to 30 April.':
+    'Piggdekksesongen som varslene om sommer- og vinterhjul bygger på. Sør- og Midt-Norge: 1. november til og med første søndag etter andre påskedag. Nordland, Troms og Finnmark: 16. oktober til og med 30. april.',
 };
 
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
@@ -748,6 +758,12 @@ const NO_PATTERNS = [
     'Slette teamet {1}? Medlemmene ({2}) ser bare I dag til du plasserer dem i et annet team.'],
   ['Delete the team {}?', 'Slette teamet {1}?'],
   ['Stop {} from showing the delivery form?', 'Stoppe {1} fra å vise leveringsskjemaet?'], ['Set up {}', 'Satt opp {1}'], ['last used {}', 'sist brukt {1}'],
+  // Summer / winter wheels (0.29.0)
+  ['Summer wheels – studded tyre season since {}', 'Sommerhjul – piggdekksesongen startet {1}'],
+  ['Summer wheels – studded tyre season starts {}', 'Sommerhjul – piggdekksesongen starter {1}'],
+  ['Winter wheels – studded tyre season ended {}', 'Vinterhjul – piggdekksesongen sluttet {1}'],
+  ['studded tyre season since {}', 'piggdekksesongen startet {1}'], ['studded tyre season starts {}', 'piggdekksesongen starter {1}'],
+  ['studded tyre season ended {}', 'piggdekksesongen sluttet {1}'],
 ];
 
 // Norwegian texts Carbonara itself uses (outside documents) -> English.

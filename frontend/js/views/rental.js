@@ -6,7 +6,7 @@
 // and are deleted for good after TRASH_DAYS.
 import {
   FUEL_TYPES, api, append, busy, cameraPicker, dateInput, euStatus, fmtDate, fmtKm, getInspectorId, h,
-  openDialog, osloTodayIso, session, setInspectorId, showError, timeInput, toast,
+  openDialog, osloTodayIso, session, setInspectorId, showError, timeInput, toast, tyreBadge, wheelsSelect,
 } from '../ui.js';
 import { duration, telLink } from './testdrive.js';
 
@@ -137,6 +137,23 @@ function fleetCard(data, done) {
       : h('p', { class: 'empty' }, 'No rental cars yet. Add the first one with “+ Add rental car”.'));
 }
 
+/** Summer / winter wheels dropdown (saves at once) with the season warning beside it. */
+function wheelsLine(c, done) {
+  // Not busy(): it resets textContent, which would wipe a <select>'s options.
+  const sel = wheelsSelect(c.wheels, async (wheels) => {
+    sel.disabled = true;
+    try {
+      await api.patch(`/rental-cars/${c.id}`, { wheels });
+      toast('Wheels saved', 'success');
+      await done();
+    } catch (err) {
+      sel.value = c.wheels ?? '';
+      showError(err);
+    } finally { sel.disabled = false; }
+  }, { class: 'wheels-select', 'aria-label': 'Wheels' });
+  return h('div', { class: 'rc-wheels' }, sel, tyreBadge(c.tyre_warning));
+}
+
 function fleetRow(c, data, done) {
   return h('div', { class: 'list-card inner rc-row' },
     h('div', { class: 'list-main' },
@@ -146,6 +163,7 @@ function fleetRow(c, data, done) {
         c.rental_id
           ? h('span', { class: 'badge warn' }, h('span', {}, 'Rented out'), ' · ', h('span', { translate: 'no' }, c.rented_to))
           : h('span', { class: 'badge good' }, 'Available')),
+      wheelsLine(c, done),
       h('div', { class: 'list-meta' }, [
         c.eu_control_last_approved && h('span', {}, `last approved ${fmtDate(c.eu_control_last_approved, false)}`),
         c.registry_checked_at && h('span', {}, `Statens vegvesen checked ${fmtDate(c.registry_checked_at, false)}`),
@@ -196,6 +214,7 @@ function carDialog(car, data, done) {
   const vin = h('input', { type: 'text', id: 'rc-vin', maxlength: 17, autocomplete: 'off', class: 'mono', value: v.vin || '' });
   const eu = dateInput({ id: 'rc-eu', value: v.eu_control_due || '' });
   const note = h('input', { type: 'text', id: 'rc-note', maxlength: 500, value: v.note || '', placeholder: 'e.g. winter wheels in the boot' });
+  const wheels = wheelsSelect(v.wheels, null, { id: 'rc-wheels' });
   const lookupHint = h('div', { class: 'small muted' });
 
   const fill = (input, value) => { if (value != null && value !== '' && !input.value) input.value = value; };
@@ -240,6 +259,7 @@ function carDialog(car, data, done) {
       h('div', { class: 'small muted' }, data.registry
         ? 'Filled in from Statens vegvesen, and updated automatically when the car has passed.'
         : 'Statens vegvesen is not set up, so type the date from the registration certificate.')),
+    h('div', { class: 'field' }, h('label', { for: 'rc-wheels' }, 'Wheels on the car'), wheels),
     h('div', { class: 'field' }, h('label', { for: 'rc-note' }, 'Note (optional)'), note),
     h('div', { class: 'actions' }, submit));
 
@@ -249,7 +269,7 @@ function carDialog(car, data, done) {
       const body = {
         registration_number: reg.value, make: make.value, model: model.value,
         model_year: year.value ? Number(year.value) : null, color: color.value, fuel: fuel.value || null,
-        vin: vin.value, eu_control_due: eu.value || null, note: note.value,
+        vin: vin.value, eu_control_due: eu.value || null, note: note.value, wheels: wheels.value || null,
       };
       if (car) await api.patch(`/rental-cars/${car.id}`, body);
       else await api.post('/rental-cars', body);
@@ -274,7 +294,7 @@ function rentCard(data, staff, done) {
   h('div', { class: 'list-main' },
     h('div', { class: 'list-title' }, h('span', { class: 'rc-reg', translate: 'no' }, c.registration_number), ' ',
       h('span', { translate: 'no' }, carName(c))),
-    h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c))))));
+    h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c), tyreBadge(c.tyre_warning))))));
 
   function choose(c) {
     chooser.hidden = true;
@@ -360,7 +380,7 @@ function rentForm(c, staff, data, done, cancel) {
   const form = h('form', { class: 'form' },
     h('div', { class: 'card inner notice' },
       h('span', { class: 'rc-reg', translate: 'no' }, c.registration_number), ' ', h('strong', { translate: 'no' }, carName(c)),
-      h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c)),
+      h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c), tyreBadge(c.tyre_warning)),
       h('button', { class: 'link small', type: 'button', onClick: () => { picker.remove(); cancel(); } }, 'Choose another car')),
     euWarn,
     h('h3', {}, 'Customer'),

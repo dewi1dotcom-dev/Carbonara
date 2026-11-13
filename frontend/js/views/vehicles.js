@@ -5,7 +5,7 @@ import { batteryCard, storageCard } from './storagecare.js';
 import {
   api, append, badge, busy, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   readyBadge, regStatus, showError, spotLabel, STATUS,
-  toast, vehicleTitle, viewPhoto,
+  toast, tyreBadge, vehicleTitle, viewPhoto, WHEELS, wheelsSelect,
 } from '../ui.js';
 
 export async function vehiclesView(el) {
@@ -73,6 +73,7 @@ export function vehicleCard(v, extra = null) {
         svc && svc.cls !== 'good' ? badge(svc) : null,
         v.finn_code ? h('span', { class: 'badge finn' }, 'finn.no') : null,
         v.test_drive_id ? h('span', { class: 'badge warn' }, 'On test drive') : null,
+        tyreBadge(v.tyre_warning),
         v.pdi_status ? h('span', { class: `badge ${v.pdi_status === 'booked' ? 'good' : 'warn'}` },
           v.pdi_status === 'booked' ? `PDI booked ${fmtDate(v.pdi_at)}` : v.pdi_status === 'sent' ? 'PDI ordered' : 'PDI not sent') : null),
       meta ? h('div', { class: 'list-meta' }, meta) : null),
@@ -125,9 +126,10 @@ const FIELD_LABELS = {
   eu_control_last_approved: 'EU-kontroll approved', color: 'Colour', make: 'Make', model: 'Model', fuel_type: 'Fuel',
   variant: 'Variant', model_year: 'Model year',
   condition: 'New/used', last_service_date: 'Last service', last_service_km: 'Km at last service',
-  finn_code: 'finn.no code',
+  finn_code: 'finn.no code', wheels: 'Wheels',
 };
 const changeText = (obj) => Object.entries(obj || {})
+  .map(([k, [a, b]]) => [k, k === 'wheels' ? [WHEELS[a] ?? a, WHEELS[b] ?? b] : [a, b]])
   .map(([k, [a, b]]) => `${FIELD_LABELS[k] ?? k}: ${a ?? '–'} → ${b ?? '–'}`).join(', ');
 
 function eventDetail(e) {
@@ -604,6 +606,7 @@ function overviewCard(v, rerender) {
           h('button', { class: 'link', type: 'button', onClick: () => finnDialog(v, rerender) }, '+ Add finn.no link'))],
       ['Service', serviceRow(v)],
       ['Condition', v.condition ? CONDITION[v.condition] : null],
+      ['Wheels', wheelsRow(v, rerender)],
       ['Colour', v.color ?? r.color ?? '–'],
       ['VIN location', r.vin_location ?? h('span', { class: 'muted' }, '–')],
       ['Storage spot', storageText(v)],
@@ -624,6 +627,23 @@ function storageText(v) {
       ev ? `${ev.data?.note ? `${ev.data.note} · ` : ''}since ${fmtDate(ev.occurred_at)}` : '');
   }
   return v.status === 'intake' ? 'Placed when the arrival inspection is completed' : '–';
+}
+
+/** Summer / winter wheels dropdown (saves at once) with the season warning beside it. */
+function wheelsRow(v, rerender) {
+  // Not busy(): it resets textContent, which would wipe a <select>'s options.
+  const sel = wheelsSelect(v.wheels, async (wheels) => {
+    sel.disabled = true;
+    try {
+      await api.patch(`/vehicles/${v.id}`, { wheels });
+      toast('Wheels saved', 'success');
+      await rerender();
+    } catch (err) {
+      sel.value = v.wheels ?? '';
+      showError(err);
+    } finally { sel.disabled = false; }
+  }, { class: 'wheels-select', 'aria-label': 'Wheels' });
+  return h('span', { class: 'inline' }, sel, tyreBadge(v.tyre_warning));
 }
 
 /** Everything else, folded away under "All vehicle data". */
@@ -768,7 +788,7 @@ export async function vehicleView(el, [id], host = el) {
           ? h('div', { class: 'reg-big mono' }, v.registration_number)
           : h('div', { class: 'reg-big none' }, 'No reg. no'),
         h('div', { class: 'vin mono big' }, v.vin)),
-      h('div', { class: 'head-side' }, pill(v.status), readyBadge(v),
+      h('div', { class: 'head-side' }, pill(v.status), readyBadge(v), tyreBadge(v.tyre_warning),
         // Visual hint: the car is advertised (on the website, via finn.no)
         v.finn_code ? finnLink(v.finn_code, 'finn.no ↗') : null)),
     duplicateNotice(v.possible_duplicates),

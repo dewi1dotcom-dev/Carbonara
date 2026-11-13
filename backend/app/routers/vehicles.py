@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 
 from .. import photostore, vegvesen, vinlib
-from ..common import (READY_SQL, RETENTION_DUE_SQL, RIGHT_PHOTO_SQL, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
+from ..common import (READY_SQL, RETENTION_DUE_SQL, RIGHT_PHOTO_SQL, add_tyre_warnings, bad_request, check_staff, conflict, log_event, not_found, patch_fields,
                       place_in_location, purge_vehicle, service_due, similar_vehicles, soft_delete_vehicle,
                       update_row)
 from ..config import settings
@@ -113,7 +113,7 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
     ).fetchall()
     for row in rows:
         row["service"] = service_due(row, row["first_registered"])
-    return rows
+    return add_tyre_warnings(rows)
 
 
 @router.get("/vehicles/{vehicle_id}")
@@ -211,6 +211,7 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "registry_configured": vegvesen.is_configured(),
         "service": service_due(vehicle, registry and (registry["first_registered"] or registry["first_registered_norway"])),
         "possible_duplicates": similar_vehicles(conn, vehicle["vin"], vehicle["registration_number"], vehicle_id),
+        "tyre_warning": add_tyre_warnings([vehicle])[0]["tyre_warning"],  # summer / winter wheels vs. the season
     }
 
 

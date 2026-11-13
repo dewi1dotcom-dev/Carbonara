@@ -94,6 +94,11 @@ SETTINGS: tuple[Setting, ...] = (
             help="Shown on the rental privacy notice."),
     Setting("rental_address", "Postal address", "Rental cars",
             help="Shown on the rental privacy notice."),
+    # Summer / winter wheels warnings (common.tyre_warning)
+    Setting("tyre_region", "Studded tyre region", "Wheels", default="south", choices=("south", "north"),
+            help="The studded tyre season for the summer / winter wheels warnings. South and Central Norway: "
+                 "1 November to the first Sunday after Easter Monday. Nordland, Troms and Finnmark: "
+                 "16 October to 30 April."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),
