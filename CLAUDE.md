@@ -991,6 +991,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.29.0 | **Summer / winter wheels:** dropdown on the vehicle page and rental cars, required for used cars at the arrival inspection; warnings from the studded tyre season (region on the System page) on cars, lists and Today (migration 030) |
 | 0.29.1 | Rental cars: wheels dropdown only in the Edit dialog (fleet list shows the wheels as text + warning badge) |
 | 0.29.2 | Rental cars: each car in the fleet list in its own box, with space under the heading |
+| 0.29.3 | Login always opens Today (the login screen resets the address to `#/`, so the next user doesn't land on the previous user's page, e.g. System) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

@@ -192,6 +192,9 @@ function boot() {
       document.body.classList.toggle('logged-out', !state.me);
       if (!state.me) {
         refreshNotify(); // clears the bar
+        // Whoever logs in next starts on Today, not on the page the last user had open
+        // (e.g. System, which a regular user may not see). replaceState: no hashchange.
+        if ((location.hash || '#/') !== '#/') history.replaceState(null, '', `${location.pathname}${location.search}#/`);
         const again = () => { booting = null; return boot(); };
         if (state.kiosk && !staffLogin) {
           await kioskView(root, [], { standalone: true, onStaffLogin: () => { staffLogin = true; again(); } });
