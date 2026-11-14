@@ -328,7 +328,9 @@ def field_start(gray, right: float, cy: float, text_h: float) -> float:
 def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
     """Empty square tick boxes on a rendered page, as (centre x, centre y, width) in px.
     A box: a square outline 0.7–4 % of the page width, hollow inside. Letters like
-    O or D are rounder (less area than their bounding box) and are skipped.
+    O or D are rounder (less area than their bounding box) and are skipped. Also wide, evenly
+    light-grey cells inside a table's borders (MG S6: a grey column of tick cells), with the
+    cell's height as the width.
     One box per spot: forms like MG's split each tick cell into grey | white | grey squares,
     so of the candidates close together on a line only the lightest inside (the white box) is kept."""
     import cv2
@@ -342,21 +344,27 @@ def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
     boxes = []
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)
-        if not (lo <= w <= hi and lo <= h <= hi and 0.65 <= w / h <= 1.5):
+        square = lo <= w <= hi and lo <= h <= hi and 0.65 <= w / h <= 1.5
+        # Some forms (MG S6) use a column of wide, solid light-grey cells as the tick boxes
+        cell = W * 0.02 <= w <= W * 0.1 and lo <= h <= W * 0.06 and 1.2 <= w / h <= 4.5
+        if not (square or cell):
             continue
         if cv2.contourArea(c) < 0.85 * w * h:
             continue
         approx = cv2.approxPolyDP(c, 0.08 * cv2.arcLength(c, True), True)
         if len(approx) != 4 or not cv2.isContourConvex(approx):
             continue
-        m = max(2, round(w * 0.2))
+        m = max(2, round(min(w, h) * 0.2))
         inner = bw[y + m:y + h - m, x + m:x + w - m]
         if inner.size == 0 or inner.mean() > 255 * 0.15:  # filled squares, bullets, ticked boxes
             continue
-        shade = float(gray[y + m:y + h - m, x + m:x + w - m].mean())  # 255 = white inside
-        if shade < 170:  # dark or mid-grey cells are not empty boxes
-            continue
-        boxes.append((x + w / 2, y + h / 2, float(max(w, h)), shade))
+        inside = gray[y + m:y + h - m, x + m:x + w - m]
+        shade = float(inside.mean())  # 255 = white inside
+        if square and shade >= 170:  # dark or mid-grey squares are not empty boxes
+            boxes.append((x + w / 2, y + h / 2, float(max(w, h)), shade))
+        elif cell and 150 <= shade <= 240 and float(inside.std()) < 12:
+            # only grey, evenly filled cells: white rectangles are headers and text boxes
+            boxes.append((x + w / 2, y + h / 2, float(min(w, h)), shade))
     out: list[tuple[float, float, float]] = []
     # Lightest first (then largest: a box's outer edge before its inner edge); skip any candidate
     # next to one already kept on the same line.

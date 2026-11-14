@@ -762,8 +762,10 @@ the server is LAN-only, so no customer phones / public internet).
       positions" also finds empty square boxes on the page pictures (`find_boxes`, OpenCV: square outline
       0.7–4 % of the page width, hollow, not round like O/D), only when no boxes are placed yet. **One box per
       spot (0.33.5):** MG's tick cells are grey | white | grey squares, so candidates close together on a line
-      compete and only the lightest inside (the white box) is kept; mid-grey or darker insides never count. The
-      suggested tick size is 85 % of the median box.
+      compete and only the lightest inside (the white box) is kept; mid-grey or darker insides never count.
+      **Grey cells (0.33.7):** another MG S6 form has wide, solid light-grey tick cells (≈ 7.6 × 2.6 % of the page,
+      black borders); those count too (2–10 % wide, aspect 1.2–4.5, evenly grey 150–240; white rectangles never,
+      they are headers / text boxes), sized by their height. The suggested tick size is 85 % of the median box.
     - The dialog shows "Tick all boxes on the PDI sheet" (unticked by default, remembered as `sheet_checks` for
       "Make sheet again"). Ticks are drawn with ZapfDingbats (built-in PDF font); reportlab needs the
       Unicode "✔" (passing "4" came out as a black square, fixed 0.33.6). "Test" ticks every box.
@@ -1127,6 +1129,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.4 | PDI sheets: page pictures show a fillable form's fields (tick boxes visible and found); bare "REG" label; 12V number suggested before a "Volt" label. Verified live: flattening removes the form fields |
 | 0.33.5 | PDI sheets: tick box finder keeps one box per spot (the white box, not the grey squares beside it) |
 | 0.33.6 | Fix: made PDI sheets of fillable forms lost the whole form (page content kept untouched now); the form's own check boxes are ticked ("Ja" look); ✔ instead of black squares |
+| 0.33.7 | PDI sheets: tick box finder also finds wide light-grey tick cells (MG S6 "S6 2" form) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
