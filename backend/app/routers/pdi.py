@@ -356,6 +356,9 @@ def confirm_date(order_id: int, body: WorkOrderIn, request: Request, conn=Depend
                  (_me(request), work_order, order_id))
     log_event(conn, row["vehicle_id"], "pdi_date_confirmed", staff_id=_me(request),
               data={"pdi_at": row["pdi_at"].isoformat(), "work_order": work_order})
+    if row["work_order"] and row["work_order"] != work_order:  # confirmed again with another number
+        log_event(conn, row["vehicle_id"], "pdi_work_order_changed", staff_id=_me(request),
+                  data={"from": row["work_order"], "to": work_order})
     return _order(conn, order_id)
 
 
@@ -426,8 +429,7 @@ def mark_done(order_id: int, request: Request, body: Optional[DoneIn] = None, co
     body = body or DoneIn()
     conn.execute("UPDATE pdi_orders SET status = 'done', done_at = now(), done_by = %s, done_km = %s WHERE id = %s",
                  (_me(request), body.km, order_id))
-    if (body.work_order or "").strip():
-        conn.execute("UPDATE pdi_orders SET work_order = %s WHERE id = %s", (_work_order(body.work_order), order_id))
+    pdi_sheets.save_work_order(conn, order_id, _me(request), body.work_order)
     old = None
     if body.template_id is not None:
         if body.km is None:

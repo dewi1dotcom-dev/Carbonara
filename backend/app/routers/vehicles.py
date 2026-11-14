@@ -387,13 +387,13 @@ def sync_now(vehicle_id: int, request: Request, conn=Depends(get_conn)):
 # --------------------------------------------------------------------------- #
 
 @router.post("/vehicles/{vehicle_id}/move")
-def move_vehicle(vehicle_id: int, body: MoveIn, conn=Depends(get_conn)):
+def move_vehicle(vehicle_id: int, body: MoveIn, request: Request, conn=Depends(get_conn)):
+    staff_id = request.state.staff["id"]  # the logged-in user is the one moving the car
     vehicle = conn.execute("SELECT * FROM vehicles WHERE id = %s FOR UPDATE", (vehicle_id,)).fetchone()
     if not vehicle:
         raise not_found("Vehicle")
     if vehicle["status"] == "intake":
         raise conflict("Finish the arrival inspection first; it places the car in storage")
-    check_staff(conn, body.staff_id)
     current = conn.execute(
         """SELECT a.id, l.id AS location_id, l.code FROM storage_assignments a
              JOIN storage_spots l ON l.id = a.location_id
@@ -405,9 +405,9 @@ def move_vehicle(vehicle_id: int, body: MoveIn, conn=Depends(get_conn)):
     if body.location_id is not None:
         if current and current["location_id"] == body.location_id:
             raise conflict(f"The car is already at {current['code']}")
-        location = place_in_location(conn, vehicle_id, body.location_id, body.staff_id)
+        location = place_in_location(conn, vehicle_id, body.location_id, staff_id)
         conn.execute("UPDATE vehicles SET status = 'in_storage' WHERE id = %s", (vehicle_id,))
-        log_event(conn, vehicle_id, "moved", staff_id=body.staff_id, data={
+        log_event(conn, vehicle_id, "moved", staff_id=staff_id, data={
             "from": from_code, "to": location["code"], "location_id": location["id"], "note": body.note,
         })
     else:
@@ -416,10 +416,10 @@ def move_vehicle(vehicle_id: int, body: MoveIn, conn=Depends(get_conn)):
         if current:
             conn.execute(
                 "UPDATE storage_assignments SET removed_at = now(), removed_by = %s WHERE id = %s",
-                (body.staff_id, current["id"]),
+                (staff_id, current["id"]),
             )
         conn.execute("UPDATE vehicles SET status = 'off_site' WHERE id = %s", (vehicle_id,))
-        log_event(conn, vehicle_id, "moved_off_site", staff_id=body.staff_id,
+        log_event(conn, vehicle_id, "moved_off_site", staff_id=staff_id,
                   data={"from": from_code, "note": body.note})
     return get_vehicle(vehicle_id, conn)
 

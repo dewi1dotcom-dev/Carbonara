@@ -356,6 +356,8 @@ before** the deadline. Service: green / amber (± 31 days) / red.
   (`parent_id`). **The user likes the sub-zone layout; keep it.**
 - `place_in_location` locks the spot and checks capacity and sub-zone rules. "Off site" means
   not on a spot.
+- **Move car (0.32.2):** the person moving is the logged-in user (`POST /vehicles/{id}/move` uses the
+  session, not `staff_id`); the dialog has no "Moved by" dropdown.
 - **Zones are not used (0.14.2):** old zone values were moved into the description, and
   zones are never shown. In Settings, the description and capacity are edited in place.
   Lists and pickers are flat.
@@ -717,7 +719,10 @@ the server is LAN-only, so no customer phones / public internet).
     doesn't touch `updated_at`).
   - **On the PDI sheet:** placeable text field `work_order` (OCR labels: arbeidsordre, ordrenr, work order…). The
     "PDI done" / "Make PDI sheet" dialog shows the number prefilled and editable (required when the chosen sheet
-    has the field); a number typed there is saved on the order first.
+    has the field); a number typed there is saved on the order first (`pdi_sheets.save_work_order`).
+  - **Every change of the number is a history entry (0.32.1, the user's rule):** `pdi_work_order_changed`
+    `{from, to}`, wherever it is changed (the Change link, the sheet dialogs, or confirming again with another
+    number). The first number entered at confirmation is logged in `pdi_date_confirmed`.
 - **PDI orders page (0.30.0)** (`#/pdi-orders`, `views/pdiorders.js`, `GET /pdi/orders`; top menu "PDI orders" /
   "Nybilklargjøring", team menu key `pdi_orders`; migration 031 gave it to teams that see Vehicles):
   - **Which cars:** every car with a PDI order (its open one, else its latest done one; cancelled ones don't
@@ -1073,6 +1078,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.30.0 | **PDI orders page** (top menu): cars with a PDI order until registered and off site, with car details, right-side photo, order and history (no documents); PDI **expected completion date** (default the day after) and **confirm PDI date** (migration 031) |
 | 0.31.0 | **PDI sheets:** "PDI done" dialog fills in the model's own PDF form (reg. no, VIN, mileage, date, stamp, signature) and stores it on the order; templates uploaded per model with tap-to-place fields and OCR suggestions; company stamps; each user's own signature (drawn or uploaded) (migration 032) |
 | 0.32.0 | **Work order no.** on PDI orders: entered when confirming the PDI date (editable later), shown on the PDI orders page and the PDI card, placeable field on the PDI sheet (migration 033) |
+| 0.32.1 | Work order no. changed in the "PDI done" / "Make PDI sheet" dialog now gets a history entry too |
+| 0.32.2 | Move car: "Moved by" is the logged-in user (no dropdown; server takes it from the session) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

@@ -308,14 +308,13 @@ function moveDialog(v, done) {
     ].filter(Boolean));
   }).catch(showError);
   const note = h('input', { type: 'text', id: 'move-note', maxlength: 200, placeholder: 'Optional, e.g. "At workshop for paint"' });
-  const staffSel = staffSelect('move-staff');
   const okBtn = h('button', { class: 'btn primary', type: 'submit' }, 'Move');
 
+  // "Moved by" is the logged-in user (the server takes it from the session)
   const form = h('form', { class: 'form' },
     h('p', {}, here ? `Currently at ${here.code}.` : 'Currently off site.'),
     h('label', { for: 'move-spot' }, 'Move to'), spotSel,
     h('label', { for: 'move-note' }, 'Note'), note,
-    h('label', { for: 'move-staff' }, 'Moved by'), staffSel,
     h('div', { class: 'actions' }, okBtn));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
@@ -323,7 +322,7 @@ function moveDialog(v, done) {
     busy(okBtn, async () => {
       await api.post(`/vehicles/${v.id}/move`, {
         location_id: spotSel.value === 'off' ? null : Number(spotSel.value),
-        note: note.value.trim() || null, staff_id: staffId(staffSel),
+        note: note.value.trim() || null,
       });
       close();
       toast(spotSel.value === 'off' ? 'Marked as off site' : 'Moved', 'success');

@@ -285,11 +285,24 @@ class SheetIn(BaseModel):
     work_order: Optional[str] = Field(None, max_length=40)  # filled in or corrected in the dialog
 
 
+def save_work_order(conn, order_id: int, staff_id: int, text: Optional[str]) -> None:
+    """A work order number typed in the "PDI done" / "Make PDI sheet" dialog: saved on the
+    order, with a history entry when it differs from the stored one. Empty = keep the stored one."""
+    work_order = " ".join((text or "").split())
+    if not work_order:
+        return
+    row = conn.execute("SELECT vehicle_id, work_order FROM pdi_orders WHERE id = %s FOR UPDATE",
+                       (order_id,)).fetchone()
+    if not row or row["work_order"] == work_order:
+        return
+    conn.execute("UPDATE pdi_orders SET work_order = %s WHERE id = %s", (work_order, order_id))
+    log_event(conn, row["vehicle_id"], "pdi_work_order_changed", staff_id=staff_id,
+              data={"from": row["work_order"], "to": work_order})
+
+
 def make_sheet(conn, order_id: int, staff: dict, body: SheetIn) -> Optional[str]:
     """Shared by "PDI done" (pdi.py) and "Make PDI sheet": returns the old sheet's key."""
-    work_order = " ".join((body.work_order or "").split())
-    if work_order:  # typed in the dialog: saved on the order, then printed on the sheet
-        conn.execute("UPDATE pdi_orders SET work_order = %s WHERE id = %s", (work_order, order_id))
+    save_work_order(conn, order_id, staff["id"], body.work_order)  # saved first, then printed on the sheet
     try:
         old = pdisheet.make_sheet(conn, order_id, staff, body.template_id, body.km, body.date, body.stamp_id)
     except pdisheet.SheetError as exc:
