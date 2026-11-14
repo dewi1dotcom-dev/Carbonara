@@ -135,6 +135,9 @@ const changeText = (obj) => Object.entries(obj || {})
   .map(([k, [a, b]]) => [k, k === 'wheels' ? [WHEELS[a] ?? a, WHEELS[b] ?? b] : [a, b]])
   .map(([k, [a, b]]) => `${FIELD_LABELS[k] ?? k}: ${a ?? '–'} → ${b ?? '–'}`).join(', ');
 
+/** 12V battery reading in history details: 12.6 -> "12V 12,6 V". */
+const volt12 = (v) => (v == null ? '' : `12V ${String(v).replace('.', ',')} V`);
+
 export function eventDetail(e) {
   const d = e.data || {};
   switch (e.event_type) {
@@ -150,8 +153,8 @@ export function eventDetail(e) {
     case 'pdi_date_confirmed':
       return [d.pdi_at && fmtDate(d.pdi_at), d.work_order && `Work order no. ${d.work_order}`].filter(Boolean).join(' · ');
     case 'pdi_work_order_changed': return d.from ? `${d.from} → ${d.to}` : d.to || '';
-    case 'pdi_done': return [d.km != null && fmtKm(d.km), d.sheet && 'PDI sheet filled in'].filter(Boolean).join(' · ');
-    case 'pdi_sheet_made': return [d.km != null && fmtKm(d.km), d.again && 'made again'].filter(Boolean).join(' · ');
+    case 'pdi_done': return [d.km != null && fmtKm(d.km), volt12(d.battery), d.sheet && 'PDI sheet filled in'].filter(Boolean).join(' · ');
+    case 'pdi_sheet_made': return [d.km != null && fmtKm(d.km), volt12(d.battery), d.again && 'made again'].filter(Boolean).join(' · ');
     case 'storage_check':
       return [d.kind === 'arrival' ? 'First storage check' : { monthly: 'Monthly', quarterly: '3-month', half_year: '6-month' }[d.level],
         d.v12 != null && `12V ${d.v12} V`, d.battery_action && d.battery_action !== 'none' && `battery ${d.battery_action}`,

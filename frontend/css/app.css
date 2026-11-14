@@ -732,6 +732,8 @@ button.po-photo { padding: 0; cursor: zoom-in; font: inherit; color: inherit; }
 .ps-img.empty { aspect-ratio: 3 / 1; display: flex; align-items: center; justify-content: center; color: var(--mark);
   font-size: .75rem; line-height: 1.2; background: var(--mark-bg); }
 .ps-mark.sel { outline: 2px solid var(--primary); }
+.ps-check { transform: translate(-50%, -50%); color: var(--mark); line-height: 1; }
+.ps-check.sel { outline: 1px solid var(--primary); }
 input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; text-transform: uppercase;
   letter-spacing: .06em; width: auto; flex: 1 1 8rem; max-width: 12rem; }
 .field .row:has(.rc-reg-input) { margin-top: 0; align-items: center; }

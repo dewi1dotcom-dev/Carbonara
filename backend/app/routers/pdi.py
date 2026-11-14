@@ -422,6 +422,8 @@ class DoneIn(BaseModel):
     stamp_id: Optional[int] = None
     work_order: Optional[str] = Field(None, max_length=40)  # filled in or corrected here too
     wheels: Optional[Literal["summer", "winter"]] = None   # the wheels the car is on after the PDI
+    battery: Optional[float] = Field(None, ge=0, le=30)  # 12V battery reading for the sheet
+    checks: bool = False
 
 
 @router.post("/pdi/{order_id}/done")
@@ -443,9 +445,10 @@ def mark_done(order_id: int, request: Request, body: Optional[DoneIn] = None, co
         if body.km is None:
             raise bad_request("Enter the mileage for the PDI sheet")
         old = pdi_sheets.make_sheet(conn, order_id, request.state.staff, pdi_sheets.SheetIn(
-            template_id=body.template_id, km=body.km, date=body.date or dt.date.today(), stamp_id=body.stamp_id))
+            template_id=body.template_id, km=body.km, date=body.date or dt.date.today(), stamp_id=body.stamp_id,
+            battery=body.battery, checks=body.checks))
     log_event(conn, row["vehicle_id"], "pdi_done", staff_id=_me(request),
-              data={"km": body.km, "sheet": body.template_id is not None})
+              data={"km": body.km, "battery": body.battery, "sheet": body.template_id is not None})
     result = _order(conn, order_id)
     if old:
         conn.commit()  # remove the old file only once the change is final

@@ -200,7 +200,7 @@ backend/
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet)
-  migrations/           001…033
+  migrations/           001…034
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -255,6 +255,7 @@ frontend/               no build step; plain ES modules
 | 031 | `pdi_confirm` | `pdi_orders.expected_done_date / pdi_confirmed_at / pdi_confirmed_by`; teams with Vehicles get menu item `pdi_orders` |
 | 032 | `pdi_sheets` | `pdi_templates` (model PDFs + field positions), `pdi_stamps`, `staff.signature_key`, `pdi_orders.done_km / sheet_*` |
 | 033 | `work_order` | `pdi_orders.work_order` (the workshop's work order number) |
+| 034 | `pdi_battery_checks` | `pdi_orders.done_battery_v` (12V reading), `sheet_checks` ("tick all boxes") |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -750,6 +751,17 @@ the server is LAN-only, so no customer phones / public internet).
     asked in "Make PDI sheet"). One request: `POST /pdi/{id}/done` with `{template_id, km, date, stamp_id,
     work_order, wheels}`; nothing is saved if the sheet fails. Afterwards "📄 Open PDI sheet" (a tap, so no popup
     blocker).
+  - **12V battery + tick boxes (0.33.0, migration 034; the user's request):** the MG forms have a 12V reading and
+    many tick boxes.
+    - Text field `battery` (OCR labels 12V / batteri / spenning…), filled as "12,6 V" (`fmt_volt`). The dialog
+      asks "12V battery (V) \*" (required when the sheet has the field; comma or dot). Stored as
+      `pdi_orders.done_battery_v` and logged in `pdi_done` / `pdi_sheet_made` (`battery`; not personal data).
+    - Field `checks` = **many positions in one field**: `{size, marks: [{page, x, y}]}` (centre of each box). In
+      "Place fields" → "Tick boxes", each tap adds a box and a tap on a tick removes it; "Remove all". "Suggest
+      positions" also finds empty square boxes on the page pictures (`find_boxes`, OpenCV: square outline
+      0.7–3 % of the page width, hollow, not round like O/D), only when no boxes are placed yet.
+    - The dialog shows "Tick all boxes on the PDI sheet" (unticked by default, remembered as `sheet_checks` for
+      "Make sheet again"). Ticks are drawn with ZapfDingbats "4" (✔, a built-in PDF font). "Test" ticks every box.
   - **Done orders:** "📄 PDI sheet" (`GET /pdi/{id}/sheet`, inline, `no-store`) and "Make PDI sheet" / "Make
     sheet again" (`POST /pdi/{id}/sheet`, e.g. once the car has its reg. no; the old file is removed after
     commit; event `pdi_sheet_made`). The signer is whoever makes the sheet.
@@ -1084,6 +1096,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.32.1 | Work order no. changed in the "PDI done" / "Make PDI sheet" dialog now gets a history entry too |
 | 0.32.2 | Move car: "Moved by" is the logged-in user (no dropdown; server takes it from the session) |
 | 0.32.3 | "PDI done" dialog asks for summer or winter wheels (required, saved on the car) |
+| 0.33.0 | **PDI sheets: 12V battery reading** (placeable field, asked in the dialog) and **"Tick all boxes"** (tick-box positions tapped or found automatically on the form) (migration 034) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

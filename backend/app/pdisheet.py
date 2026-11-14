@@ -31,10 +31,14 @@ from .config import settings
 
 log = logging.getLogger("carbonara.pdisheet")
 
-TEXT_FIELDS = ("reg", "vin", "km", "date", "signer", "work_order")
+TEXT_FIELDS = ("reg", "vin", "km", "date", "signer", "work_order", "battery")
 IMAGE_FIELDS = ("stamp", "signature")
-FIELDS = TEXT_FIELDS + IMAGE_FIELDS
+# "checks": the form's tick boxes, many positions in one field: {"size": pt, "marks": [{page, x, y}, …]}.
+# Each mark is the centre of a box; all are ticked when the user chooses "Tick all boxes".
+CHECKS = "checks"
+FIELDS = TEXT_FIELDS + IMAGE_FIELDS + (CHECKS,)
 MAX_PAGES = 20
+MAX_MARKS = 400
 RENDER_WIDTH = 1400  # px; pictures of the pages for placing fields and for OCR
 
 _pdfium_lock = threading.Lock()  # pdfium is not thread-safe
@@ -166,6 +170,8 @@ LABELS = {
     "work_order": ("arbeidsordre", "arbeidsordrenr", "arbeidsordre nr", "ordrenr", "ordre nr", "ordrenummer", "a.o.",
                    "ao nr", "work order", "work order no", "wo", "wo no", "r.o.", "repair order"),
     "signer": ("navn", "name"),
+    "battery": ("12v", "12 v", "12v-batteri", "12v batteri", "batterispenning", "batteri", "battery voltage",
+                "battery", "spenning", "voltage", "volt"),
     "signature": ("signatur", "signature", "underskrift", "sign"),
     "stamp": ("stempel", "stamp", "firmastempel"),
 }
@@ -182,9 +188,14 @@ def suggest(key: str, pages: list[dict]) -> dict:
     from .vinlib import scene_text
 
     found: dict[str, tuple[int, dict]] = {}
+    marks: list[dict] = []
+    box_pts: list[float] = []
     for page_no in range(1, min(len(pages), 6) + 1):
         img = Image.open(page_image(key, page_no))
         W, H = img.size
+        for cx, cy, bw in find_boxes(img):
+            marks.append({"page": page_no, "x": round(cx / W, 4), "y": round(cy / H, 4)})
+            box_pts.append(bw / W * pages[page_no - 1]["w"])
         for item in scene_text(img, log_text=False):
             text = item["text"].lower().strip()
             if len(text) > 60:
@@ -201,7 +212,45 @@ def suggest(key: str, pages: list[dict]) -> dict:
                            "size": max(7, min(14, round(item["height"] / W * pages[page_no - 1]["w"] * 0.8)))}
                 if field not in found or len(text) < found[field][0]:
                     found[field] = (len(text), {k: round(v, 4) if isinstance(v, float) else v for k, v in pos.items()})
-    return {f: pos for f, (_, pos) in found.items()}
+    out = {f: pos for f, (_, pos) in found.items()}
+    if marks:
+        box_pts.sort()
+        out[CHECKS] = {"size": round(min(max(box_pts[len(box_pts) // 2], 6), 24), 1), "marks": marks[:MAX_MARKS]}
+    return out
+
+
+def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
+    """Empty square tick boxes on a rendered page, as (centre x, centre y, width) in px.
+    A box: a square outline 0.7–3 % of the page width, hollow inside. Letters like
+    O or D are rounder (less area than their bounding box) and are skipped."""
+    import cv2
+    import numpy as np
+
+    gray = np.array(img.convert("L"))
+    W = gray.shape[1]
+    bw = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 15, 10)
+    contours, _ = cv2.findContours(bw, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    lo, hi = W * 0.007, W * 0.03
+    boxes = []
+    for c in contours:
+        x, y, w, h = cv2.boundingRect(c)
+        if not (lo <= w <= hi and lo <= h <= hi and 0.8 <= w / h <= 1.25):
+            continue
+        if cv2.contourArea(c) < 0.85 * w * h:
+            continue
+        approx = cv2.approxPolyDP(c, 0.08 * cv2.arcLength(c, True), True)
+        if len(approx) != 4 or not cv2.isContourConvex(approx):
+            continue
+        m = max(2, round(w * 0.2))
+        inner = bw[y + m:y + h - m, x + m:x + w - m]
+        if inner.size == 0 or inner.mean() > 255 * 0.15:  # filled squares, bullets, ticked boxes
+            continue
+        boxes.append((x + w / 2, y + h / 2, float(w)))
+    out: list[tuple[float, float, float]] = []
+    for b in sorted(boxes, key=lambda b: -b[2]):  # a box's outer and inner edge: keep one
+        if not any(abs(b[0] - o[0]) < o[2] / 2 and abs(b[1] - o[1]) < o[2] / 2 for o in out):
+            out.append(b)
+    return sorted(out, key=lambda b: (round(b[1] / (W * 0.01)), b[0]))  # reading order
 
 
 def clean_fields(fields: dict, pages: list[dict]) -> dict:
@@ -210,6 +259,22 @@ def clean_fields(fields: dict, pages: list[dict]) -> dict:
     for key, f in (fields or {}).items():
         if key not in FIELDS or not isinstance(f, dict):
             raise SheetError(f"Unknown field: {key}")
+        if key == CHECKS:
+            marks = f.get("marks") or []
+            if not isinstance(marks, list) or len(marks) > MAX_MARKS:
+                raise SheetError(f"At most {MAX_MARKS} tick boxes")
+            clean = []
+            for m in marks:
+                try:
+                    page, x, y = int(m["page"]), float(m["x"]), float(m["y"])
+                except (KeyError, TypeError, ValueError) as exc:
+                    raise SheetError("Tick boxes: page, x and y are needed") from exc
+                if not 1 <= page <= len(pages) or not (0 <= x <= 1 and 0 <= y <= 1):
+                    raise SheetError("A tick box is outside the page")
+                clean.append({"page": page, "x": round(x, 4), "y": round(y, 4)})
+            if clean:  # no boxes = the field isn't placed
+                out[key] = {"size": round(min(max(float(f.get("size") or 10), 6), 24), 1), "marks": clean}
+            continue
         try:
             page = int(f["page"])
             x, y = float(f["x"]), float(f["y"])
@@ -256,14 +321,23 @@ def fmt_km(km: int | None) -> str:
     return "" if km is None else f"{km:,}".replace(",", " ")
 
 
-def fill(template: dict, values: dict[str, str], images: dict[str, Path | None]) -> bytes:
+def fmt_volt(v) -> str:
+    """12.6 -> '12,6 V' (Norwegian decimal comma)."""
+    if v is None:
+        return ""
+    return f"{float(v):.2f}".rstrip("0").rstrip(".").replace(".", ",") + " V"
+
+
+def fill(template: dict, values: dict[str, str], images: dict[str, Path | None], checks: bool = False) -> bytes:
     """The form with the values and pictures drawn on. Fields without a value or
-    picture are left blank (e.g. no reg. no yet)."""
+    picture are left blank (e.g. no reg. no yet). checks = tick every tick box."""
     from pypdf import PdfReader, PdfWriter
     from reportlab.lib.utils import ImageReader
     from reportlab.pdfgen import canvas
 
-    fields = template["fields"] or {}
+    fields = dict(template["fields"] or {})
+    tick = fields.pop(CHECKS, None) if checks else None
+    fields.pop(CHECKS, None)
     reader = PdfReader(str(path(template["file_key"], "pdf")))
     writer = PdfWriter()
     for page_no, page in enumerate(reader.pages, start=1):
@@ -272,7 +346,8 @@ def fill(template: dict, values: dict[str, str], images: dict[str, Path | None])
         box = page.cropbox
         left, bottom, W, H = float(box.left), float(box.bottom), float(box.width), float(box.height)
         here = {k: f for k, f in fields.items() if f.get("page") == page_no}
-        if here:
+        ticks = [m for m in (tick or {}).get("marks", []) if m["page"] == page_no]
+        if here or ticks:
             buf = io.BytesIO()
             c = canvas.Canvas(buf, pagesize=(float(page.mediabox.right), float(page.mediabox.top)))
             for key, f in here.items():
@@ -291,6 +366,11 @@ def fill(template: dict, values: dict[str, str], images: dict[str, Path | None])
                     if text:
                         c.setFont("Helvetica", f["size"])
                         c.drawString(x, y - f["size"] * 0.35, text)  # y is the middle of the line
+            if ticks:
+                size = tick["size"]
+                c.setFont("ZapfDingbats", size)  # built-in PDF font; "4" is a heavy check mark ✔
+                for m in ticks:
+                    c.drawCentredString(left + m["x"] * W, bottom + (1 - m["y"]) * H - size * 0.35, "4")
             c.save()
             buf.seek(0)
             page.merge_page(PdfReader(buf).pages[0])
@@ -309,7 +389,7 @@ def store_sheet(data: bytes) -> str:
 
 
 def make_sheet(conn, order_id: int, staff: dict, template_id: int, km: int, date: dt.date,
-               stamp_id: int | None) -> str | None:
+               stamp_id: int | None, battery: float | None = None, checks: bool = False) -> str | None:
     """Fill in the PDI sheet for a PDI order and store it on the order. Signs with
     the logged-in user's signature. Returns the replaced sheet's key: remove that
     file after commit."""
@@ -333,7 +413,10 @@ def make_sheet(conn, order_id: int, staff: dict, template_id: int, km: int, date
             raise SheetError("Choose a stamp")
     if "signature" in fields and not me["signature_key"]:
         raise SheetError("Add your signature first (Settings → My signature, or the 👤 menu)")
+    if "battery" in fields and battery is None:
+        raise SheetError("Enter the 12V battery reading")
     values = {
+        "battery": fmt_volt(battery),
         "reg": fmt_reg(order["registration_number"]),
         "vin": order["vin"],
         "km": fmt_km(km),
@@ -346,7 +429,7 @@ def make_sheet(conn, order_id: int, staff: dict, template_id: int, km: int, date
         "signature": path(me["signature_key"], "png") if me["signature_key"] else None,
     }
     try:
-        key = store_sheet(fill(template, values, images))
+        key = store_sheet(fill(template, values, images, checks=checks))
     except SheetError:
         raise
     except Exception as exc:
@@ -354,9 +437,11 @@ def make_sheet(conn, order_id: int, staff: dict, template_id: int, km: int, date
         raise SheetError("The PDI sheet could not be made from this PDF") from exc
     conn.execute(
         """UPDATE pdi_orders SET done_km = %s, sheet_file_key = %s, sheet_template_id = %s, sheet_stamp_id = %s,
-                  sheet_date = %s, sheet_made_at = now(), sheet_made_by = %s
+                  sheet_date = %s, sheet_made_at = now(), sheet_made_by = %s,
+                  done_battery_v = coalesce(%s, done_battery_v), sheet_checks = %s
             WHERE id = %s""",
-        (km, key, template_id, stamp["id"] if stamp else None, date, staff["id"], order_id),
+        (km, key, template_id, stamp["id"] if stamp else None, date, staff["id"], battery,
+         bool(checks and CHECKS in fields), order_id),
     )
     return order["sheet_file_key"]
 
@@ -366,7 +451,8 @@ def test_fill(template: dict, signer: dict, stamp: dict | None) -> bytes:
     return fill(template, {
         "reg": "AB 12345", "vin": "TESTVIN0123456789", "km": "12 345",
         "date": dt.date.today().strftime("%d.%m.%Y"), "signer": signer["name"], "work_order": "123456",
+        "battery": fmt_volt(12.6),
     }, {
         "stamp": path(stamp["file_key"], "png") if stamp else None,
         "signature": path(signer["signature_key"], "png") if signer.get("signature_key") else None,
-    })
+    }, checks=True)

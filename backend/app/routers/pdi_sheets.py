@@ -258,7 +258,7 @@ def sheet_options(order_id: int, request: Request, conn=Depends(get_conn)):
     """What the "PDI done" / "Make PDI sheet" dialog needs."""
     order = conn.execute(
         """SELECT o.id, o.status, o.done_km, o.sheet_template_id, o.sheet_stamp_id, o.sheet_date, o.done_at,
-                  o.work_order, v.wheels, v.make, v.model, v.registration_number, v.vin,
+                  o.work_order, o.done_battery_v, o.sheet_checks, v.wheels, v.make, v.model, v.registration_number, v.vin,
                   (SELECT max(i.odometer_km) FROM inspections i
                     WHERE i.vehicle_id = v.id AND i.status = 'completed') AS last_km
              FROM pdi_orders o JOIN vehicles v ON v.id = o.vehicle_id WHERE o.id = %s""", (order_id,)).fetchone()
@@ -283,6 +283,8 @@ class SheetIn(BaseModel):
     date: dt.date
     stamp_id: Optional[int] = None
     work_order: Optional[str] = Field(None, max_length=40)  # filled in or corrected in the dialog
+    battery: Optional[float] = Field(None, ge=0, le=30)  # 12V battery reading, volts
+    checks: bool = False  # tick every tick box on the sheet
 
 
 def save_work_order(conn, order_id: int, staff_id: int, text: Optional[str]) -> None:
@@ -304,7 +306,8 @@ def make_sheet(conn, order_id: int, staff: dict, body: SheetIn) -> Optional[str]
     """Shared by "PDI done" (pdi.py) and "Make PDI sheet": returns the old sheet's key."""
     save_work_order(conn, order_id, staff["id"], body.work_order)  # saved first, then printed on the sheet
     try:
-        old = pdisheet.make_sheet(conn, order_id, staff, body.template_id, body.km, body.date, body.stamp_id)
+        old = pdisheet.make_sheet(conn, order_id, staff, body.template_id, body.km, body.date, body.stamp_id,
+                                  battery=body.battery, checks=body.checks)
     except pdisheet.SheetError as exc:
         raise _sheet_error(exc)
     return old
@@ -320,7 +323,8 @@ def remake_sheet(order_id: int, body: SheetIn, request: Request, conn=Depends(ge
         raise conflict("Mark the PDI as done first")
     staff = request.state.staff
     old = make_sheet(conn, order_id, staff, body)
-    log_event(conn, row["vehicle_id"], "pdi_sheet_made", staff_id=staff["id"], data={"km": body.km, "again": bool(old)})
+    log_event(conn, row["vehicle_id"], "pdi_sheet_made", staff_id=staff["id"],
+              data={"km": body.km, "battery": body.battery, "again": bool(old)})
     conn.commit()
     pdisheet.remove(old, "pdf")
     return {"ok": True}

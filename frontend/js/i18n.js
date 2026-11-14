@@ -379,6 +379,18 @@ const NO = {
   'Work order no.': 'Arbeidsordrenr.', 'Work order no. *': 'Arbeidsordrenr. *', 'Change': 'Endre', 'e.g. 123456': 'f.eks. 123456',
   'Confirm PDI date': 'Bekreft dato for nybilklargjøring', 'Add work order no.': 'Legg til arbeidsordrenr.', 'Work order no. saved': 'Arbeidsordrenr. lagret',
   'Work order no. changed': 'Arbeidsordrenr. endret', 'Enter the work order number': 'Skriv inn arbeidsordrenummeret',
+  // PDI sheets: 12V battery and tick boxes (0.33.0)
+  '12V battery': '12V-batteri', 'Tick boxes': 'Avkrysningsbokser', '12V battery (V) *': '12V-batteri (V) *', 'e.g. 12,6': 'f.eks. 12,6',
+  'Tick all boxes on the PDI sheet': 'Kryss av alle boksene på skjemaet',
+  'Enter the 12V battery reading': 'Skriv inn målingen av 12V-batteriet',
+  '12V battery: a reading in volts, e.g. 12,6': '12V-batteri: en måling i volt, f.eks. 12,6',
+  'Tap each box on the form that should be ticked. Tap a tick again to remove it.':
+    'Trykk på hver boks på skjemaet som skal krysses av. Trykk på et kryss igjen for å fjerne det.',
+  'Tick size (pt)': 'Størrelse på kryss (pt)', 'Remove all': 'Fjern alle', 'Remove all tick boxes?': 'Fjerne alle avkrysningsboksene?',
+  '“Tick boxes”: tap the middle of every box that “Tick all boxes” should tick. “Suggest positions” also looks for empty boxes on the form.':
+    '«Avkrysningsbokser»: trykk midt i hver boks som «Kryss av alle boksene» skal krysse av. «Foreslå plasseringer» ser også etter tomme bokser på skjemaet.',
+  'Tick boxes: page, x and y are needed': 'Avkrysningsbokser: side, x og y mangler',
+  'A tick box is outside the page': 'En avkrysningsboks er utenfor siden',
   'The workshop’s work order number for this PDI. It is printed on the PDI sheet.': 'Verkstedets arbeidsordrenummer for denne nybilklargjøringen. Det skrives på skjemaet.',
   'Make the PDI sheet again to print the new number on it.': 'Lag skjemaet på nytt for å få det nye nummeret på det.',
   'Mark the PDI as done?': 'Merke nybilklargjøringen som utført?', 'PDI marked as done': 'Nybilklargjøring merket som utført', 'Cancel this PDI order?': 'Avbryte denne bestillingen?',
@@ -735,6 +747,7 @@ const NO_PATTERNS = [
     'Slette {1}?\n\nVedkommende fjernes fra listen over ansatte, og telefonnummer og PIN-kode slettes. Navnet blir stående i historikken vedkommende er en del av (kontroller, lagerkontroller…). Dette kan ikke angres.'],
   ['PDI today at {}', 'Nybilklargjøring i dag kl. {1}'], ['PDI tomorrow at {}', 'Nybilklargjøring i morgen kl. {1}'], ['PDI {} at {}', 'Nybilklargjøring {1} kl. {2}'],
   ['Work order no. {}', 'Arbeidsordrenr. {1}'],
+  ['{n} tick boxes', '{1} avkrysningsbokser'], ['At most {n} tick boxes', 'Høyst {1} avkrysningsbokser'],
   ['Fields: {}', 'Felter: {1}'], ['Suggested: {}. Check each one and tap to move it.', 'Foreslått: {1}. Sjekk hvert felt, og trykk for å flytte det.'],
   ['Tap on the page where “{}” goes.', 'Trykk på siden der «{1t}» skal stå.'], ['Place fields – {}', 'Plasser felter – {1}'],
   ['Remove the PDI sheet {}? Sheets already made are kept.', 'Fjerne skjemaet {1}? Skjemaer som allerede er laget, beholdes.'],

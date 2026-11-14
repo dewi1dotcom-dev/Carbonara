@@ -11,14 +11,16 @@ import {
 } from '../ui.js';
 
 const FIELD_LABEL = {
-  reg: 'Reg. no', vin: 'VIN', km: 'Mileage', date: 'Date', work_order: 'Work order no.', signer: 'Name of the person signing',
-  stamp: 'Stamp', signature: 'Signature',
+  reg: 'Reg. no', vin: 'VIN', km: 'Mileage', date: 'Date', work_order: 'Work order no.', battery: '12V battery',
+  signer: 'Name of the person signing', stamp: 'Stamp', signature: 'Signature', checks: 'Tick boxes',
 };
 const FIELD_KEYS = Object.keys(FIELD_LABEL);
 const IMAGE_FIELDS = ['stamp', 'signature'];
+const CHECKS = 'checks'; // many positions in one field: { size, marks: [{ page, x, y }] } (centre of each box)
 const DEFAULT_W = { stamp: 0.2, signature: 0.22 };
 const SAMPLE = {
-  reg: 'AB 12345', vin: 'TESTVIN0123456789', km: '12 345', date: '14.11.2026', work_order: '123456', signer: 'Ola Nordmann',
+  reg: 'AB 12345', vin: 'TESTVIN0123456789', km: '12 345', date: '14.11.2026', work_order: '123456', battery: '12,6 V',
+  signer: 'Ola Nordmann',
 };
 
 const fmtReg = (r) => (r && /^[A-Z]{2}\d{4,5}$/.test(r) ? `${r.slice(0, 2)} ${r.slice(2)}` : r || '');
@@ -263,7 +265,11 @@ function placeDialog(t, stamps, onSaved) {
 
   const drawMarkers = () => {
     const scale = img.clientWidth / (pages[page - 1]?.w || 595); // px per PDF point
-    markers.replaceChildren(...Object.entries(fields).filter(([, f]) => f.page === page).map(([k, f]) => {
+    const ticks = (fields[CHECKS]?.marks || []).filter((m) => m.page === page).map((m) => h('div', {
+      class: `ps-mark ps-check${selected === CHECKS ? ' sel' : ''}`,
+      style: { left: `${m.x * 100}%`, top: `${m.y * 100}%`, fontSize: `${Math.max(fields[CHECKS].size * scale, 6)}px` },
+    }, '✔'));
+    markers.replaceChildren(...ticks, ...Object.entries(fields).filter(([k, f]) => k !== CHECKS && f.page === page).map(([k, f]) => {
       const sel = k === selected ? ' sel' : '';
       if (IMAGE_FIELDS.includes(k)) {
         const box = h('div', {
@@ -288,12 +294,35 @@ function placeDialog(t, stamps, onSaved) {
   const drawControls = () => {
     fieldBar.replaceChildren(...FIELD_KEYS.map((k) => h('button', {
       class: k === selected ? 'btn primary small' : 'btn small', type: 'button',
-      onClick: () => { selected = k; if (fields[k] && fields[k].page !== page) showPage(fields[k].page); drawAll(); },
+      onClick: () => {
+        selected = k;
+        if (k !== CHECKS && fields[k] && fields[k].page !== page) showPage(fields[k].page);
+        drawAll();
+      },
     }, `${fields[k] ? '✓ ' : ''}${FIELD_LABEL[k]}`)));
     pageBar.replaceChildren(...(pages.length > 1 ? pages.map((_, i) => h('button', {
       class: i + 1 === page ? 'btn primary small' : 'btn small', type: 'button', onClick: () => showPage(i + 1),
     }, `Page ${i + 1}`)) : []));
     const f = fields[selected];
+    if (selected === CHECKS) {
+      const n = f?.marks.length || 0;
+      const size = h('input', { type: 'number', min: 6, max: 24, step: 0.5, value: f?.size ?? 10, class: 'ps-size' });
+      size.addEventListener('input', () => {
+        const v = Number(size.value);
+        if (v && fields[CHECKS]) { fields[CHECKS].size = Math.min(Math.max(v, 6), 24); drawMarkers(); }
+      });
+      controls.replaceChildren(...[ // spread + filter: replaceChildren() prints null as text
+        h('p', { class: 'small' }, 'Tap each box on the form that should be ticked. Tap a tick again to remove it.'),
+        n ? h('div', { class: 'inline-form wrap' },
+          h('span', { class: 'small' }, `${n} tick boxes`),
+          h('label', {}, 'Tick size (pt)'), size,
+          h('button', {
+            class: 'link danger', type: 'button',
+            onClick: () => { if (confirm('Remove all tick boxes?')) { delete fields[CHECKS]; drawAll(); } },
+          }, 'Remove all')) : null,
+      ].filter(Boolean));
+      return;
+    }
     if (!f) {
       controls.replaceChildren(h('p', { class: 'small' }, `Tap on the page where “${FIELD_LABEL[selected]}” goes.`));
       return;
@@ -329,6 +358,15 @@ function placeDialog(t, stamps, onSaved) {
     const r = img.getBoundingClientRect();
     const x = (e.clientX - r.left) / r.width;
     const y = (e.clientY - r.top) / r.height;
+    if (selected === CHECKS) { // add a box, or remove the tick that was tapped
+      const c = fields[CHECKS] || (fields[CHECKS] = { size: 10, marks: [] });
+      const near = c.marks.findIndex((m) => m.page === page
+        && Math.abs(m.x - x) * r.width < 12 && Math.abs(m.y - y) * r.height < 12);
+      if (near >= 0) c.marks.splice(near, 1); else c.marks.push({ page, x, y });
+      if (!c.marks.length) delete fields[CHECKS];
+      drawAll();
+      return;
+    }
     const prev = fields[selected];
     fields[selected] = IMAGE_FIELDS.includes(selected)
       ? { page, x, y, w: prev?.w ?? DEFAULT_W[selected] }
@@ -350,7 +388,7 @@ function placeDialog(t, stamps, onSaved) {
       const added = Object.keys(found).filter((k) => !fields[k]);
       added.forEach((k) => { fields[k] = found[k]; });
       status.textContent = added.length
-        ? `Suggested: ${added.map((k) => tr(FIELD_LABEL[k])).join(', ')}. Check each one and tap to move it.`
+        ? `Suggested: ${added.map((k) => (k === CHECKS ? `${tr(FIELD_LABEL[k])} (${found[k].marks.length})` : tr(FIELD_LABEL[k]))).join(', ')}. Check each one and tap to move it.`
         : 'No more labels found. Tap the page to place the fields.';
       selected = FIELD_KEYS.find((k) => !fields[k]) || selected;
       drawAll();
@@ -372,6 +410,8 @@ function placeDialog(t, stamps, onSaved) {
     h('p', { class: 'muted small' },
       'Choose a field, then tap on the page. Text starts where you tap (the middle of the line); the stamp and the signature are centred where you tap. '
       + 'Fields you don’t place are left out.'),
+    h('p', { class: 'muted small' },
+      '“Tick boxes”: tap the middle of every box that “Tick all boxes” should tick. “Suggest positions” also looks for empty boxes on the form.'),
     fieldBar, pageBar, controls, status, stage,
     h('div', { class: 'actions spread' }, suggestBtn, save));
   const { close } = openDialog(`Place fields – ${t.name}`, body, { wide: true });
@@ -393,6 +433,12 @@ export async function doneDialog(o, done, { remake = false } = {}) {
   const km = h('input', { type: 'text', id: 'ps-km', inputmode: 'numeric', maxlength: 9, value: ord.done_km ?? '', placeholder: 'e.g. 12', autocomplete: 'off' });
   const date = dateInput({ id: 'ps-date', value: ord.sheet_date || osloTodayIso() });
   const wo = h('input', { type: 'text', id: 'ps-wo', maxlength: 40, value: ord.work_order ?? '', placeholder: 'e.g. 123456', autocomplete: 'off' });
+  const bat = h('input', {
+    type: 'text', id: 'ps-bat', inputmode: 'decimal', maxlength: 6, autocomplete: 'off', placeholder: 'e.g. 12,6',
+    value: ord.done_battery_v != null ? String(Number(ord.done_battery_v)).replace('.', ',') : '',
+  });
+  const checks = h('input', { type: 'checkbox', id: 'ps-checks' });
+  checks.checked = !!ord.sheet_checks;
   const stampSel = h('select', { id: 'ps-stamp' }, opts.stamps.map((s) => h('option', { value: s.id }, s.name)));
   const defStamp = opts.stamps.find((s) => s.id === ord.sheet_stamp_id) || opts.stamps.find((s) => s.is_default) || opts.stamps[0];
   if (defStamp) stampSel.value = String(defStamp.id);
@@ -414,7 +460,9 @@ export async function doneDialog(o, done, { remake = false } = {}) {
         h('div', { class: 'field' }, h('label', { for: 'ps-km' }, t ? 'Mileage (km) *' : 'Mileage (km)'), km,
           ord.last_km != null ? h('div', { class: 'muted small' }, `At the arrival inspection: ${ord.last_km} km`) : null),
         t ? h('div', { class: 'field' }, h('label', { for: 'ps-date' }, 'Date on the sheet'), date) : null,
-        h('div', { class: 'field' }, h('label', { for: 'ps-wo' }, has('work_order') ? 'Work order no. *' : 'Work order no.'), wo)),
+        h('div', { class: 'field' }, h('label', { for: 'ps-wo' }, has('work_order') ? 'Work order no. *' : 'Work order no.'), wo),
+        has('battery') ? h('div', { class: 'field' }, h('label', { for: 'ps-bat' }, '12V battery (V) *'), bat) : null),
+      has('checks') ? h('label', { class: 'check' }, checks, h('span', {}, 'Tick all boxes on the PDI sheet')) : null,
       has('stamp') ? (opts.stamps.length
         ? h('div', { class: 'field' }, h('label', { for: 'ps-stamp' }, 'Stamp'), stampSel)
         : h('div', { class: 'notice warn small' }, 'No stamps yet – an administrator can add them under Settings → PDI sheets.')) : null,
@@ -450,11 +498,19 @@ export async function doneDialog(o, done, { remake = false } = {}) {
     if (t && !kmText) { toast('Enter the mileage for the PDI sheet', 'error'); km.focus(); return; }
     if (t?.fields.includes('signature') && !opts.has_signature) { toast('Add your signature first', 'error'); return; }
     if (t?.fields.includes('work_order') && !wo.value.trim()) { toast('Enter the work order number', 'error'); wo.focus(); return; }
+    const batText = bat.value.replace(/\s/g, '').replace(/v$/i, '').replace(',', '.');
+    const needBat = t?.fields.includes('battery');
+    if (needBat && !batText) { toast('Enter the 12V battery reading', 'error'); bat.focus(); return; }
+    if (needBat && (!/^\d{1,2}(\.\d{1,2})?$/.test(batText) || Number(batText) > 30)) {
+      toast('12V battery: a reading in volts, e.g. 12,6', 'error'); bat.focus(); return;
+    }
     busy(submit, async () => {
       const body = {
         template_id: t ? t.id : null, km: kmText ? Number(kmText) : null,
         date: date.value || osloTodayIso(), stamp_id: stampSel.value ? Number(stampSel.value) : null,
         work_order: wo.value.trim() || null,
+        battery: needBat ? Number(batText) : null,
+        checks: !!t?.fields.includes('checks') && checks.checked,
       };
       if (wheels) body.wheels = wheels.value;
       if (remake) await api.post(`/pdi/${o.id}/sheet`, body);
