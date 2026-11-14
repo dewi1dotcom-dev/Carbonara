@@ -386,7 +386,7 @@ const NO = {
   '12V battery: a reading in volts, e.g. 12,6': '12V-batteri: en måling i volt, f.eks. 12,6',
   'Tap each box on the form that should be ticked. Tap a tick again to remove it.':
     'Trykk på hver boks på skjemaet som skal krysses av. Trykk på et kryss igjen for å fjerne det.',
-  'Tick size (pt)': 'Størrelse på kryss (pt)', 'Remove all': 'Fjern alle', 'Remove all tick boxes?': 'Fjerne alle avkrysningsboksene?',
+  'Tick size (pt)': 'Størrelse på kryss (pt)', 'Bold': 'Fet', 'Remove all': 'Fjern alle', 'Remove all tick boxes?': 'Fjerne alle avkrysningsboksene?',
   '“Tick boxes”: tap the middle of every box that “Tick all boxes” should tick. “Suggest positions” also looks for empty boxes on the form.':
     '«Avkrysningsbokser»: trykk midt i hver boks som «Kryss av alle boksene» skal krysse av. «Foreslå plasseringer» ser også etter tomme bokser på skjemaet.',
   'Tick boxes: page, x and y are needed': 'Avkrysningsbokser: side, x og y mangler',

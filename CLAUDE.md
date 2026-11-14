@@ -775,8 +775,17 @@ the server is LAN-only, so no customer phones / public internet).
     VIN / Reg.nr / Km / Dato / Signatur / Stempel in `LABELS`, the shortest matching text wins) automatically on the
     first open and with "Suggest positions"; they only fill empty fields. "Test" (`GET /pdi-templates/{id}/test`)
     fills it with made-up values, the default stamp and your own signature.
+  - **Text style (0.33.2, the user's default):** text fields are **bold** (Helvetica-Bold; per field "Bold" checkbox,
+    `bold: false` turns it off, a missing flag = bold) and **12 pt** by default (suggested sizes +2 pt, 8–16).
+  - **Suggested text goes into the box (0.33.2):** `field_start` looks along the label's line: a label in a black cell
+    → past the dark area into the light box; a label on white followed by a box border (a dark line taller than the
+    text) → just inside the border; otherwise just after the label ("Reg.nr: ____").
   - **Filling** (`fill`): a reportlab overlay per page merged onto the original with pypdf (the form is never
     changed); rotated pages are straightened first (`transfer_rotation_to_content`); Helvetica (æøå OK).
+    **Fillable ("klikkbar") forms (0.33.1):** viewers draw form fields *on top of* the page, so their white boxes hid
+    the ticks and text. `_flatten_widgets` draws each field's current look (`/AP /N`, check boxes by `/AS`) into the
+    page and removes the fields and `/AcroForm` before the overlay is merged, so the filled sheet isn't editable.
+    If flattening fails, the page is filled as before (logged).
   - **Stamps** (`pdi_stamps`, admins; several, one default) and **my signature** (`staff.signature_key`; every user
     their own, drawn on a signature pad or an uploaded picture; Settings → My signature and the 👤 menu;
     `GET/PUT/DELETE /my-signature`, never readable by others). Uploaded pictures go through `clean_image`:
@@ -1097,6 +1106,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.32.2 | Move car: "Moved by" is the logged-in user (no dropdown; server takes it from the session) |
 | 0.32.3 | "PDI done" dialog asks for summer or winter wheels (required, saved on the car) |
 | 0.33.0 | **PDI sheets: 12V battery reading** (placeable field, asked in the dialog) and **"Tick all boxes"** (tick-box positions tapped or found automatically on the form) (migration 034) |
+| 0.33.1 | Fix: fillable PDF forms hid the ticks and text (form fields are flattened into the page before filling) |
+| 0.33.2 | PDI sheets: suggested text positions go into the box beside the label (not on the label's black cell); text bold and 12 pt by default |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

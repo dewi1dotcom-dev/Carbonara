@@ -286,7 +286,10 @@ function placeDialog(t, stamps, onSaved) {
       }
       return h('div', {
         class: `ps-mark ps-text${sel}`,
-        style: { left: `${f.x * 100}%`, top: `${f.y * 100}%`, fontSize: `${Math.max(f.size * scale, 6)}px` },
+        style: {
+          left: `${f.x * 100}%`, top: `${f.y * 100}%`, fontSize: `${Math.max(f.size * scale, 6)}px`,
+          fontWeight: f.bold === false ? 'normal' : 'bold',
+        },
       }, SAMPLE[k]);
     }));
   };
@@ -337,8 +340,14 @@ function placeDialog(t, stamps, onSaved) {
       if (isImg) f.w = v / 100; else f.size = Math.min(Math.max(v, 6), 24);
       drawMarkers();
     });
+    const bold = isImg ? null : h('input', { type: 'checkbox' });
+    if (bold) {
+      bold.checked = f.bold !== false;
+      bold.addEventListener('change', () => { f.bold = bold.checked; drawMarkers(); });
+    }
     controls.replaceChildren(h('div', { class: 'inline-form wrap' },
       h('label', {}, isImg ? 'Width' : 'Text size (pt)'), size,
+      bold ? h('label', { class: 'ps-bold' }, bold, h('span', {}, 'Bold')) : null,
       h('button', {
         class: 'link danger', type: 'button',
         onClick: () => { delete fields[selected]; drawAll(); },
@@ -370,7 +379,7 @@ function placeDialog(t, stamps, onSaved) {
     const prev = fields[selected];
     fields[selected] = IMAGE_FIELDS.includes(selected)
       ? { page, x, y, w: prev?.w ?? DEFAULT_W[selected] }
-      : { page, x, y, size: prev?.size ?? 10 };
+      : { page, x, y, size: prev?.size ?? 12, bold: prev?.bold ?? true };
     // Next field not placed yet, so the sheet can be done tap by tap.
     const next = FIELD_KEYS.find((k) => !fields[k]);
     if (next && !prev) selected = next;

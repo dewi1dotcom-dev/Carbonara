@@ -190,9 +190,12 @@ def suggest(key: str, pages: list[dict]) -> dict:
     found: dict[str, tuple[int, dict]] = {}
     marks: list[dict] = []
     box_pts: list[float] = []
+    import numpy as np
+
     for page_no in range(1, min(len(pages), 6) + 1):
         img = Image.open(page_image(key, page_no))
         W, H = img.size
+        gray = np.array(img.convert("L"))
         for cx, cy, bw in find_boxes(img):
             marks.append({"page": page_no, "x": round(cx / W, 4), "y": round(cy / H, 4)})
             box_pts.append(bw / W * pages[page_no - 1]["w"])
@@ -208,8 +211,9 @@ def suggest(key: str, pages: list[dict]) -> dict:
                     w = DEFAULT_SIZE[field]
                     pos = {"page": page_no, "x": min(right + w / 2 + 0.01, 1 - w / 2), "y": item["cy"] / H, "w": w}
                 else:
-                    pos = {"page": page_no, "x": min(right + 0.01, 0.95), "y": item["cy"] / H,
-                           "size": max(7, min(14, round(item["height"] / W * pages[page_no - 1]["w"] * 0.8)))}
+                    start = field_start(gray, right * W, item["cy"], item["height"]) / W
+                    pos = {"page": page_no, "x": min(start, 0.95), "y": item["cy"] / H, "bold": True,
+                           "size": max(8, min(16, round(item["height"] / W * pages[page_no - 1]["w"] * 0.8) + 2))}
                 if field not in found or len(text) < found[field][0]:
                     found[field] = (len(text), {k: round(v, 4) if isinstance(v, float) else v for k, v in pos.items()})
     out = {f: pos for f, (_, pos) in found.items()}
@@ -217,6 +221,40 @@ def suggest(key: str, pages: list[dict]) -> dict:
         box_pts.sort()
         out[CHECKS] = {"size": round(min(max(box_pts[len(box_pts) // 2], 6), 24), 1), "marks": marks[:MAX_MARKS]}
     return out
+
+
+def field_start(gray, right: float, cy: float, text_h: float) -> float:
+    """Where a value should start, in px, for a label whose right edge is at `right`.
+    Looks along the label's line for the empty box the value belongs in:
+      - label in a dark (black) cell: past the dark area, into the light box beside it
+      - label on white with a box after it: past the box's left border line
+      - otherwise (e.g. "Reg.nr: ______"): just after the label, as before."""
+    H, W = gray.shape
+    pad = max(4, round(W * 0.006))
+    band = gray[max(0, round(cy - text_h * 0.15)):min(H, round(cy + text_h * 0.15) + 1)]
+    tall = gray[max(0, round(cy - text_h)):min(H, round(cy + text_h) + 1)]  # a box border spans more than a letter
+    if band.size == 0:
+        return right + pad
+    light = band.mean(axis=0) > 160
+    line = (tall < 110).mean(axis=0) > 0.9
+    x, end = int(right) + 2, min(W, int(right + W * 0.35))
+    if x >= end:
+        return right + pad
+    if not light[x]:  # dark cell: walk past it, then into the light box
+        while x < end and not light[x]:
+            x += 1
+        return x + pad if x < end else right + pad
+    for gap_x in range(x, min(end, int(right + W * 0.15))):  # a border line soon after the label
+        if line[gap_x]:
+            k = gap_x
+            while k < end and line[k]:
+                k += 1
+            if k + round(W * 0.03) < end and light[k:k + round(W * 0.03)].all():
+                return k + pad
+            break
+        if not light[gap_x]:  # more text before any box: not a box field
+            break
+    return right + pad
 
 
 def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
@@ -286,7 +324,8 @@ def clean_fields(fields: dict, pages: list[dict]) -> dict:
         if key in IMAGE_FIELDS:
             item["w"] = round(min(max(float(f.get("w") or DEFAULT_SIZE[key]), 0.03), 0.6), 4)
         else:
-            item["size"] = round(min(max(float(f.get("size") or 10), 6), 24), 1)
+            item["size"] = round(min(max(float(f.get("size") or 12), 6), 24), 1)
+            item["bold"] = f.get("bold", True) is not False  # bold unless turned off (the user's default)
         out[key] = item
     return out
 
@@ -340,9 +379,14 @@ def fill(template: dict, values: dict[str, str], images: dict[str, Path | None],
     fields.pop(CHECKS, None)
     reader = PdfReader(str(path(template["file_key"], "pdf")))
     writer = PdfWriter()
-    for page_no, page in enumerate(reader.pages, start=1):
-        if page.rotation % 360:
-            page.transfer_rotation_to_content()  # draw in the page's upright coordinates
+    for page_no, src in enumerate(reader.pages, start=1):
+        if src.rotation % 360:
+            src.transfer_rotation_to_content()  # draw in the page's upright coordinates
+        page = writer.add_page(src)
+        try:
+            _flatten_widgets(writer, page, page_no)  # fillable forms: fields would cover what we draw
+        except Exception:  # an odd form: fill it as before rather than fail
+            log.warning("Form fields on page %s could not be flattened", page_no, exc_info=True)
         box = page.cropbox
         left, bottom, W, H = float(box.left), float(box.bottom), float(box.width), float(box.height)
         here = {k: f for k, f in fields.items() if f.get("page") == page_no}
@@ -364,7 +408,7 @@ def fill(template: dict, values: dict[str, str], images: dict[str, Path | None],
                 else:
                     text = values.get(key) or ""
                     if text:
-                        c.setFont("Helvetica", f["size"])
+                        c.setFont("Helvetica" if f.get("bold") is False else "Helvetica-Bold", f["size"])
                         c.drawString(x, y - f["size"] * 0.35, text)  # y is the middle of the line
             if ticks:
                 size = tick["size"]
@@ -374,10 +418,78 @@ def fill(template: dict, values: dict[str, str], images: dict[str, Path | None],
             c.save()
             buf.seek(0)
             page.merge_page(PdfReader(buf).pages[0])
-        writer.add_page(page)
+    if "/AcroForm" in writer._root_object:
+        del writer._root_object["/AcroForm"]
     out = io.BytesIO()
     writer.write(out)
     return out.getvalue()
+
+
+def _flatten_widgets(writer, page, page_no: int) -> None:
+    """A fillable ("klikkbar") PDF form: viewers draw form fields on top of the page, so
+    the fields' white boxes would hide the ticks and text we draw. Draw each field's
+    current look into the page itself and remove the fields; the sheet looks the same
+    but is no longer editable (fine for a signed, archived sheet)."""
+    from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject
+
+    annots = page.get("/Annots")
+    if not annots:
+        return
+    keep, ops = ArrayObject(), []
+    xobjects = {}
+    for i, ref in enumerate(annots.get_object()):
+        a = ref.get_object()
+        if a.get("/Subtype") != "/Widget":
+            keep.append(ref)
+            continue
+        ap = a.get("/AP")
+        if ap is None or int(a.get("/F", 0)) & 2:  # no look, or hidden
+            continue
+        ap = ap.get_object()
+        if "/N" not in ap:
+            continue
+        normal, n_ref = ap["/N"].get_object(), ap.raw_get("/N")
+        if not hasattr(normal, "get_data"):  # check boxes: one look per state, /AS is the current one
+            state = a.get("/AS")
+            if not state or state not in normal:
+                continue
+            n_ref, normal = normal.raw_get(state), normal[state].get_object()
+        try:
+            r = [float(v) for v in a["/Rect"]]
+            bb = [float(v) for v in normal.get("/BBox", [0, 0, abs(r[2] - r[0]), abs(r[3] - r[1])])]
+            m = [float(v) for v in normal.get("/Matrix", [1, 0, 0, 1, 0, 0])]
+        except (KeyError, TypeError, ValueError):
+            continue
+        x0, y0, x1, y1 = min(r[0], r[2]), min(r[1], r[3]), max(r[0], r[2]), max(r[1], r[3])
+        # PDF 12.5.5: the bounding box, transformed by the look's matrix, is fitted to the field's rectangle.
+        pts = [(bb[0], bb[1]), (bb[2], bb[1]), (bb[0], bb[3]), (bb[2], bb[3])]
+        tx = [m[0] * x + m[2] * y + m[4] for x, y in pts]
+        ty = [m[1] * x + m[3] * y + m[5] for x, y in pts]
+        w, h = max(tx) - min(tx), max(ty) - min(ty)
+        if w <= 0 or h <= 0:
+            continue
+        sx, sy = (x1 - x0) / w, (y1 - y0) / h
+        name = f"/CbnField{page_no}x{i}"
+        xobjects[name] = n_ref if hasattr(n_ref, "idnum") else writer._add_object(normal)
+        ops.append(f"q {sx:.5f} 0 0 {sy:.5f} {x0 - min(tx) * sx:.4f} {y0 - min(ty) * sy:.4f} cm {name} Do Q")
+    if keep:
+        page[NameObject("/Annots")] = keep
+    else:
+        del page["/Annots"]
+    if not ops:
+        return
+    if "/Resources" not in page:
+        page[NameObject("/Resources")] = DictionaryObject()
+    res = page["/Resources"].get_object()
+    if "/XObject" not in res:
+        res[NameObject("/XObject")] = DictionaryObject()
+    xo = res["/XObject"].get_object()
+    for name, ref in xobjects.items():
+        xo[NameObject(name)] = ref
+    old = page.get_contents()
+    stream = DecodedStreamObject()
+    stream.set_data(b"q\n" + (old.get_data() if old else b"") + b"\nQ\n" + "\n".join(ops).encode() + b"\n")
+    page[NameObject("/Contents")] = writer._add_object(stream)
 
 
 def store_sheet(data: bytes) -> str:
