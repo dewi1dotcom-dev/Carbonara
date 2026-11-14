@@ -7,7 +7,7 @@
 // - "✓ PDI done" dialog and "Make PDI sheet" on the PDI card and the PDI orders page.
 import { tr } from '../i18n.js';
 import {
-  api, busy, dateInput, h, openDialog, osloTodayIso, session, showError, toast,
+  api, busy, dateInput, h, openDialog, osloTodayIso, session, showError, toast, wheelsSelect,
 } from '../ui.js';
 
 const FIELD_LABEL = {
@@ -396,6 +396,9 @@ export async function doneDialog(o, done, { remake = false } = {}) {
   const stampSel = h('select', { id: 'ps-stamp' }, opts.stamps.map((s) => h('option', { value: s.id }, s.name)));
   const defStamp = opts.stamps.find((s) => s.id === ord.sheet_stamp_id) || opts.stamps.find((s) => s.is_default) || opts.stamps[0];
   if (defStamp) stampSel.value = String(defStamp.id);
+  // "PDI done" asks which wheels the car is on (saved on the car, like the vehicle page's dropdown)
+  const wheels = remake ? null : wheelsSelect(ord.wheels, null, { id: 'ps-wheels' });
+  if (wheels) wheels.options[0].textContent = 'Select…';
 
   const slot = h('div');
   const tpl = () => opts.templates.find((t) => String(t.id) === tplSel.value);
@@ -434,6 +437,7 @@ export async function doneDialog(o, done, { remake = false } = {}) {
     opts.templates.length
       ? h('div', { class: 'field' }, h('label', { for: 'ps-template' }, 'PDI sheet'), tplSel)
       : h('div', { class: 'notice small' }, 'No PDI sheets set up yet – an administrator can add each model’s PDF under Settings → PDI sheets.'),
+    wheels ? h('div', { class: 'field' }, h('label', { for: 'ps-wheels' }, 'Summer or winter wheels? *'), wheels) : null,
     slot,
     h('div', { class: 'actions' }, submit));
   form.addEventListener('submit', (e) => {
@@ -441,6 +445,7 @@ export async function doneDialog(o, done, { remake = false } = {}) {
     const t = tpl();
     const kmText = km.value.replace(/\s/g, '');
     if (remake && !t) { toast('Choose a PDI sheet', 'error'); return; }
+    if (wheels && !wheels.value) { toast('Choose summer or winter wheels', 'error'); wheels.focus(); return; }
     if (kmText && !/^\d+$/.test(kmText)) { toast('Mileage: whole kilometres only', 'error'); km.focus(); return; }
     if (t && !kmText) { toast('Enter the mileage for the PDI sheet', 'error'); km.focus(); return; }
     if (t?.fields.includes('signature') && !opts.has_signature) { toast('Add your signature first', 'error'); return; }
@@ -451,6 +456,7 @@ export async function doneDialog(o, done, { remake = false } = {}) {
         date: date.value || osloTodayIso(), stamp_id: stampSel.value ? Number(stampSel.value) : null,
         work_order: wo.value.trim() || null,
       };
+      if (wheels) body.wheels = wheels.value;
       if (remake) await api.post(`/pdi/${o.id}/sheet`, body);
       else await api.post(`/pdi/${o.id}/done`, body);
       toast(remake ? 'PDI sheet made' : 'PDI done – the car is ready for registration and delivery', 'success');

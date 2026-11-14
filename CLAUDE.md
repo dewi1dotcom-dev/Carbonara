@@ -745,8 +745,11 @@ the server is LAN-only, so no customer phones / public internet).
   - **"✓ PDI done" dialog** (`doneDialog`, on the PDI card and the PDI orders page, booked orders): PDI sheet
     (the template matching the car preselected; "No PDI sheet" allowed), mileage (required with a sheet; the
     arrival inspection's km shown as a hint), date, stamp (default preselected), your signature (or "Add my
-    signature"). One request: `POST /pdi/{id}/done` with `{template_id, km, date, stamp_id}`; nothing is saved if
-    the sheet fails. Afterwards "📄 Open PDI sheet" (a tap, so no popup blocker).
+    signature"), and **"Summer or winter wheels? \*"** (required, prefilled from the car; 0.32.3, the user's rule;
+    saved on `vehicles.wheels` with the same `vehicle_details_updated` entry as the vehicle page's dropdown; not
+    asked in "Make PDI sheet"). One request: `POST /pdi/{id}/done` with `{template_id, km, date, stamp_id,
+    work_order, wheels}`; nothing is saved if the sheet fails. Afterwards "📄 Open PDI sheet" (a tap, so no popup
+    blocker).
   - **Done orders:** "📄 PDI sheet" (`GET /pdi/{id}/sheet`, inline, `no-store`) and "Make PDI sheet" / "Make
     sheet again" (`POST /pdi/{id}/sheet`, e.g. once the car has its reg. no; the old file is removed after
     commit; event `pdi_sheet_made`). The signer is whoever makes the sheet.
@@ -1080,6 +1083,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.32.0 | **Work order no.** on PDI orders: entered when confirming the PDI date (editable later), shown on the PDI orders page and the PDI card, placeable field on the PDI sheet (migration 033) |
 | 0.32.1 | Work order no. changed in the "PDI done" / "Make PDI sheet" dialog now gets a history entry too |
 | 0.32.2 | Move car: "Moved by" is the logged-in user (no dropdown; server takes it from the session) |
+| 0.32.3 | "PDI done" dialog asks for summer or winter wheels (required, saved on the car) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

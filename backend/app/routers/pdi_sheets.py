@@ -258,7 +258,7 @@ def sheet_options(order_id: int, request: Request, conn=Depends(get_conn)):
     """What the "PDI done" / "Make PDI sheet" dialog needs."""
     order = conn.execute(
         """SELECT o.id, o.status, o.done_km, o.sheet_template_id, o.sheet_stamp_id, o.sheet_date, o.done_at,
-                  o.work_order, v.make, v.model, v.registration_number, v.vin,
+                  o.work_order, v.wheels, v.make, v.model, v.registration_number, v.vin,
                   (SELECT max(i.odometer_km) FROM inspections i
                     WHERE i.vehicle_id = v.id AND i.status = 'completed') AS last_km
              FROM pdi_orders o JOIN vehicles v ON v.id = o.vehicle_id WHERE o.id = %s""", (order_id,)).fetchone()

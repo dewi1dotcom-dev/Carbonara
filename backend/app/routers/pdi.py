@@ -421,6 +421,7 @@ class DoneIn(BaseModel):
     date: Optional[dt.date] = None
     stamp_id: Optional[int] = None
     work_order: Optional[str] = Field(None, max_length=40)  # filled in or corrected here too
+    wheels: Optional[Literal["summer", "winter"]] = None   # the wheels the car is on after the PDI
 
 
 @router.post("/pdi/{order_id}/done")
@@ -430,6 +431,13 @@ def mark_done(order_id: int, request: Request, body: Optional[DoneIn] = None, co
     conn.execute("UPDATE pdi_orders SET status = 'done', done_at = now(), done_by = %s, done_km = %s WHERE id = %s",
                  (_me(request), body.km, order_id))
     pdi_sheets.save_work_order(conn, order_id, _me(request), body.work_order)
+    if body.wheels:  # same history entry as the Wheels dropdown on the vehicle page
+        before = conn.execute("SELECT wheels FROM vehicles WHERE id = %s FOR UPDATE", (row["vehicle_id"],)).fetchone()
+        if before["wheels"] != body.wheels:
+            conn.execute("UPDATE vehicles SET wheels = %s WHERE id = %s",
+                         (body.wheels, row["vehicle_id"]))
+            log_event(conn, row["vehicle_id"], "vehicle_details_updated", staff_id=_me(request),
+                      data={"changes": {"wheels": [before["wheels"], body.wheels]}})
     old = None
     if body.template_id is not None:
         if body.km is None:

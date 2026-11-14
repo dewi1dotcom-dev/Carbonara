@@ -631,6 +631,7 @@ const NO = {
   // Summer / winter wheels (0.29.0)
   'Not recorded': 'Ikke registrert', 'Wheels': 'Hjul',
   'Wheels saved': 'Hjul lagret', 'Wheels on the car': 'Hjul på bilen', 'Summer or winter wheels? *': 'Sommer- eller vinterhjul? *',
+  'Choose summer or winter wheels': 'Velg sommer- eller vinterhjul',
   'Summer or winter wheels recorded (used car)': 'Sommer- eller vinterhjul registrert (bruktbil)',
   'Summer wheels – change to winter wheels': 'Sommerhjul – bytt til vinterhjul',
   'Winter wheels – the studded tyre season has ended': 'Vinterhjul – piggdekksesongen er over', 'rental car': 'leiebil',
