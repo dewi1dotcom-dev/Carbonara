@@ -458,14 +458,16 @@ def fill(template: dict, values: dict[str, str], images: dict[str, Path | None],
         if src.rotation % 360:
             src.transfer_rotation_to_content()  # draw in the page's upright coordinates
         page = writer.add_page(src)
-        try:
-            _flatten_widgets(writer, page, page_no)  # fillable forms: fields would cover what we draw
-        except Exception:  # an odd form: fill it as before rather than fail
-            log.warning("Form fields on page %s could not be flattened", page_no, exc_info=True)
         box = page.cropbox
         left, bottom, W, H = float(box.left), float(box.bottom), float(box.width), float(box.height)
         here = {k: f for k, f in fields.items() if f.get("page") == page_no}
-        ticks = [m for m in (tick or {}).get("marks", []) if m["page"] == page_no]
+        ticks = [(left + m["x"] * W, bottom + (1 - m["y"]) * H)
+                 for m in (tick or {}).get("marks", []) if m["page"] == page_no]
+        try:  # fillable forms: fields would cover what we draw; its own check boxes tick themselves
+            done = _flatten_widgets(writer, page, page_no, ticks)
+            ticks = [t for i, t in enumerate(ticks) if i not in done]
+        except Exception:  # an odd form: fill it as before rather than fail
+            log.warning("Form fields on page %s could not be flattened", page_no, exc_info=True)
         if here or ticks:
             buf = io.BytesIO()
             c = canvas.Canvas(buf, pagesize=(float(page.mediabox.right), float(page.mediabox.top)))
@@ -487,9 +489,11 @@ def fill(template: dict, values: dict[str, str], images: dict[str, Path | None],
                         c.drawString(x, y - f["size"] * 0.35, text)  # y is the middle of the line
             if ticks:
                 size = tick["size"]
-                c.setFont("ZapfDingbats", size)  # built-in PDF font; "4" is a heavy check mark ✔
-                for m in ticks:
-                    c.drawCentredString(left + m["x"] * W, bottom + (1 - m["y"]) * H - size * 0.35, "4")
+                # Built-in PDF font. reportlab takes the Unicode character (it maps ✔ to the font's code);
+                # passing "4" itself came out as a black square.
+                c.setFont("ZapfDingbats", size)
+                for tx, ty in ticks:
+                    c.drawCentredString(tx, ty - size * 0.35, "✔")
             c.save()
             buf.seek(0)
             page.merge_page(PdfReader(buf).pages[0])
@@ -500,16 +504,21 @@ def fill(template: dict, values: dict[str, str], images: dict[str, Path | None],
     return out.getvalue()
 
 
-def _flatten_widgets(writer, page, page_no: int) -> None:
+def _flatten_widgets(writer, page, page_no: int, ticks: list[tuple[float, float]]) -> set[int]:
     """A fillable ("klikkbar") PDF form: viewers draw form fields on top of the page, so
     the fields' white boxes would hide the ticks and text we draw. Draw each field's
-    current look into the page itself and remove the fields; the sheet looks the same
-    but is no longer editable (fine for a signed, archived sheet)."""
+    look into the page itself and remove the fields; the sheet looks the same but is no
+    longer editable (fine for a signed, archived sheet).
+
+    The form's own check boxes: one with a tick (page coordinates) inside it gets its
+    "on" look (e.g. MG's /Ja: the form's own ✔), the rest their current look. Returns the
+    indexes of the ticks done that way, so they aren't drawn a second time."""
     from pypdf.generic import ArrayObject, DecodedStreamObject, DictionaryObject, NameObject
 
+    done: set[int] = set()
     annots = page.get("/Annots")
     if not annots:
-        return
+        return done
     keep, ops = ArrayObject(), []
     xobjects = {}
     for i, ref in enumerate(annots.get_object()):
@@ -523,19 +532,27 @@ def _flatten_widgets(writer, page, page_no: int) -> None:
         ap = ap.get_object()
         if "/N" not in ap:
             continue
+        try:
+            r = [float(v) for v in a["/Rect"]]
+        except (KeyError, TypeError, ValueError):
+            continue
+        x0, y0, x1, y1 = min(r[0], r[2]), min(r[1], r[3]), max(r[0], r[2]), max(r[1], r[3])
         normal, n_ref = ap["/N"].get_object(), ap.raw_get("/N")
         if not hasattr(normal, "get_data"):  # check boxes: one look per state, /AS is the current one
             state = a.get("/AS")
+            inside = [k for k, (px, py) in enumerate(ticks) if x0 <= px <= x1 and y0 <= py <= y1]
+            on = [s for s in normal if s != "/Off"]
+            if inside and on:
+                state = on[0]
+                done.update(inside)
             if not state or state not in normal:
                 continue
             n_ref, normal = normal.raw_get(state), normal[state].get_object()
         try:
-            r = [float(v) for v in a["/Rect"]]
-            bb = [float(v) for v in normal.get("/BBox", [0, 0, abs(r[2] - r[0]), abs(r[3] - r[1])])]
+            bb = [float(v) for v in normal.get("/BBox", [0, 0, x1 - x0, y1 - y0])]
             m = [float(v) for v in normal.get("/Matrix", [1, 0, 0, 1, 0, 0])]
-        except (KeyError, TypeError, ValueError):
+        except (TypeError, ValueError):
             continue
-        x0, y0, x1, y1 = min(r[0], r[2]), min(r[1], r[3]), max(r[0], r[2]), max(r[1], r[3])
         # PDF 12.5.5: the bounding box, transformed by the look's matrix, is fitted to the field's rectangle.
         pts = [(bb[0], bb[1]), (bb[2], bb[1]), (bb[0], bb[3]), (bb[2], bb[3])]
         tx = [m[0] * x + m[2] * y + m[4] for x, y in pts]
@@ -552,7 +569,7 @@ def _flatten_widgets(writer, page, page_no: int) -> None:
     else:
         del page["/Annots"]
     if not ops:
-        return
+        return done
     if "/Resources" not in page:
         page[NameObject("/Resources")] = DictionaryObject()
     res = page["/Resources"].get_object()
@@ -561,10 +578,22 @@ def _flatten_widgets(writer, page, page_no: int) -> None:
     xo = res["/XObject"].get_object()
     for name, ref in xobjects.items():
         xo[NameObject(name)] = ref
-    old = page.get_contents()
-    stream = DecodedStreamObject()
-    stream.set_data(b"q\n" + (old.get_data() if old else b"") + b"\nQ\n" + "\n".join(ops).encode() + b"\n")
-    page[NameObject("/Contents")] = writer._add_object(stream)
+    # Keep the page's own content streams untouched and add the looks after them:
+    # /Contents = [q, <original streams…>, Q + looks]. (Reading the content back with
+    # get_contents().get_data() and writing it again lost the whole form in 0.33.1–0.33.5.)
+    raw = page.raw_get("/Contents") if "/Contents" in page else None
+    resolved = raw.get_object() if raw is not None else None
+    original = list(resolved) if isinstance(resolved, ArrayObject) else ([raw] if raw is not None else [])
+    original = [o if hasattr(o, "idnum") else writer._add_object(o) for o in original]  # streams must be indirect
+
+    def add_stream(data: bytes):
+        s = DecodedStreamObject()
+        s.set_data(data)
+        return writer._add_object(s)
+
+    page[NameObject("/Contents")] = ArrayObject(
+        [add_stream(b"q\n"), *original, add_stream(b"\nQ\n" + "\n".join(ops).encode() + b"\n")])
+    return done
 
 
 def store_sheet(data: bytes) -> str:

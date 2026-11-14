@@ -765,7 +765,8 @@ the server is LAN-only, so no customer phones / public internet).
       compete and only the lightest inside (the white box) is kept; mid-grey or darker insides never count. The
       suggested tick size is 85 % of the median box.
     - The dialog shows "Tick all boxes on the PDI sheet" (unticked by default, remembered as `sheet_checks` for
-      "Make sheet again"). Ticks are drawn with ZapfDingbats "4" (✔, a built-in PDF font). "Test" ticks every box.
+      "Make sheet again"). Ticks are drawn with ZapfDingbats (built-in PDF font); reportlab needs the
+      Unicode "✔" (passing "4" came out as a black square, fixed 0.33.6). "Test" ticks every box.
   - **Done orders:** "📄 PDI sheet" (`GET /pdi/{id}/sheet`, inline, `no-store`) and "Make PDI sheet" / "Make
     sheet again" (`POST /pdi/{id}/sheet`, e.g. once the car has its reg. no; the old file is removed after
     commit; event `pdi_sheet_made`). The signer is whoever makes the sheet.
@@ -794,6 +795,12 @@ the server is LAN-only, so no customer phones / public internet).
     the ticks and text. `_flatten_widgets` draws each field's current look (`/AP /N`, check boxes by `/AS`) into the
     page and removes the fields and `/AcroForm` before the overlay is merged, so the filled sheet isn't editable.
     If flattening fails, the page is filled as before (logged).
+    - **Never rewrite the page content (0.33.6):** the looks are added as extra streams, `/Contents = [q, <original
+      streams>, Q + looks]`. 0.33.1–0.33.5 read the content back with `get_contents().get_data()`, which came back
+      empty for the MG S6 form, so the made sheet lost the whole form (only our values and boxes were left).
+    - **The form's own check boxes (0.33.6):** MG's boxes have the states `/Ja` (its own ✔) and `/Off`. With "Tick all
+      boxes", a check box with a tick mark inside its rectangle is drawn in its on state (first state ≠ `/Off`), and
+      that tick is not drawn again (`_flatten_widgets` returns the ticks it handled).
   - **Stamps** (`pdi_stamps`, admins; several, one default) and **my signature** (`staff.signature_key`; every user
     their own, drawn on a signature pad or an uploaded picture; Settings → My signature and the 👤 menu;
     `GET/PUT/DELETE /my-signature`, never readable by others). Uploaded pictures go through `clean_image`:
@@ -1119,6 +1126,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.3 | PDI sheets: 12V reading printed as the number only; stamp / signature / date under a shared header bar are suggested side by side in the box below it |
 | 0.33.4 | PDI sheets: page pictures show a fillable form's fields (tick boxes visible and found); bare "REG" label; 12V number suggested before a "Volt" label. Verified live: flattening removes the form fields |
 | 0.33.5 | PDI sheets: tick box finder keeps one box per spot (the white box, not the grey squares beside it) |
+| 0.33.6 | Fix: made PDI sheets of fillable forms lost the whole form (page content kept untouched now); the form's own check boxes are ticked ("Ja" look); ✔ instead of black squares |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
