@@ -753,7 +753,7 @@ the server is LAN-only, so no customer phones / public internet).
     blocker).
   - **12V battery + tick boxes (0.33.0, migration 034; the user's request):** the MG forms have a 12V reading and
     many tick boxes.
-    - Text field `battery` (OCR labels 12V / batteri / spenning…), filled as "12,6 V" (`fmt_volt`). The dialog
+    - Text field `battery` (OCR labels 12V / batteri / spenning…), filled as just the number "12,6" (`fmt_volt`; the forms print "Volt" themselves, 0.33.3). The dialog
       asks "12V battery (V) \*" (required when the sheet has the field; comma or dot). Stored as
       `pdi_orders.done_battery_v` and logged in `pdi_done` / `pdi_sheet_made` (`battery`; not personal data).
     - Field `checks` = **many positions in one field**: `{size, marks: [{page, x, y}]}` (centre of each box). In
@@ -780,6 +780,9 @@ the server is LAN-only, so no customer phones / public internet).
   - **Suggested text goes into the box (0.33.2):** `field_start` looks along the label's line: a label in a black cell
     → past the dark area into the light box; a label on white followed by a box border (a dark line taller than the
     text) → just inside the border; otherwise just after the label ("Reg.nr: ____").
+  - **Header bars (0.33.3):** fields that share one label (MG S6: "FIRMASTEMPEL, DATO OG SIGNATUR" = stamp, date and
+    signature) are placed together. When the label sits in a dark bar that runs on to the right, `_box_below` finds the
+    widest empty column run in the box under the bar, and the fields go side by side there: stamp | signature | text.
   - **Filling** (`fill`): a reportlab overlay per page merged onto the original with pypdf (the form is never
     changed); rotated pages are straightened first (`transfer_rotation_to_content`); Helvetica (æøå OK).
     **Fillable ("klikkbar") forms (0.33.1):** viewers draw form fields *on top of* the page, so their white boxes hid
@@ -1108,6 +1111,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.0 | **PDI sheets: 12V battery reading** (placeable field, asked in the dialog) and **"Tick all boxes"** (tick-box positions tapped or found automatically on the form) (migration 034) |
 | 0.33.1 | Fix: fillable PDF forms hid the ticks and text (form fields are flattened into the page before filling) |
 | 0.33.2 | PDI sheets: suggested text positions go into the box beside the label (not on the label's black cell); text bold and 12 pt by default |
+| 0.33.3 | PDI sheets: 12V reading printed as the number only; stamp / signature / date under a shared header bar are suggested side by side in the box below it |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

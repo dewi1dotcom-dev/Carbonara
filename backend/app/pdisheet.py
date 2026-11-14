@@ -187,40 +187,99 @@ def suggest(key: str, pages: list[dict]) -> dict:
     The shortest text with the label wins (a bare "VIN:" over a sentence that mentions it)."""
     from .vinlib import scene_text
 
-    found: dict[str, tuple[int, dict]] = {}
-    marks: list[dict] = []
-    box_pts: list[float] = []
     import numpy as np
 
+    found: dict[str, tuple[int, int, dict]] = {}  # field -> (label length, page, OCR item)
+    grays: dict[int, "np.ndarray"] = {}
+    marks: list[dict] = []
+    box_pts: list[float] = []
     for page_no in range(1, min(len(pages), 6) + 1):
         img = Image.open(page_image(key, page_no))
-        W, H = img.size
-        gray = np.array(img.convert("L"))
+        grays[page_no] = np.array(img.convert("L"))
         for cx, cy, bw in find_boxes(img):
-            marks.append({"page": page_no, "x": round(cx / W, 4), "y": round(cy / H, 4)})
-            box_pts.append(bw / W * pages[page_no - 1]["w"])
+            marks.append({"page": page_no, "x": round(cx / img.width, 4), "y": round(cy / img.height, 4)})
+            box_pts.append(bw / img.width * pages[page_no - 1]["w"])
         for item in scene_text(img, log_text=False):
             text = item["text"].lower().strip()
             if len(text) > 60:
                 continue
             for field, labels in LABELS.items():
-                if not any(_has_label(text, lb) for lb in labels):
-                    continue
-                right = (item["cx"] + item["width"] / 2) / W  # the label's right edge
+                if any(_has_label(text, lb) for lb in labels) and (field not in found or len(text) < found[field][0]):
+                    found[field] = (len(text), page_no, item)
+
+    # Fields sharing one label (e.g. "FIRMASTEMPEL, DATO OG SIGNATUR") are placed together.
+    groups: dict[tuple, list[str]] = {}
+    for field in IMAGE_FIELDS + TEXT_FIELDS:  # stamp, signature, then text: left to right in a shared box
+        if field in found:
+            _, page_no, item = found[field]
+            groups.setdefault((page_no, item["cx"], item["cy"]), []).append(field)
+    out: dict = {}
+    for (page_no, _, _), group in groups.items():
+        gray, item = grays[page_no], found[group[0]][2]
+        H, W = gray.shape
+        size = max(8, min(16, round(item["height"] / W * pages[page_no - 1]["w"] * 0.8) + 2))
+        below = _box_below(gray, item)
+        for field in group:
+            if below:  # a header bar: the fields go side by side in the empty box under it
+                a, b, cy = below
+                n, i = len(group), group.index(field)
+                slot_l, slot_r = a + (b - a) * i / n, a + (b - a) * (i + 1) / n
+                if field in IMAGE_FIELDS:
+                    w = min(DEFAULT_SIZE[field], (slot_r - slot_l) * 0.85 / W)
+                    pos = {"page": page_no, "x": (slot_l + slot_r) / 2 / W, "y": cy / H, "w": w}
+                else:
+                    pos = {"page": page_no, "x": (slot_l + W * 0.01) / W, "y": cy / H, "size": size, "bold": True}
+            else:
+                start = field_start(gray, item["cx"] + item["width"] / 2, item["cy"], item["height"])
                 if field in IMAGE_FIELDS:
                     w = DEFAULT_SIZE[field]
-                    pos = {"page": page_no, "x": min(right + w / 2 + 0.01, 1 - w / 2), "y": item["cy"] / H, "w": w}
+                    pos = {"page": page_no, "x": min(start / W + w / 2, 1 - w / 2), "y": item["cy"] / H, "w": w}
                 else:
-                    start = field_start(gray, right * W, item["cy"], item["height"]) / W
-                    pos = {"page": page_no, "x": min(start, 0.95), "y": item["cy"] / H, "bold": True,
-                           "size": max(8, min(16, round(item["height"] / W * pages[page_no - 1]["w"] * 0.8) + 2))}
-                if field not in found or len(text) < found[field][0]:
-                    found[field] = (len(text), {k: round(v, 4) if isinstance(v, float) else v for k, v in pos.items()})
-    out = {f: pos for f, (_, pos) in found.items()}
+                    pos = {"page": page_no, "x": min(start / W, 0.95), "y": item["cy"] / H, "size": size, "bold": True}
+            out[field] = {k: round(v, 4) if isinstance(v, float) else v for k, v in pos.items()}
     if marks:
         box_pts.sort()
         out[CHECKS] = {"size": round(min(max(box_pts[len(box_pts) // 2], 6), 24), 1), "marks": marks[:MAX_MARKS]}
     return out
+
+
+def _box_below(gray, item: dict) -> tuple[float, float, float] | None:
+    """For a label in a dark header bar that runs on to the right (no box beside it), the
+    empty space in the box under the bar: (left px, right px, middle y px). None otherwise."""
+    H, W = gray.shape
+    th, cy = item["height"], item["cy"]
+    right = int(item["cx"] + item["width"] / 2) + 2
+    band = gray[max(0, round(cy - th * 0.15)):min(H, round(cy + th * 0.15) + 1)]
+    if band.size == 0 or right >= W or band[:, right].mean() > 110:
+        return None  # the label isn't on a dark background
+    x = right
+    while x < W and band[:, x].mean() <= 160:
+        x += 1
+    if x < W and x - right < W * 0.2:
+        return None  # a light box right beside the dark cell: the value goes there (field_start)
+    lx = slice(max(0, int(item["cx"] - item["width"] / 2)), right)  # the label's columns
+    y = int(cy)
+    while y < H and gray[y, lx].mean() <= 160:  # down to the bottom of the bar
+        y += 1
+    top = y + 2
+    y = top
+    while y < min(H, top + int(H * 0.2)) and (gray[y] < 110).mean() < 0.5:  # down to the box's bottom line
+        y += 1
+    bottom = y - 2
+    if bottom - top < th:
+        return None
+    empty = (gray[top:bottom] > 200).mean(axis=0) > 0.98  # columns with nothing in them
+    best, run_start = (0, 0), None
+    for xx in range(W + 1):
+        if xx < W and empty[xx]:
+            run_start = xx if run_start is None else run_start
+        elif run_start is not None:
+            if xx - run_start > best[1] - best[0]:
+                best = (run_start, xx)
+            run_start = None
+    if best[1] - best[0] < W * 0.1:
+        return None
+    return float(best[0]), float(best[1]), (top + bottom) / 2
 
 
 def field_start(gray, right: float, cy: float, text_h: float) -> float:
@@ -361,10 +420,10 @@ def fmt_km(km: int | None) -> str:
 
 
 def fmt_volt(v) -> str:
-    """12.6 -> '12,6 V' (Norwegian decimal comma)."""
+    """12.6 -> '12,6' (Norwegian decimal comma). Only the number: the forms print "Volt" / "V" themselves."""
     if v is None:
         return ""
-    return f"{float(v):.2f}".rstrip("0").rstrip(".").replace(".", ",") + " V"
+    return f"{float(v):.2f}".rstrip("0").rstrip(".").replace(".", ",")
 
 
 def fill(template: dict, values: dict[str, str], images: dict[str, Path | None], checks: bool = False) -> bytes:

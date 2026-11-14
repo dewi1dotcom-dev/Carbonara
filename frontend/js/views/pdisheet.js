@@ -19,7 +19,7 @@ const IMAGE_FIELDS = ['stamp', 'signature'];
 const CHECKS = 'checks'; // many positions in one field: { size, marks: [{ page, x, y }] } (centre of each box)
 const DEFAULT_W = { stamp: 0.2, signature: 0.22 };
 const SAMPLE = {
-  reg: 'AB 12345', vin: 'TESTVIN0123456789', km: '12 345', date: '14.11.2026', work_order: '123456', battery: '12,6 V',
+  reg: 'AB 12345', vin: 'TESTVIN0123456789', km: '12 345', date: '14.11.2026', work_order: '123456', battery: '12,6',
   signer: 'Ola Nordmann',
 };
 
