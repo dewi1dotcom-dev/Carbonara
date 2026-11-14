@@ -97,6 +97,7 @@ export function pdiCard(v, data, opts, rerender) {
         o.sent_at ? h('span', { class: 'muted small' }, o.sent_via === 'print'
           ? `Printed / PDF ${fmtDate(o.sent_at)}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}`
           : `Sent ${fmtDate(o.sent_at)} to ${o.sent_to}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}${o.sent_via === 'mail_app' ? ' (e-mail app)' : ''}`) : null),
+      workOrderLine(o, rerender),
       o.changed_since_sent ? h('div', { class: 'notice warn small' }, 'Changed since it was sent — send it again so the workshop has the latest order.') : null,
       o.status === 'booked' && !o.sent_at ? h('div', { class: 'notice warn small' }, 'PDI date is set, but the order list has not been sent to the workshop yet.') : null,
       o.prepared_at ? h('div', { class: 'notice small' },
@@ -465,14 +466,58 @@ export function confirmedText(o) {
     : h('span', { class: 'badge warn' }, 'Date not confirmed');
 }
 
-/** Confirm the PDI date (e.g. the workshop agrees to it). */
-export async function confirmDate(o, done) {
-  if (!confirm(`Confirm the PDI date ${fmtDate(o.pdi_at)}?`)) return;
-  try {
-    await api.post(`/pdi/${o.id}/confirm`);
-    toast('PDI date confirmed', 'success');
-    await done();
-  } catch (e) { showError(e); }
+/** Confirm the PDI date (e.g. the workshop agrees to it), with the workshop's work order number. */
+export function confirmDate(o, done) {
+  const wo = h('input', { type: 'text', id: 'pdi-work-order', maxlength: 40, required: true, autocomplete: 'off',
+    value: o.work_order ?? '', placeholder: 'e.g. 123456' });
+  const save = h('button', { class: 'btn primary', type: 'submit' }, '✓ Confirm PDI date');
+  const form = h('form', {},
+    h('p', {}, h('strong', {}, carText(o)), ` · PDI ${fmtDate(o.pdi_at)}`),
+    h('div', { class: 'field' }, h('label', { for: 'pdi-work-order' }, 'Work order no. *'), wo,
+      h('div', { class: 'muted small' }, 'The workshop’s work order number for this PDI. It is printed on the PDI sheet.')),
+    h('div', { class: 'actions' }, save));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(save, async () => {
+      await api.post(`/pdi/${o.id}/confirm`, { work_order: wo.value });
+      close();
+      toast('PDI date confirmed', 'success');
+      await done();
+    });
+  });
+  const { close } = openDialog('Confirm PDI date', form);
+  wo.focus();
+}
+
+/** Change the work order number (open or done orders). */
+export function workOrderDialog(o, done) {
+  const wo = h('input', { type: 'text', id: 'pdi-work-order', maxlength: 40, required: true, autocomplete: 'off',
+    value: o.work_order ?? '', placeholder: 'e.g. 123456' });
+  const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
+  const form = h('form', {},
+    h('div', { class: 'field' }, h('label', { for: 'pdi-work-order' }, 'Work order no.'), wo),
+    o.sheet_file_key ? h('p', { class: 'muted small' }, 'Make the PDI sheet again to print the new number on it.') : null,
+    h('div', { class: 'actions' }, save));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(save, async () => {
+      await api.put(`/pdi/${o.id}/work-order`, { work_order: wo.value });
+      close();
+      toast('Work order no. saved', 'success');
+      await done();
+    });
+  });
+  const { close } = openDialog('Work order no.', form);
+  wo.focus();
+}
+
+/** "Work order no. 123456 · Change" (or "Add work order no.") for the PDI card and the PDI orders page. */
+export function workOrderLine(o, done) {
+  if (o.status === 'cancelled') return null;
+  return h('div', { class: 'small pdi-wo' },
+    o.work_order ? h('span', {}, 'Work order no. ', h('strong', { class: 'mono' }, o.work_order), ' ') : null,
+    h('button', { class: 'link', type: 'button', onClick: () => workOrderDialog(o, done) },
+      o.work_order ? 'Change' : 'Add work order no.'));
 }
 
 

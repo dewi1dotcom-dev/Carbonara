@@ -31,7 +31,7 @@ from .config import settings
 
 log = logging.getLogger("carbonara.pdisheet")
 
-TEXT_FIELDS = ("reg", "vin", "km", "date", "signer")
+TEXT_FIELDS = ("reg", "vin", "km", "date", "signer", "work_order")
 IMAGE_FIELDS = ("stamp", "signature")
 FIELDS = TEXT_FIELDS + IMAGE_FIELDS
 MAX_PAGES = 20
@@ -163,6 +163,8 @@ LABELS = {
     "vin": ("vin", "understellsnr", "understellsnummer", "chassisnr", "chassis", "vin-nr", "vin nr"),
     "km": ("km", "km-stand", "kmstand", "kilometerstand", "kilometer", "mileage", "odometer"),
     "date": ("dato", "date"),
+    "work_order": ("arbeidsordre", "arbeidsordrenr", "arbeidsordre nr", "ordrenr", "ordre nr", "ordrenummer", "a.o.",
+                   "ao nr", "work order", "work order no", "wo", "wo no", "r.o.", "repair order"),
     "signer": ("navn", "name"),
     "signature": ("signatur", "signature", "underskrift", "sign"),
     "stamp": ("stempel", "stamp", "firmastempel"),
@@ -319,7 +321,7 @@ def make_sheet(conn, order_id: int, staff: dict, template_id: int, km: int, date
     if not fields:
         raise SheetError("The fields of this PDI sheet have not been placed yet (Settings → PDI sheets)")
     order = conn.execute(
-        """SELECT o.id, o.sheet_file_key, v.registration_number, v.vin
+        """SELECT o.id, o.sheet_file_key, o.work_order, v.registration_number, v.vin
              FROM pdi_orders o JOIN vehicles v ON v.id = o.vehicle_id WHERE o.id = %s""", (order_id,)).fetchone()
     me = conn.execute("SELECT name, signature_key FROM staff WHERE id = %s", (staff["id"],)).fetchone()
     stamp = None
@@ -337,6 +339,7 @@ def make_sheet(conn, order_id: int, staff: dict, template_id: int, km: int, date
         "km": fmt_km(km),
         "date": date.strftime("%d.%m.%Y"),
         "signer": me["name"],
+        "work_order": order["work_order"] or "",
     }
     images = {
         "stamp": path(stamp["file_key"], "png") if stamp else None,
@@ -362,7 +365,7 @@ def test_fill(template: dict, signer: dict, stamp: dict | None) -> bytes:
     """The form filled with made-up values, to check the positions."""
     return fill(template, {
         "reg": "AB 12345", "vin": "TESTVIN0123456789", "km": "12 345",
-        "date": dt.date.today().strftime("%d.%m.%Y"), "signer": signer["name"],
+        "date": dt.date.today().strftime("%d.%m.%Y"), "signer": signer["name"], "work_order": "123456",
     }, {
         "stamp": path(stamp["file_key"], "png") if stamp else None,
         "signature": path(signer["signature_key"], "png") if signer.get("signature_key") else None,

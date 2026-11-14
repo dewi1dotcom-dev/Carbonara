@@ -108,6 +108,7 @@ export const EVENT_LABELS = {
   pdi_booked: 'PDI booked',
   pdi_booking_cleared: 'PDI date removed',
   pdi_date_confirmed: 'PDI date confirmed',
+  pdi_work_order_changed: 'Work order no. changed',
   pdi_done: 'PDI done',
   pdi_sheet_made: 'PDI sheet made',
   pdi_prepared: 'Prepared for PDI',
@@ -146,7 +147,9 @@ export function eventDetail(e) {
       const when = day ? `${fmtDate(day, false)} ${time || ''}`.trim() : '';
       return [when, d.expected_done && `expected done ${fmtDate(d.expected_done, false)}`].filter(Boolean).join(' · ');
     }
-    case 'pdi_date_confirmed': return d.pdi_at ? fmtDate(d.pdi_at) : '';
+    case 'pdi_date_confirmed':
+      return [d.pdi_at && fmtDate(d.pdi_at), d.work_order && `Work order no. ${d.work_order}`].filter(Boolean).join(' · ');
+    case 'pdi_work_order_changed': return d.from ? `${d.from} → ${d.to}` : d.to || '';
     case 'pdi_done': return [d.km != null && fmtKm(d.km), d.sheet && 'PDI sheet filled in'].filter(Boolean).join(' · ');
     case 'pdi_sheet_made': return [d.km != null && fmtKm(d.km), d.again && 'made again'].filter(Boolean).join(' · ');
     case 'storage_check':

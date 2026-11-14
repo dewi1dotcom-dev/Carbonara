@@ -332,16 +332,48 @@ def set_booking(order_id: int, body: BookingIn, request: Request, conn=Depends(g
     return _order(conn, order_id)
 
 
+class WorkOrderIn(BaseModel):
+    work_order: str = Field(max_length=40)
+
+
+def _work_order(text: str) -> str:
+    value = " ".join(text.split())
+    if not value:
+        raise bad_request("Enter the work order number")
+    return value
+
+
 @router.post("/pdi/{order_id}/confirm")
-def confirm_date(order_id: int, request: Request, conn=Depends(get_conn)):
-    """Confirm the PDI date (e.g. the workshop agrees to it). A new date clears it."""
+def confirm_date(order_id: int, body: WorkOrderIn, request: Request, conn=Depends(get_conn)):
+    """Confirm the PDI date (e.g. the workshop agrees to it), with the workshop's
+    work order number. A new date clears the confirmation (the number stays)."""
     row = _open_order(conn, order_id)
     if row["status"] != "booked" or row["pdi_at"] is None:
         raise conflict("Enter the PDI date first")
-    conn.execute("UPDATE pdi_orders SET pdi_confirmed_at = now(), pdi_confirmed_by = %s WHERE id = %s",
-                 (_me(request), order_id))
+    work_order = _work_order(body.work_order)
+    conn.execute("UPDATE pdi_orders SET pdi_confirmed_at = now(), pdi_confirmed_by = %s, work_order = %s "
+                 "WHERE id = %s",
+                 (_me(request), work_order, order_id))
     log_event(conn, row["vehicle_id"], "pdi_date_confirmed", staff_id=_me(request),
-              data={"pdi_at": row["pdi_at"].isoformat()})
+              data={"pdi_at": row["pdi_at"].isoformat(), "work_order": work_order})
+    return _order(conn, order_id)
+
+
+@router.put("/pdi/{order_id}/work-order")
+def set_work_order(order_id: int, body: WorkOrderIn, request: Request, conn=Depends(get_conn)):
+    """Change the work order number (open or done orders). Doesn't touch
+    updated_at, so it doesn't count as "changed since sent"."""
+    row = conn.execute("SELECT vehicle_id, status, work_order FROM pdi_orders WHERE id = %s FOR UPDATE",
+                       (order_id,)).fetchone()
+    if not row:
+        raise not_found("PDI order")
+    if row["status"] == "cancelled":
+        raise conflict("This PDI order is closed")
+    work_order = _work_order(body.work_order)
+    if work_order != row["work_order"]:
+        conn.execute("UPDATE pdi_orders SET work_order = %s WHERE id = %s", (work_order, order_id))
+        log_event(conn, row["vehicle_id"], "pdi_work_order_changed", staff_id=_me(request),
+                  data={"from": row["work_order"], "to": work_order})
     return _order(conn, order_id)
 
 
@@ -385,6 +417,7 @@ class DoneIn(BaseModel):
     km: Optional[int] = Field(None, ge=0, le=2_000_000)
     date: Optional[dt.date] = None
     stamp_id: Optional[int] = None
+    work_order: Optional[str] = Field(None, max_length=40)  # filled in or corrected here too
 
 
 @router.post("/pdi/{order_id}/done")
@@ -393,6 +426,8 @@ def mark_done(order_id: int, request: Request, body: Optional[DoneIn] = None, co
     body = body or DoneIn()
     conn.execute("UPDATE pdi_orders SET status = 'done', done_at = now(), done_by = %s, done_km = %s WHERE id = %s",
                  (_me(request), body.km, order_id))
+    if (body.work_order or "").strip():
+        conn.execute("UPDATE pdi_orders SET work_order = %s WHERE id = %s", (_work_order(body.work_order), order_id))
     old = None
     if body.template_id is not None:
         if body.km is None:

@@ -5,7 +5,7 @@
 import {
   api, append, canSee, CONDITION, fmtDate, fmtKm, h, photoUrl, pill, showError, tyreBadge, vehicleTitle, viewPhoto, WHEELS,
 } from '../ui.js';
-import { bookingDialog, confirmDate, confirmedText, itemsList, STATUS_CLS, STATUS_TEXT } from './pdi.js';
+import { bookingDialog, confirmDate, confirmedText, itemsList, STATUS_CLS, STATUS_TEXT, workOrderLine } from './pdi.js';
 import { doneDialog, sheetActions } from './pdisheet.js';
 import { EVENT_LABELS, eventDetail } from './vehicles.js';
 
@@ -64,6 +64,7 @@ function orderCard(o, opts, rerender) {
       h('span', { class: `badge ${STATUS_CLS[o.status]}` }, STATUS_TEXT[o.status]),
       o.pdi_at && o.status !== 'done' ? h('strong', {}, fmtDate(o.pdi_at)) : null,
       confirmedText(o)),
+    workOrderLine(o, rerender),
     kv([
       ['PDI date', o.pdi_at && fmtDate(o.pdi_at)],
       ['Expected completion', o.expected_done_date && fmtDate(o.expected_done_date, false)],

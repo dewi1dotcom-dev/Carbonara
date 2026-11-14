@@ -200,7 +200,7 @@ backend/
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet)
-  migrations/           001…032
+  migrations/           001…033
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -254,6 +254,7 @@ frontend/               no build step; plain ES modules
 | 030 | `wheels` | `vehicles.wheels`, `rental_cars.wheels` ('summer' / 'winter', NULL = not recorded) |
 | 031 | `pdi_confirm` | `pdi_orders.expected_done_date / pdi_confirmed_at / pdi_confirmed_by`; teams with Vehicles get menu item `pdi_orders` |
 | 032 | `pdi_sheets` | `pdi_templates` (model PDFs + field positions), `pdi_stamps`, `staff.signature_key`, `pdi_orders.done_km / sheet_*` |
+| 033 | `work_order` | `pdi_orders.work_order` (the workshop's work order number) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -707,6 +708,16 @@ the server is LAN-only, so no customer phones / public internet).
     `pdi_date_confirmed`). **A new date or time clears it**; saving the same date keeps it. Removing the date
     clears both. Shown as a badge ("✓ Date confirmed …" / "Date not confirmed") on the PDI card and the PDI
     orders page; the PDI page says "date not confirmed".
+- **Work order no. (0.32.0)** (`pdi_orders.work_order`, migration 033; the user's request):
+  - **Entered when confirming the PDI date:** "✓ Confirm PDI date" opens a dialog (`confirmDate` in `pdi.js`)
+    with a required "Work order no." (`POST /pdi/{id}/confirm` `{work_order}`; max 40 characters, spaces
+    tidied). A new PDI date clears the confirmation but **keeps the number**.
+  - **Shown and changed** with `workOrderLine` ("Work order no. 123456 · Change" / "Add work order no.") on the PDI
+    card and the PDI orders page (`PUT /pdi/{id}/work-order`, open or done orders; event `pdi_work_order_changed`;
+    doesn't touch `updated_at`).
+  - **On the PDI sheet:** placeable text field `work_order` (OCR labels: arbeidsordre, ordrenr, work order…). The
+    "PDI done" / "Make PDI sheet" dialog shows the number prefilled and editable (required when the chosen sheet
+    has the field); a number typed there is saved on the order first.
 - **PDI orders page (0.30.0)** (`#/pdi-orders`, `views/pdiorders.js`, `GET /pdi/orders`; top menu "PDI orders" /
   "Nybilklargjøring", team menu key `pdi_orders`; migration 031 gave it to teams that see Vehicles):
   - **Which cars:** every car with a PDI order (its open one, else its latest done one; cancelled ones don't
@@ -723,7 +734,7 @@ the server is LAN-only, so no customer phones / public internet).
     teams it's a menu filter, not a server lock.
 - **PDI sheets (0.31.0)** (migration 032; `app/pdisheet.py`, `routers/pdi_sheets.py`, `views/pdisheet.js`):
   - **What:** when a PDI is marked done, the **car model's own PDI form (a PDF)** is filled in with reg. no
-    (formatted "AB 12345"; empty if not registered yet), VIN, mileage, date, the signer's name, a **company
+    (formatted "AB 12345"; empty if not registered yet), VIN, mileage, date, work order no. (0.32.0), the signer's name, a **company
     stamp** and the **signature of the person marking it done**, and stored on the order
     (`pdi_orders.sheet_file_key`, `done_km`, `sheet_template_id / _stamp_id / _date / _made_at / _made_by`).
   - **"✓ PDI done" dialog** (`doneDialog`, on the PDI card and the PDI orders page, booked orders): PDI sheet
@@ -1061,6 +1072,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.29.3 | Login always opens Today (the login screen resets the address to `#/`, so the next user doesn't land on the previous user's page, e.g. System) |
 | 0.30.0 | **PDI orders page** (top menu): cars with a PDI order until registered and off site, with car details, right-side photo, order and history (no documents); PDI **expected completion date** (default the day after) and **confirm PDI date** (migration 031) |
 | 0.31.0 | **PDI sheets:** "PDI done" dialog fills in the model's own PDF form (reg. no, VIN, mileage, date, stamp, signature) and stores it on the order; templates uploaded per model with tap-to-place fields and OCR suggestions; company stamps; each user's own signature (drawn or uploaded) (migration 032) |
+| 0.32.0 | **Work order no.** on PDI orders: entered when confirming the PDI date (editable later), shown on the PDI orders page and the PDI card, placeable field on the PDI sheet (migration 033) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

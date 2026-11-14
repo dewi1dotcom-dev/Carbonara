@@ -11,13 +11,15 @@ import {
 } from '../ui.js';
 
 const FIELD_LABEL = {
-  reg: 'Reg. no', vin: 'VIN', km: 'Mileage', date: 'Date', signer: 'Name of the person signing',
+  reg: 'Reg. no', vin: 'VIN', km: 'Mileage', date: 'Date', work_order: 'Work order no.', signer: 'Name of the person signing',
   stamp: 'Stamp', signature: 'Signature',
 };
 const FIELD_KEYS = Object.keys(FIELD_LABEL);
 const IMAGE_FIELDS = ['stamp', 'signature'];
 const DEFAULT_W = { stamp: 0.2, signature: 0.22 };
-const SAMPLE = { reg: 'AB 12345', vin: 'TESTVIN0123456789', km: '12 345', date: '14.11.2026', signer: 'Ola Nordmann' };
+const SAMPLE = {
+  reg: 'AB 12345', vin: 'TESTVIN0123456789', km: '12 345', date: '14.11.2026', work_order: '123456', signer: 'Ola Nordmann',
+};
 
 const fmtReg = (r) => (r && /^[A-Z]{2}\d{4,5}$/.test(r) ? `${r.slice(0, 2)} ${r.slice(2)}` : r || '');
 
@@ -390,6 +392,7 @@ export async function doneDialog(o, done, { remake = false } = {}) {
   tplSel.value = opts.suggested_template_id ? String(opts.suggested_template_id) : (remake && opts.templates[0] ? String(opts.templates[0].id) : '');
   const km = h('input', { type: 'text', id: 'ps-km', inputmode: 'numeric', maxlength: 9, value: ord.done_km ?? '', placeholder: 'e.g. 12', autocomplete: 'off' });
   const date = dateInput({ id: 'ps-date', value: ord.sheet_date || osloTodayIso() });
+  const wo = h('input', { type: 'text', id: 'ps-wo', maxlength: 40, value: ord.work_order ?? '', placeholder: 'e.g. 123456', autocomplete: 'off' });
   const stampSel = h('select', { id: 'ps-stamp' }, opts.stamps.map((s) => h('option', { value: s.id }, s.name)));
   const defStamp = opts.stamps.find((s) => s.id === ord.sheet_stamp_id) || opts.stamps.find((s) => s.is_default) || opts.stamps[0];
   if (defStamp) stampSel.value = String(defStamp.id);
@@ -407,7 +410,8 @@ export async function doneDialog(o, done, { remake = false } = {}) {
       h('div', { class: 'grid' },
         h('div', { class: 'field' }, h('label', { for: 'ps-km' }, t ? 'Mileage (km) *' : 'Mileage (km)'), km,
           ord.last_km != null ? h('div', { class: 'muted small' }, `At the arrival inspection: ${ord.last_km} km`) : null),
-        t ? h('div', { class: 'field' }, h('label', { for: 'ps-date' }, 'Date on the sheet'), date) : null),
+        t ? h('div', { class: 'field' }, h('label', { for: 'ps-date' }, 'Date on the sheet'), date) : null,
+        h('div', { class: 'field' }, h('label', { for: 'ps-wo' }, has('work_order') ? 'Work order no. *' : 'Work order no.'), wo)),
       has('stamp') ? (opts.stamps.length
         ? h('div', { class: 'field' }, h('label', { for: 'ps-stamp' }, 'Stamp'), stampSel)
         : h('div', { class: 'notice warn small' }, 'No stamps yet – an administrator can add them under Settings → PDI sheets.')) : null,
@@ -440,10 +444,12 @@ export async function doneDialog(o, done, { remake = false } = {}) {
     if (kmText && !/^\d+$/.test(kmText)) { toast('Mileage: whole kilometres only', 'error'); km.focus(); return; }
     if (t && !kmText) { toast('Enter the mileage for the PDI sheet', 'error'); km.focus(); return; }
     if (t?.fields.includes('signature') && !opts.has_signature) { toast('Add your signature first', 'error'); return; }
+    if (t?.fields.includes('work_order') && !wo.value.trim()) { toast('Enter the work order number', 'error'); wo.focus(); return; }
     busy(submit, async () => {
       const body = {
         template_id: t ? t.id : null, km: kmText ? Number(kmText) : null,
         date: date.value || osloTodayIso(), stamp_id: stampSel.value ? Number(stampSel.value) : null,
+        work_order: wo.value.trim() || null,
       };
       if (remake) await api.post(`/pdi/${o.id}/sheet`, body);
       else await api.post(`/pdi/${o.id}/done`, body);

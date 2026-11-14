@@ -375,6 +375,12 @@ const NO = {
   'The PDI sheet could not be made from this PDF': 'Skjemaet kunne ikke lages fra denne PDF-en', 'Give the PDI sheet a name': 'Gi skjemaet et navn',
   'Give the stamp a name': 'Gi stempelet et navn', 'Mark the PDI as done first': 'Merk nybilklargjøringen som utført først',
   'PDI sheet not found': 'Fant ikke skjemaet', 'Stamp not found': 'Fant ikke stempelet', 'Signature not found': 'Fant ikke signaturen', 'Page not found': 'Fant ikke siden',
+  // Work order no. (0.32.0)
+  'Work order no.': 'Arbeidsordrenr.', 'Work order no. *': 'Arbeidsordrenr. *', 'Change': 'Endre', 'e.g. 123456': 'f.eks. 123456',
+  'Confirm PDI date': 'Bekreft dato for nybilklargjøring', 'Add work order no.': 'Legg til arbeidsordrenr.', 'Work order no. saved': 'Arbeidsordrenr. lagret',
+  'Work order no. changed': 'Arbeidsordrenr. endret', 'Enter the work order number': 'Skriv inn arbeidsordrenummeret',
+  'The workshop’s work order number for this PDI. It is printed on the PDI sheet.': 'Verkstedets arbeidsordrenummer for denne nybilklargjøringen. Det skrives på skjemaet.',
+  'Make the PDI sheet again to print the new number on it.': 'Lag skjemaet på nytt for å få det nye nummeret på det.',
   'Mark the PDI as done?': 'Merke nybilklargjøringen som utført?', 'PDI marked as done': 'Nybilklargjøring merket som utført', 'Cancel this PDI order?': 'Avbryte denne bestillingen?',
   'Cancel this PDI order? It has already been sent – remember to tell the workshop.': 'Avbryte denne bestillingen? Den er allerede sendt – husk å gi beskjed til verkstedet.',
   // ---- storage maintenance
@@ -727,6 +733,7 @@ const NO_PATTERNS = [
   ['Delete {}?\n\nThey are removed from the staff list and their phone number and PIN are deleted. Their name stays on the history they are part of (inspections, storage checks…). This cannot be undone.',
     'Slette {1}?\n\nVedkommende fjernes fra listen over ansatte, og telefonnummer og PIN-kode slettes. Navnet blir stående i historikken vedkommende er en del av (kontroller, lagerkontroller…). Dette kan ikke angres.'],
   ['PDI today at {}', 'Nybilklargjøring i dag kl. {1}'], ['PDI tomorrow at {}', 'Nybilklargjøring i morgen kl. {1}'], ['PDI {} at {}', 'Nybilklargjøring {1} kl. {2}'],
+  ['Work order no. {}', 'Arbeidsordrenr. {1}'],
   ['Fields: {}', 'Felter: {1}'], ['Suggested: {}. Check each one and tap to move it.', 'Foreslått: {1}. Sjekk hvert felt, og trykk for å flytte det.'],
   ['Tap on the page where “{}” goes.', 'Trykk på siden der «{1t}» skal stå.'], ['Place fields – {}', 'Plasser felter – {1}'],
   ['Remove the PDI sheet {}? Sheets already made are kept.', 'Fjerne skjemaet {1}? Skjemaer som allerede er laget, beholdes.'],

@@ -258,7 +258,7 @@ def sheet_options(order_id: int, request: Request, conn=Depends(get_conn)):
     """What the "PDI done" / "Make PDI sheet" dialog needs."""
     order = conn.execute(
         """SELECT o.id, o.status, o.done_km, o.sheet_template_id, o.sheet_stamp_id, o.sheet_date, o.done_at,
-                  v.make, v.model, v.registration_number, v.vin,
+                  o.work_order, v.make, v.model, v.registration_number, v.vin,
                   (SELECT max(i.odometer_km) FROM inspections i
                     WHERE i.vehicle_id = v.id AND i.status = 'completed') AS last_km
              FROM pdi_orders o JOIN vehicles v ON v.id = o.vehicle_id WHERE o.id = %s""", (order_id,)).fetchone()
@@ -282,10 +282,14 @@ class SheetIn(BaseModel):
     km: int = Field(ge=0, le=2_000_000)
     date: dt.date
     stamp_id: Optional[int] = None
+    work_order: Optional[str] = Field(None, max_length=40)  # filled in or corrected in the dialog
 
 
 def make_sheet(conn, order_id: int, staff: dict, body: SheetIn) -> Optional[str]:
     """Shared by "PDI done" (pdi.py) and "Make PDI sheet": returns the old sheet's key."""
+    work_order = " ".join((body.work_order or "").split())
+    if work_order:  # typed in the dialog: saved on the order, then printed on the sheet
+        conn.execute("UPDATE pdi_orders SET work_order = %s WHERE id = %s", (work_order, order_id))
     try:
         old = pdisheet.make_sheet(conn, order_id, staff, body.template_id, body.km, body.date, body.stamp_id)
     except pdisheet.SheetError as exc:

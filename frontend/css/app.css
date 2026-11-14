@@ -714,6 +714,7 @@ button.po-photo { padding: 0; cursor: zoom-in; font: inherit; color: inherit; }
   border-radius: 6px; padding: 2px; }
 .pdi-sheet-form { margin-top: .5rem; }
 .pdi-done-list { margin-top: .75rem; }
+.pdi-wo { margin: .4rem 0; display: flex; gap: .4rem; align-items: baseline; flex-wrap: wrap; }
 /* Placing fields: the page picture with the fields drawn where they will be printed. */
 .ps-fields { margin: .5rem 0; }
 .ps-pages { margin: .25rem 0 .5rem; }
