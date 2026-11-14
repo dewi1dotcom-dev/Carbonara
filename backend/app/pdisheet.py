@@ -143,13 +143,18 @@ def store_template(data: bytes) -> tuple[str, list[dict]]:
 
 def page_image(key: str, page_no: int) -> Path:
     """A picture of the form's page (1-based), rendered once and cached."""
-    out = path(key, "pdf").with_name(f"{Path(key).name}_p{page_no}.png")
+    # "_pf": drawn with the form fields (0.33.4); older "_p<n>" pictures lacked a fillable form's boxes
+    out = path(key, "pdf").with_name(f"{Path(key).name}_pf{page_no}.png")
     if not out.is_file():
         import pypdfium2 as pdfium
 
         with _pdfium_lock:
             pdf = pdfium.PdfDocument(str(path(key, "pdf")))
             try:
+                try:
+                    pdf.init_forms()  # draw a fillable form's fields (its tick boxes) too
+                except Exception:
+                    log.warning("Form fields of %s could not be loaded", key, exc_info=True)
                 if not 1 <= page_no <= len(pdf):
                     raise SheetError("No such page")
                 page = pdf[page_no - 1]
@@ -162,7 +167,7 @@ def page_image(key: str, page_no: int) -> Path:
 
 # Labels on PDI forms (Norwegian and English), per field. Matched as whole words.
 LABELS = {
-    "reg": ("reg.nr", "reg. nr", "regnr", "reg nr", "reg.no", "reg no", "kjennemerke", "registration", "license plate",
+    "reg": ("reg", "reg.", "reg.nr", "reg. nr", "regnr", "reg nr", "reg.no", "reg no", "kjennemerke", "registration", "license plate",
             "licence plate", "registreringsnummer"),
     "vin": ("vin", "understellsnr", "understellsnummer", "chassisnr", "chassis", "vin-nr", "vin nr"),
     "km": ("km", "km-stand", "kmstand", "kilometerstand", "kilometer", "mileage", "odometer"),
@@ -231,6 +236,10 @@ def suggest(key: str, pages: list[dict]) -> dict:
                     pos = {"page": page_no, "x": (slot_l + W * 0.01) / W, "y": cy / H, "size": size, "bold": True}
             else:
                 start = field_start(gray, item["cx"] + item["width"] / 2, item["cy"], item["height"])
+                if field == "battery" and re.fullmatch(r"\(?(v|volt)\)?:?", item["text"].lower().strip()):
+                    # the label is the unit after the blank ("spenning ____ Volt"): the number goes before it
+                    value_w = (size * 2.0 + 6) / pages[page_no - 1]["w"] * W  # "12,6" in bold + a gap, in px
+                    start = max(0.0, item["cx"] - item["width"] / 2 - value_w)
                 if field in IMAGE_FIELDS:
                     w = DEFAULT_SIZE[field]
                     pos = {"page": page_no, "x": min(start / W + w / 2, 1 - w / 2), "y": item["cy"] / H, "w": w}
@@ -318,7 +327,7 @@ def field_start(gray, right: float, cy: float, text_h: float) -> float:
 
 def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
     """Empty square tick boxes on a rendered page, as (centre x, centre y, width) in px.
-    A box: a square outline 0.7–3 % of the page width, hollow inside. Letters like
+    A box: a square outline 0.7–4 % of the page width, hollow inside. Letters like
     O or D are rounder (less area than their bounding box) and are skipped."""
     import cv2
     import numpy as np
@@ -327,7 +336,7 @@ def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
     W = gray.shape[1]
     bw = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 15, 10)
     contours, _ = cv2.findContours(bw, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-    lo, hi = W * 0.007, W * 0.03
+    lo, hi = W * 0.007, W * 0.04
     boxes = []
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)

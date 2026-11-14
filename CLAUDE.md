@@ -753,7 +753,8 @@ the server is LAN-only, so no customer phones / public internet).
     blocker).
   - **12V battery + tick boxes (0.33.0, migration 034; the user's request):** the MG forms have a 12V reading and
     many tick boxes.
-    - Text field `battery` (OCR labels 12V / batteri / spenning…), filled as just the number "12,6" (`fmt_volt`; the forms print "Volt" themselves, 0.33.3). The dialog
+    - Text field `battery` (OCR labels 12V / batteri / spenning…), filled as just the number "12,6" (`fmt_volt`; the forms print "Volt" themselves, 0.33.3). When the
+      matched label is only the unit ("Volt"), the suggestion puts the number before it (0.33.4). The dialog
       asks "12V battery (V) \*" (required when the sheet has the field; comma or dot). Stored as
       `pdi_orders.done_battery_v` and logged in `pdi_done` / `pdi_sheet_made` (`battery`; not personal data).
     - Field `checks` = **many positions in one field**: `{size, marks: [{page, x, y}]}` (centre of each box). In
@@ -768,8 +769,9 @@ the server is LAN-only, so no customer phones / public internet).
   - **Templates = the user's chosen approach "tap positions" (Settings → PDI sheets, admins):** upload the
     model's PDF with a name and **car models** (comma-separated; `match_template` picks the longest name found in
     make + model, ignoring case/spaces/punctuation). Then "Place fields" (`placeDialog`): pick a field, tap the
-    page picture (`GET /pdi-templates/{id}/pages/{n}`, rendered by pypdfium2 at 1400 px and cached as
-    `<key>_p<n>.png`). Text: x, y = start of the text, middle of the line, size in pt. Stamp / signature: centred,
+    page picture (`GET /pdi-templates/{id}/pages/{n}`, rendered by pypdfium2 at 1400 px **with the form fields**
+    (`init_forms()`, 0.33.4: a fillable form's tick boxes are fields and were missing) and cached as
+    `<key>_pf<n>.png`; older `_p<n>.png` files are just unused). Text: x, y = start of the text, middle of the line, size in pt. Stamp / signature: centred,
     `w` = share of the page width. Stored as shares of the page in `pdi_templates.fields`, so it doesn't depend on
     the picture size. **OCR suggests positions** (`suggest`: RapidOCR `scene_text` on the page pictures, labels like
     VIN / Reg.nr / Km / Dato / Signatur / Stempel in `LABELS`, the shortest matching text wins) automatically on the
@@ -1112,6 +1114,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.1 | Fix: fillable PDF forms hid the ticks and text (form fields are flattened into the page before filling) |
 | 0.33.2 | PDI sheets: suggested text positions go into the box beside the label (not on the label's black cell); text bold and 12 pt by default |
 | 0.33.3 | PDI sheets: 12V reading printed as the number only; stamp / signature / date under a shared header bar are suggested side by side in the box below it |
+| 0.33.4 | PDI sheets: page pictures show a fillable form's fields (tick boxes visible and found); bare "REG" label; 12V number suggested before a "Volt" label. Verified live: flattening removes the form fields |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
