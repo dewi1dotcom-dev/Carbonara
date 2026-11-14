@@ -760,7 +760,10 @@ the server is LAN-only, so no customer phones / public internet).
     - Field `checks` = **many positions in one field**: `{size, marks: [{page, x, y}]}` (centre of each box). In
       "Place fields" → "Tick boxes", each tap adds a box and a tap on a tick removes it; "Remove all". "Suggest
       positions" also finds empty square boxes on the page pictures (`find_boxes`, OpenCV: square outline
-      0.7–3 % of the page width, hollow, not round like O/D), only when no boxes are placed yet.
+      0.7–4 % of the page width, hollow, not round like O/D), only when no boxes are placed yet. **One box per
+      spot (0.33.5):** MG's tick cells are grey | white | grey squares, so candidates close together on a line
+      compete and only the lightest inside (the white box) is kept; mid-grey or darker insides never count. The
+      suggested tick size is 85 % of the median box.
     - The dialog shows "Tick all boxes on the PDI sheet" (unticked by default, remembered as `sheet_checks` for
       "Make sheet again"). Ticks are drawn with ZapfDingbats "4" (✔, a built-in PDF font). "Test" ticks every box.
   - **Done orders:** "📄 PDI sheet" (`GET /pdi/{id}/sheet`, inline, `no-store`) and "Make PDI sheet" / "Make
@@ -1115,6 +1118,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.2 | PDI sheets: suggested text positions go into the box beside the label (not on the label's black cell); text bold and 12 pt by default |
 | 0.33.3 | PDI sheets: 12V reading printed as the number only; stamp / signature / date under a shared header bar are suggested side by side in the box below it |
 | 0.33.4 | PDI sheets: page pictures show a fillable form's fields (tick boxes visible and found); bare "REG" label; 12V number suggested before a "Volt" label. Verified live: flattening removes the form fields |
+| 0.33.5 | PDI sheets: tick box finder keeps one box per spot (the white box, not the grey squares beside it) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

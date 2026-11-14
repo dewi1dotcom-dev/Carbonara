@@ -248,7 +248,7 @@ def suggest(key: str, pages: list[dict]) -> dict:
             out[field] = {k: round(v, 4) if isinstance(v, float) else v for k, v in pos.items()}
     if marks:
         box_pts.sort()
-        out[CHECKS] = {"size": round(min(max(box_pts[len(box_pts) // 2], 6), 24), 1), "marks": marks[:MAX_MARKS]}
+        out[CHECKS] = {"size": round(min(max(box_pts[len(box_pts) // 2] * 0.85, 6), 24), 1), "marks": marks[:MAX_MARKS]}
     return out
 
 
@@ -328,7 +328,9 @@ def field_start(gray, right: float, cy: float, text_h: float) -> float:
 def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
     """Empty square tick boxes on a rendered page, as (centre x, centre y, width) in px.
     A box: a square outline 0.7–4 % of the page width, hollow inside. Letters like
-    O or D are rounder (less area than their bounding box) and are skipped."""
+    O or D are rounder (less area than their bounding box) and are skipped.
+    One box per spot: forms like MG's split each tick cell into grey | white | grey squares,
+    so of the candidates close together on a line only the lightest inside (the white box) is kept."""
     import cv2
     import numpy as np
 
@@ -340,7 +342,7 @@ def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
     boxes = []
     for c in contours:
         x, y, w, h = cv2.boundingRect(c)
-        if not (lo <= w <= hi and lo <= h <= hi and 0.8 <= w / h <= 1.25):
+        if not (lo <= w <= hi and lo <= h <= hi and 0.65 <= w / h <= 1.5):
             continue
         if cv2.contourArea(c) < 0.85 * w * h:
             continue
@@ -351,11 +353,16 @@ def find_boxes(img: Image.Image) -> list[tuple[float, float, float]]:
         inner = bw[y + m:y + h - m, x + m:x + w - m]
         if inner.size == 0 or inner.mean() > 255 * 0.15:  # filled squares, bullets, ticked boxes
             continue
-        boxes.append((x + w / 2, y + h / 2, float(w)))
+        shade = float(gray[y + m:y + h - m, x + m:x + w - m].mean())  # 255 = white inside
+        if shade < 170:  # dark or mid-grey cells are not empty boxes
+            continue
+        boxes.append((x + w / 2, y + h / 2, float(max(w, h)), shade))
     out: list[tuple[float, float, float]] = []
-    for b in sorted(boxes, key=lambda b: -b[2]):  # a box's outer and inner edge: keep one
-        if not any(abs(b[0] - o[0]) < o[2] / 2 and abs(b[1] - o[1]) < o[2] / 2 for o in out):
-            out.append(b)
+    # Lightest first (then largest: a box's outer edge before its inner edge); skip any candidate
+    # next to one already kept on the same line.
+    for cx, cy, s, _ in sorted(boxes, key=lambda b: (-round(b[3] / 8), -b[2])):
+        if not any(abs(cx - o[0]) < max(s, o[2]) * 2 and abs(cy - o[1]) < max(s, o[2]) * 0.6 for o in out):
+            out.append((cx, cy, s))
     return sorted(out, key=lambda b: (round(b[1] / (W * 0.01)), b[0]))  # reading order
 
 
