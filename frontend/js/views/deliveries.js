@@ -157,33 +157,34 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
   }
 
   /* On-screen keyboard: keep the "Register delivery" button visible above it while typing (the message
-   * field is right above it, and the keyboard covered the button). In full screen the keyboard is laid
-   * over the page instead of shrinking it, so the page gets bottom padding the keyboard's height (else it
-   * can't scroll far enough) and is scrolled by what the visual viewport hides. The field being typed
-   * in never scrolls out of sight at the top. */
+   * field is right above it, and the keyboard covered the button). 0.33.14 scrolled the page from code,
+   * which brought the browser's address bar back and was off by the bar's height the next time. Now
+   * nothing is scrolled by us:
+   * - On the tablet, the keyboard shrinks the page (interactive-widget=resizes-content, Chrome / Android),
+   *   so the browser itself scrolls the field into view above the keyboard.
+   * - While a text field has focus, the button row sticks to the bottom of what is visible (.typing).
+   *   Browsers that lay the keyboard over the page (e.g. iPad) lift it by the hidden part (--kb). */
+  if (standalone) {
+    const meta = document.querySelector('meta[name=viewport]');
+    if (meta && !meta.content.includes('interactive-widget')) meta.content += ', interactive-widget=resizes-content';
+  }
   const vv = window.visualViewport;
-  let kbTimer = null;
-  const keepSubmitVisible = () => {
-    if (!page.isConnected) { vv?.removeEventListener('resize', keepSubmitVisible); return; }
+  const onKeyboard = () => {
+    if (!page.isConnected) { vv?.removeEventListener('resize', onKeyboard); return; }
+    const form = page.querySelector('form.kiosk-card');
+    if (!form) return;
     const field = document.activeElement;
-    const btn = page.querySelector('form.kiosk-card button[type=submit]');
-    const typing = field?.closest?.('form.kiosk-card') && field.matches('textarea, input[type=text], input[type=tel]');
-    const keyboard = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
-    if (!btn || !typing || keyboard < 80) { // no keyboard open (a PC, or a tap on a chip / the map)
-      page.style.paddingBottom = '';
-      return;
-    }
-    page.style.paddingBottom = `${keyboard + 16}px`;
-    const top = vv.offsetTop + 12;
-    const bottom = vv.offsetTop + vv.height - 12;
-    const need = btn.getBoundingClientRect().bottom - bottom;
-    const room = field.getBoundingClientRect().top - top;
-    const by = Math.min(need, room);
-    if (by > 0) window.scrollBy(0, by);
+    const inForm = !!field?.closest?.('form.kiosk-card');
+    // Tapping the stuck button itself must not drop it back down mid-tap (the click would miss).
+    const typing = inForm && (field.matches('textarea, input[type=text], input[type=tel]')
+      || (form.classList.contains('typing') && !!field.closest('.actions')));
+    const hidden = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
+    form.classList.toggle('typing', typing);
+    form.style.setProperty('--kb', `${typing ? hidden : 0}px`);
   };
-  vv?.addEventListener('resize', keepSubmitVisible);
-  page.addEventListener('focusin', () => { clearTimeout(kbTimer); kbTimer = setTimeout(keepSubmitVisible, 350); });
-  page.addEventListener('focusout', () => { clearTimeout(kbTimer); kbTimer = setTimeout(keepSubmitVisible, 350); });
+  vv?.addEventListener('resize', onKeyboard);
+  page.addEventListener('focusin', onKeyboard);
+  page.addEventListener('focusout', () => setTimeout(onKeyboard, 0)); // focus has moved on by then
 
   const frame = (...content) => page.replaceChildren(...[
     standalone ? null : h('div', { class: 'card notice' },
