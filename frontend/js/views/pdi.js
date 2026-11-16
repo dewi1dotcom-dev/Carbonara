@@ -240,6 +240,7 @@ function givenDialog(question, o, onYes) {
   const [d0, t0] = (o.pdi_local || '').split('T');
   const date = dateInput({ id: 'given-date', value: d0 || '' });
   const time = timeInput({ id: 'given-time', value: (t0 || '').slice(0, 5) || '08:00' });
+  const wo = o.pdi_at ? null : workOrderInput(o, 'given-wo'); // first PDI date: also the work order no.
   const yes = h('button', { class: 'btn primary', type: 'submit' }, 'Yes');
   const form = h('form', {},
     h('p', {}, question),
@@ -248,13 +249,15 @@ function givenDialog(question, o, onYes) {
     h('div', { class: 'grid' },
       h('div', { class: 'field' }, h('label', { for: 'given-date' }, 'Date'), date),
       h('div', { class: 'field' }, h('label', { for: 'given-time' }, 'Time'), time)),
+    wo ? workOrderField(wo) : null,
     h('div', { class: 'actions' },
       h('button', { class: 'btn', type: 'button', onClick: () => close() }, 'No'),
       yes));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(yes, async () => {
-      await onYes(date.value ? { date: date.value, time: time.value || '08:00' } : null);
+      await onYes(date.value
+        ? { date: date.value, time: time.value || '08:00', work_order: wo?.value.trim() || null } : null);
       close();
     });
   });
@@ -421,6 +424,8 @@ export function bookingDialog(o, done) {
   let followDate = !o.expected_done_date || !d0 || o.expected_done_date === nextDay(d0);
   date.addEventListener('change', () => { if (followDate && date.value) expected.value = nextDay(date.value); });
   expected.addEventListener('change', () => { followDate = false; });
+  // First time a date is entered: also ask for the workshop's work order no. (later: "Change" on the order).
+  const wo = o.pdi_at ? null : workOrderInput(o, 'pdi-wo');
   const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save PDI date');
   const form = h('form', {},
     h('p', { class: 'muted' }, 'Enter the date and time the workshop replied with. Everyone sees it on the Today page, with a reminder the day before.'),
@@ -429,6 +434,7 @@ export function bookingDialog(o, done) {
       h('div', { class: 'field' }, h('label', { for: 'pdi-time' }, 'Time'), time)),
     h('div', { class: 'field' }, h('label', { for: 'pdi-expected-done' }, 'Expected completion date'), expected,
       h('div', { class: 'muted small' }, 'The day after the PDI date unless you change it.')),
+    wo ? workOrderField(wo) : null,
     o.pdi_confirmed_at ? h('p', { class: 'muted small' }, 'A new date or time must be confirmed again.') : null,
     h('div', { class: 'actions spread' },
       o.pdi_at ? h('button', {
@@ -441,7 +447,9 @@ export function bookingDialog(o, done) {
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(save, async () => {
-      await api.post(`/pdi/${o.id}/booking`, { date: date.value, time: time.value, expected_done: expected.value || null });
+      await api.post(`/pdi/${o.id}/booking`, {
+        date: date.value, time: time.value, expected_done: expected.value || null, work_order: wo?.value.trim() || null,
+      });
       close();
       toast('PDI date saved', 'success');
       window.dispatchEvent(new Event('carbonara:pdi-changed'));
@@ -450,6 +458,13 @@ export function bookingDialog(o, done) {
   });
   const { close } = openDialog('PDI date and time', form);
 }
+
+/** The workshop's work order no. when the PDI date is first entered (optional there; required to confirm). */
+function workOrderInput(o, id) {
+  return h('input', { type: 'text', id, maxlength: 40, autocomplete: 'off', value: o.work_order ?? '', placeholder: 'e.g. 123456' });
+}
+const workOrderField = (input) => h('div', { class: 'field' }, h('label', { for: input.id }, 'Work order no.'), input,
+  h('div', { class: 'muted small' }, 'The workshop’s work order number for this PDI, if you have it. It is printed on the PDI sheet.'));
 
 /** "2026-11-13" → "2026-11-14" (calendar day, no time zone shift). */
 function nextDay(iso) {

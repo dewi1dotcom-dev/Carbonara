@@ -60,6 +60,9 @@ class BookingIn(BaseModel):
     date: Optional[dt.date] = None   # None clears the booking
     time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
     expected_done: Optional[dt.date] = None  # None = the day after the PDI date
+    # The workshop's work order number, asked when the PDI date is entered the first time
+    # (0.33.18). Empty = keep the stored one; a change gets a history entry.
+    work_order: Optional[str] = Field(None, max_length=40)
 
 
 class ListIn(BaseModel):
@@ -329,6 +332,7 @@ def set_booking(order_id: int, body: BookingIn, request: Request, conn=Depends(g
     )
     log_event(conn, row["vehicle_id"], "pdi_booked", staff_id=_me(request),
               data={"pdi_at": local, "expected_done": expected})
+    pdi_sheets.save_work_order(conn, order_id, _me(request), body.work_order)
     return _order(conn, order_id)
 
 

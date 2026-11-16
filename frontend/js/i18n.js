@@ -392,6 +392,7 @@ const NO = {
   'Tick boxes: page, x and y are needed': 'Avkrysningsbokser: side, x og y mangler',
   'A tick box is outside the page': 'En avkrysningsboks er utenfor siden',
   'The workshop’s work order number for this PDI. It is printed on the PDI sheet.': 'Verkstedets arbeidsordrenummer for denne nybilklargjøringen. Det skrives på skjemaet.',
+  'The workshop’s work order number for this PDI, if you have it. It is printed on the PDI sheet.': 'Verkstedets arbeidsordrenummer for denne nybilklargjøringen, hvis du har det. Det skrives på skjemaet.',
   'Make the PDI sheet again to print the new number on it.': 'Lag skjemaet på nytt for å få det nye nummeret på det.',
   'Mark the PDI as done?': 'Merke nybilklargjøringen som utført?', 'PDI marked as done': 'Nybilklargjøring merket som utført', 'Cancel this PDI order?': 'Avbryte denne bestillingen?',
   'Cancel this PDI order? It has already been sent – remember to tell the workshop.': 'Avbryte denne bestillingen? Den er allerede sendt – husk å gi beskjed til verkstedet.',

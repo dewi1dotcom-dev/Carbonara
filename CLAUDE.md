@@ -729,6 +729,9 @@ the server is LAN-only, so no customer phones / public internet).
     clears both. Shown as a badge ("✓ Date confirmed …" / "Date not confirmed") on the PDI card and the PDI
     orders page; the PDI page says "date not confirmed".
 - **Work order no. (0.32.0)** (`pdi_orders.work_order`, migration 033; the user's request):
+  - **Also asked when the PDI date is entered the first time (0.33.18):** "Enter PDI date" and the "given to the
+    workshop?" dialog show an optional "Work order no." while the order has no date (`BookingIn.work_order`, saved
+    with `pdi_sheets.save_work_order`, history entry `pdi_work_order_changed`).
   - **Entered when confirming the PDI date:** "✓ Confirm PDI date" opens a dialog (`confirmDate` in `pdi.js`)
     with a required "Work order no." (`POST /pdi/{id}/confirm` `{work_order}`; max 40 characters, spaces
     tidied). A new PDI date clears the confirmation but **keeps the number**.
@@ -1157,6 +1160,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.15 | Kiosk form: button row sticks above the keyboard while typing (no scrolling from code, which brought the address bar back) |
 | 0.33.16 | Today: wheel blocks use ❄️ / ☀️ (the 🛞 wheel emoji is missing on Windows 10 and older phones) |
 | 0.33.17 | Today: links only lead to pages the team can see (others shown as plain text); PDI rows open the PDI orders page at that car for teams without Vehicles |
+| 0.33.18 | PDI date entered the first time ("Enter PDI date" or "given to the workshop?") also asks for the work order no. (optional there) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
