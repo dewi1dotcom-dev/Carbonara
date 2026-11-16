@@ -486,8 +486,19 @@ export const carText = (c) => [vehicleTitle(c), c.registration_number].filter(Bo
 
 // Board lists (Today page, PDI page): a card with a heading + count and rows
 // of cars, each with its details on the line below.
+// Can the logged-in user open this page (team menu)? app.js sets the check from its route table;
+// links to pages a team can't see are shown as plain text instead (no "Not available" page).
+let routeCheck = () => true;
+export const setRouteCheck = (fn) => { routeCheck = fn; };
+export const canOpen = (href) => !href || routeCheck(href);
+
+/** A car in a PDI list (Today, PDI page): its car page, or for teams that see PDI orders but not
+ *  Vehicles (e.g. the workshop) that car on the PDI orders page. */
+export const pdiCarHref = (vehicleId) => (canSee('vehicles') || !canSee('pdi_orders')
+  ? `#/vehicles/${vehicleId}` : `#/pdi-orders?car=${vehicleId}`);
+
 export function boardRow(href, title, meta, cls = '') {
-  return h('a', { class: `today-row ${cls}`, href },
+  return h(href && canOpen(href) ? 'a' : 'div', { class: `today-row ${cls}`, href: href && canOpen(href) ? href : null },
     h('span', { class: 'today-title' }, title),
     h('span', { class: 'today-meta muted small' }, meta));
 }

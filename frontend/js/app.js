@@ -1,5 +1,5 @@
 import {
-  api, append, applyTheme, canSee, carText, fmtDate, h, openDialog, osloTodayIso, session, setInspectorId, showError, startClock,
+  api, append, applyTheme, canSee, carText, fmtDate, h, openDialog, osloTodayIso, pdiCarHref, session, setInspectorId, setRouteCheck, showError, startClock,
   theme, toast,
 } from './ui.js';
 import { lang, setLang, startTranslator } from './i18n.js';
@@ -40,6 +40,12 @@ const routes = [
   [/^#\/settings$/, settingsView, 'settings'],
   [/^#\/system$/, systemView, 'system'],
 ];
+
+// Links (Today board rows and tiles) only lead to pages the user's team can see.
+setRouteCheck((href) => {
+  const route = routes.find(([re]) => re.test(href.split('?')[0]));
+  return !route || route[2] === 'system' || canSee(route[2]);
+});
 
 const root = document.getElementById('app');
 
@@ -99,7 +105,7 @@ async function refreshNotify() {
     const hhmm = (time || '').slice(0, 5);
     const when = inDays <= 0 ? `PDI today at ${hhmm}` : inDays === 1 ? `PDI tomorrow at ${hhmm}` : `PDI ${fmtDate(day, false)} at ${hhmm}`;
     return h('div', { class: 'notify-bar' },
-      h('span', {}, '🔔 ', when, ': ', h('a', { href: `#/vehicles/${o.vehicle_id}` }, h('strong', {}, carText(o))), ' — ', 'prepare the car'),
+      h('span', {}, '🔔 ', when, ': ', h('a', { href: pdiCarHref(o.vehicle_id) }, h('strong', {}, carText(o))), ' — ', 'prepare the car'),
       h('button', {
         class: 'btn primary small', type: 'button',
         onClick: () => prepDialog(o, async () => { await refreshNotify(); await render(); }),

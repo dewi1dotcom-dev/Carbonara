@@ -32,6 +32,18 @@ export async function pdiOrdersView(el, _params = [], host = el) {
     h('h2', { class: 'po-group' }, 'PDI done – waiting for registration or delivery', h('span', { class: 'count' }, done.length)),
     done.length ? h('div', { class: 'po-list' }, done.map((o) => orderCard(o, opts, rerender)))
       : h('p', { class: 'empty' }, 'No cars waiting.'));
+
+  // #/pdi-orders?car=<vehicle id> (from Today, for teams without the car pages): show that car's order.
+  // Only on the first draw, not when the page redraws itself after an action.
+  const car = el === host ? new URLSearchParams(location.hash.split('?')[1] || '').get('car') : null;
+  if (car) {
+    setTimeout(() => {
+      const card = document.getElementById(`po-car-${car}`);
+      if (!card) return;
+      card.classList.add('po-focus');
+      card.scrollIntoView({ block: 'start', behavior: 'smooth' });
+    }, 50);
+  }
 }
 
 function orderCard(o, opts, rerender) {
@@ -40,7 +52,7 @@ function orderCard(o, opts, rerender) {
   const kv = (rows) => h('dl', { class: 'kv' },
     rows.filter(([, v]) => v).map(([k, v]) => [h('dt', {}, k), h('dd', {}, v)]));
 
-  return h('section', { class: 'card po-card' },
+  return h('section', { class: 'card po-card', id: `po-car-${o.vehicle_id}` },
     h('div', { class: 'po-head' },
       h('div', { class: 'car-text' },
         h('h3', { class: 'list-title' }, vehicleTitle(o)),

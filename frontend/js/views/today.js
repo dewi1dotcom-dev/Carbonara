@@ -1,7 +1,7 @@
 // The start page ("Today board"): what needs doing today and tomorrow first,
 // then what needs attention, then a few numbers.
 import { lang } from '../i18n.js';
-import { api, append, boardBlock as block, boardRow as row, canSee, carText, fmtDate, h, tyreText, vehicleTitle } from '../ui.js';
+import { api, append, boardBlock as block, boardRow as row, canOpen, canSee, carText, fmtDate, h, pdiCarHref, tyreText, vehicleTitle } from '../ui.js';
 import { optText } from './deliveries.js';
 
 // Summer / winter wheels against the studded tyre season: cars here, plus rental cars for users
@@ -22,7 +22,7 @@ const since = (iso) => {
 const inDays = (n) => (n < 0 ? `${-n} d overdue` : n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} d`);
 
 // withPrep: today/tomorrow also show whether the car is prepared (notification bar until it is).
-const pdiRow = (o, withPrep = false) => row(`#/vehicles/${o.vehicle_id}`, carText(o),
+const pdiRow = (o, withPrep = false) => row(pdiCarHref(o.vehicle_id), carText(o),
   [o.pdi_at && clock.format(new Date(o.pdi_at)), o.location_code && `spot ${o.location_code}`,
     withPrep && (o.prepared_at ? '✓ prepared' : 'not prepared yet')].filter(Boolean).join(' · '),
   withPrep && !o.prepared_at ? 'bad' : '');
@@ -42,7 +42,7 @@ export async function todayView(el) {
     block('🔧', 'PDI tomorrow – make the car ready', d.pdi_tomorrow.map((o) => pdiRow(o, true)), { cls: 'warn' }),
     block('🔧', 'PDI today', d.pdi_today.map((o) => pdiRow(o, true)), { cls: 'info' }),
     block('⏰', 'PDI date passed – mark as done?', d.pdi_overdue.map((o) =>
-      row(`#/vehicles/${o.vehicle_id}`, carText(o), `was ${fmtDate(o.pdi_at)}`)), { cls: 'bad' }),
+      row(pdiCarHref(o.vehicle_id), carText(o), `was ${fmtDate(o.pdi_at)}`)), { cls: 'bad' }),
     block('🔋', 'Storage checks due (new cars)', d.storage_due.map((s) =>
       row(`#/vehicles/${s.id}`, carText(s), s.kind === 'arrival' ? 'first storage check missing'
         : `${s.title} · ${s.in_days < 0 ? `${-s.in_days} d overdue` : s.in_days === 0 ? 'today' : `in ${s.in_days} d`}`,
@@ -69,11 +69,11 @@ export async function todayView(el) {
     // ---- needs attention
     h('h2', { class: 'today-heading' }, 'Needs attention'),
     block('✉', 'PDI orders waiting for the workshop’s reply', d.pdi_waiting.map((o) =>
-      row(`#/vehicles/${o.vehicle_id}`, carText(o), o.sent_via === 'print'
+      row(pdiCarHref(o.vehicle_id), carText(o), o.sent_via === 'print'
         ? `printed / PDF ${fmtDate(o.sent_at, false)} · enter the date when they reply`
         : `sent ${fmtDate(o.sent_at, false)} to ${o.sent_to} · enter the date when they reply`))),
     block('📝', 'PDI orders not sent yet', d.pdi_drafts.map((o) =>
-      row(`#/vehicles/${o.vehicle_id}`, carText(o), `started ${fmtDate(o.created_at, false)}${o.created_by_name ? ` by ${o.created_by_name}` : ''}`))),
+      row(pdiCarHref(o.vehicle_id), carText(o), `started ${fmtDate(o.created_at, false)}${o.created_by_name ? ` by ${o.created_by_name}` : ''}`))),
     block('🛂', 'EU-kontroll due', d.eu_control.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days <= 1 ? 'bad' : ''))),
     canSee('rental') ? block('🛂', 'Rental cars – EU-kontroll due', d.rental_eu_control.map((c) =>
@@ -91,7 +91,7 @@ export async function todayView(el) {
       ? h('p', { class: 'empty' }, 'Nothing needs attention. 👍') : null,
 
     // ---- upcoming & numbers
-    block('📅', 'Upcoming PDIs', d.pdi_upcoming.map((o) => row(`#/vehicles/${o.vehicle_id}`, carText(o),
+    block('📅', 'Upcoming PDIs', d.pdi_upcoming.map((o) => row(pdiCarHref(o.vehicle_id), carText(o),
       [fmtDate(o.pdi_at), o.location_code && `spot ${o.location_code}`].filter(Boolean).join(' · ')))),
     h('section', { class: 'today-tiles' },
       tile(n.in_storage, 'In storage', '#/storage'),
@@ -103,5 +103,5 @@ export async function todayView(el) {
 
 function tile(value, label, href) {
   const inner = [h('span', { class: 'tile-num' }, String(value ?? 0)), h('span', { class: 'tile-label muted small' }, label)];
-  return href ? h('a', { class: 'card tile', href }, inner) : h('div', { class: 'card tile' }, inner);
+  return href && canOpen(href) ? h('a', { class: 'card tile', href }, inner) : h('div', { class: 'card tile' }, inner);
 }

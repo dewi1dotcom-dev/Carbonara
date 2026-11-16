@@ -4,7 +4,7 @@
 import { tr } from '../i18n.js';
 import { doneDialog, sheetActions } from './pdisheet.js';
 import {
-  api, append, boardBlock, boardRow, busy, canSee, carText, dateInput, fmtDate, h, openDialog, session, showError, spotLabel,
+  api, append, boardBlock, boardRow, busy, canSee, carText, dateInput, fmtDate, h, openDialog, pdiCarHref, session, showError, spotLabel,
   timeInput, toast,
 } from '../ui.js';
 
@@ -51,7 +51,7 @@ export async function pdiListView(el) {
   const d = await api.get('/pdi');
   const inWeek = new Set(d.week.map((o) => o.id));
   const now = Date.now();
-  const link = (o, meta, cls = '') => boardRow(`#/vehicles/${o.vehicle_id}`, carText(o), meta, cls);
+  const link = (o, meta, cls = '') => boardRow(pdiCarHref(o.vehicle_id), carText(o), meta, cls);
   const when = (o) => [fmtDate(o.pdi_at), o.location_code && `spot ${o.location_code}`,
     o.status === 'booked' && !o.pdi_confirmed_at && 'date not confirmed'].filter(Boolean).join(' · ');
   const booked = d.open.filter((o) => o.status === 'booked' && !inWeek.has(o.id));
