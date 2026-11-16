@@ -272,27 +272,37 @@ function carDialog(car, data, done) {
 function rentCard(data, staff, done) {
   const free = data.cars.filter((c) => !c.rental_id);
   const card = h('section', { class: 'card' }, h('h2', {}, 'Rent out a car'));
-  const formSlot = h('div');
-  const chooser = h('div', { class: 'list' }, free.map((c) => h('button', {
-    class: 'card list-card', type: 'button', onClick: () => choose(c),
-  },
-  h('div', { class: 'list-main' },
-    h('div', { class: 'list-title' }, h('span', { class: 'rc-reg', translate: 'no' }, c.registration_number), ' ',
-      h('span', { translate: 'no' }, carName(c))),
-    h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c), tyreBadge(c.tyre_warning))))));
+  const chooser = h('div', { class: 'list' }, free.map((c) => {
+    const btn = h('button', {
+      class: 'card list-card', type: 'button', onClick: () => choose(c, btn),
+    },
+    h('div', { class: 'list-main' },
+      h('div', { class: 'list-title' }, h('span', { class: 'rc-reg', translate: 'no' }, c.registration_number), ' ',
+        h('span', { translate: 'no' }, carName(c))),
+      h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c), tyreBadge(c.tyre_warning))));
+    return btn;
+  }));
 
-  function choose(c) {
-    chooser.hidden = true;
-    formSlot.replaceChildren(rentForm(c, staff, data, done, () => {
-      formSlot.replaceChildren();
-      chooser.hidden = false;
-    }));
+  // The form opens in place of the tapped car (the other cars stay in the list). `style.display`,
+  // not `hidden`: `.list-card` is display: grid/flex via CSS, which beats the hidden attribute.
+  let open = null; // the form that is open now
+  function choose(c, btn) {
+    open?.closeForm();
+    const form = rentForm(c, staff, data, done, () => {
+      form.remove();
+      btn.style.display = '';
+      if (open === form) open = null;
+    });
+    open = form;
+    btn.style.display = 'none';
+    btn.after(form);
+    form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
 
   append(card,
     data.cars.length && !free.length ? h('p', { class: 'empty' }, 'All rental cars are out.') : null,
     data.cars.length ? null : h('p', { class: 'empty' }, 'Add a rental car below first.'),
-    chooser, formSlot);
+    chooser);
   return card;
 }
 
@@ -366,7 +376,7 @@ function rentForm(c, staff, data, done, cancel) {
     h('div', { class: 'card inner notice' },
       h('span', { class: 'rc-reg', translate: 'no' }, c.registration_number), ' ', h('strong', { translate: 'no' }, carName(c)),
       h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c), tyreBadge(c.tyre_warning)),
-      h('button', { class: 'link small', type: 'button', onClick: () => { picker.remove(); cancel(); } }, 'Choose another car')),
+      h('button', { class: 'link small', type: 'button', onClick: () => form.closeForm() }, 'Choose another car')),
     euWarn,
     h('h3', {}, 'Customer'),
     h('div', { class: 'field' }, h('label', {}, 'Driving licence'),
@@ -414,6 +424,7 @@ function rentForm(c, staff, data, done, cancel) {
       await done();
     });
   });
+  form.closeForm = () => { picker.remove(); cancel(); };
   return form;
 }
 
