@@ -91,6 +91,33 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
 
 // ---------------------------------------------------------------- the kiosk form
 
+/* Full screen on the kiosk tablet. Browsers only allow it after a tap (never on page load), so
+ * every tap on the kiosk form asks for it while the page isn't full screen: the first customer
+ * touch, and again after a reload (language switch) or someone swiping out of it. Stopped (and
+ * full screen left) when staff log in. iPhones have no full screen for pages; iPads use webkit. */
+let fullscreenOn = false;
+function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement; }
+function askFullscreen(e) {
+  if (fsElement() || e.target.closest?.('.kiosk-foot')) return; // not for the "Staff login" tap
+  const root = document.documentElement;
+  const req = root.requestFullscreen || root.webkitRequestFullscreen;
+  if (!req) return;
+  try {
+    const p = req.call(root, { navigationUI: 'hide' });
+    if (p?.catch) p.catch(() => {}); // refused (e.g. not allowed in this browser): just stay as is
+  } catch { /* old webkit throws instead */ }
+}
+function kioskFullscreen(on) {
+  if (on === fullscreenOn) return;
+  fullscreenOn = on;
+  if (on) {
+    document.addEventListener('pointerdown', askFullscreen, true);
+  } else {
+    document.removeEventListener('pointerdown', askFullscreen, true);
+    if (fsElement()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
+  }
+}
+
 /**
  * standalone: this device is a kiosk tablet (no staff logged in); shows a
  * "Staff login" link (onStaffLogin). Otherwise a staff
@@ -100,6 +127,7 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
   const cfg = await api.get('/kiosk/config');
   const page = h('div', { class: 'kiosk' });
   el.replaceChildren(page);
+  if (standalone) kioskFullscreen(true);
   let idleTimer = null;
   let doneTimer = null;
 
@@ -109,7 +137,7 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
         h('a', { href: '#/deliveries' }, 'Back to Customer deliveries'))),
     ...content,
     standalone && onStaffLogin ? h('p', { class: 'kiosk-foot' },
-      h('button', { class: 'link small', type: 'button', onClick: () => { clearTimeout(idleTimer); clearTimeout(doneTimer); onStaffLogin(); } },
+      h('button', { class: 'link small', type: 'button', onClick: () => { clearTimeout(idleTimer); clearTimeout(doneTimer); kioskFullscreen(false); onStaffLogin(); } },
         'Staff login')) : null,
   ].filter(Boolean));
 

@@ -519,6 +519,9 @@ the server is LAN-only, so no customer phones / public internet).
   it is ended. `/auth/state` returns `kiosk`; `boot()` then shows the form instead of the login screen
   (no menu: `body.logged-out`). "Staff login" at the bottom → normal login; logging out goes back to
   the form. Admins can stop a tablet (`revoked_at`).
+- **Full screen (0.33.11):** browsers only allow full screen after a tap, so on a kiosk tablet every tap on
+  the form asks for it while not full screen (`kioskFullscreen` in `deliveries.js`; not the "Staff login"
+  tap, which leaves full screen). iPhones can't; for a locked-down tablet use Android screen pinning.
 - **`/api/kiosk/*`** is the only API open without a staff session: `auth.require_kiosk_or_staff` (kiosk
   cookie or staff). Staff can preview the form at `#/kiosk` (deliveries sent from it are real).
 - **The form:** reg. no (stored uppercase without spaces, 2–8 letters/digits; linked to the car when the
@@ -1133,6 +1136,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.8 | Top bar clock: time, weekday and date on three lines (narrower, more room for the menu) |
 | 0.33.9 | Rental cars: the rent-out form opens in place of the tapped car (not under the whole list) |
 | 0.33.10 | Rental cars: the tapped car stays visible with its form right under it; tapping it again (or "Cancel") closes the form |
+| 0.33.11 | Delivery kiosk: full screen on the first tap (and again after leaving it); left when staff log in |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
