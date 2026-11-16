@@ -1151,6 +1151,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.13 | Name fields (kiosk and staff) capitalize on phone / tablet keyboards too (after each word, and on leaving the field) |
 | 0.33.14 | Kiosk form: the "Register delivery" button stays visible above the on-screen keyboard while typing |
 | 0.33.15 | Kiosk form: button row sticks above the keyboard while typing (no scrolling from code, which brought the address bar back) |
+| 0.33.16 | Today: wheel blocks use ❄️ / ☀️ (the 🛞 wheel emoji is missing on Windows 10 and older phones) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

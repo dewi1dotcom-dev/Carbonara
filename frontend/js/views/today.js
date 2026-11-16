@@ -78,9 +78,9 @@ export async function todayView(el) {
       row(`#/vehicles/${c.id}`, carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days <= 1 ? 'bad' : ''))),
     canSee('rental') ? block('🛂', 'Rental cars – EU-kontroll due', d.rental_eu_control.map((c) =>
       row('#/rental', carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days <= 1 ? 'bad' : ''))) : null,
-    block('🛞', 'Summer wheels – change to winter wheels', tyreRows(d.tyres_summer),
+    block('❄️', 'Summer wheels – change to winter wheels', tyreRows(d.tyres_summer),
       { cls: d.tyres_summer.some((t) => t.level === 'bad') ? 'bad' : 'warn' }),
-    block('🛞', 'Winter wheels – the studded tyre season has ended', tyreRows(d.tyres_winter), { cls: 'info' }),
+    block('☀️', 'Winter wheels – the studded tyre season has ended', tyreRows(d.tyres_winter), { cls: 'info' }),
     block('🛠', 'Service due', d.service.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days < -31 ? 'bad' : ''))),
     block('⚠', 'Statens vegvesen differences to check', d.registry_mismatches.map((c) =>
