@@ -640,7 +640,8 @@ the server is LAN-only, so no customer phones / public internet).
 - **Links follow the team (0.33.17):** `canOpen(href)` (`ui.js`, check set by `app.js` from its route table) turns
   Today rows and tiles that point to a page the team can't see into plain text. PDI rows (Today, the PDI page,
   the 🔔 bar; `pdiCarHref`) go to
-  `#/pdi-orders?car=<vehicle id>` (scrolls to and marks that car) for teams with PDI orders but not Vehicles.
+  `#/pdi-orders?car=<vehicle id>` (scrolls to and marks that car) for everyone who sees PDI orders (0.33.19, the
+  user's rule; before, only teams without Vehicles); others get the car page.
 - A change applies when the user next opens or reloads the app.
 
 **System page (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`, `views/system.js`):
@@ -1161,6 +1162,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.16 | Today: wheel blocks use ❄️ / ☀️ (the 🛞 wheel emoji is missing on Windows 10 and older phones) |
 | 0.33.17 | Today: links only lead to pages the team can see (others shown as plain text); PDI rows open the PDI orders page at that car for teams without Vehicles |
 | 0.33.18 | PDI date entered the first time ("Enter PDI date" or "given to the workshop?") also asks for the work order no. (optional there) |
+| 0.33.19 | PDI rows on Today, the PDI page and the 🔔 bar open the order on the PDI orders page (car page only for teams without PDI orders) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

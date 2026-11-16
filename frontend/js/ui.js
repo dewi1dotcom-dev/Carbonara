@@ -492,10 +492,10 @@ let routeCheck = () => true;
 export const setRouteCheck = (fn) => { routeCheck = fn; };
 export const canOpen = (href) => !href || routeCheck(href);
 
-/** A car in a PDI list (Today, PDI page): its car page, or for teams that see PDI orders but not
- *  Vehicles (e.g. the workshop) that car on the PDI orders page. */
-export const pdiCarHref = (vehicleId) => (canSee('vehicles') || !canSee('pdi_orders')
-  ? `#/vehicles/${vehicleId}` : `#/pdi-orders?car=${vehicleId}`);
+/** A car in a PDI list (Today, PDI page, the 🔔 bar): its order on the PDI orders page (0.33.19, the
+ *  user's rule), or the car page for teams that don't see PDI orders. */
+export const pdiCarHref = (vehicleId) => (canSee('pdi_orders')
+  ? `#/pdi-orders?car=${vehicleId}` : `#/vehicles/${vehicleId}`);
 
 export function boardRow(href, title, meta, cls = '') {
   return h(href && canOpen(href) ? 'a' : 'div', { class: `today-row ${cls}`, href: href && canOpen(href) ? href : null },
