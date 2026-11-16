@@ -173,8 +173,10 @@ export function viewPhoto(id, title = 'Photo') {
 // "søndag 8. november 2026" / "Sunday 8 November 2026".)
 const TZ = 'Europe/Oslo';
 const fmtTime = new Intl.DateTimeFormat('nb-NO', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+// Header clock: weekday and date on their own lines under the time (narrower top bar).
+const fmtWeekday = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', { timeZone: TZ, weekday: 'long' });
 const fmtLongDate = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', {
-  timeZone: TZ, weekday: 'long', day: 'numeric', month: 'long', year: 'numeric',
+  timeZone: TZ, day: 'numeric', month: 'long', year: 'numeric',
 });
 const fmtParts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
 
@@ -415,12 +417,15 @@ export function duplicateNotice(list, { onUseVin = null } = {}) {
 
 export const badge = (st, prefix = '') => st && h('span', { class: `badge ${st.cls}` }, prefix + st.text);
 
-/** Live clock: keeps `el` showing the current time and date, updated on the minute. */
+const capFirst = (s) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** Live clock: keeps `el` showing the current time, weekday and date, updated on the minute. */
 export function startClock(el) {
   const tick = () => {
     const now = new Date();
     el.replaceChildren(
       h('span', { class: 'clock-time' }, fmtTime.format(now)),
+      h('span', { class: 'clock-date' }, capFirst(fmtWeekday.format(now))),
       h('span', { class: 'clock-date' }, fmtLongDate.format(now)));
     setTimeout(tick, 60000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
   };

@@ -1130,6 +1130,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.5 | PDI sheets: tick box finder keeps one box per spot (the white box, not the grey squares beside it) |
 | 0.33.6 | Fix: made PDI sheets of fillable forms lost the whole form (page content kept untouched now); the form's own check boxes are ticked ("Ja" look); ✔ instead of black squares |
 | 0.33.7 | PDI sheets: tick box finder also finds wide light-grey tick cells (MG S6 "S6 2" form) |
+| 0.33.8 | Top bar clock: time, weekday and date on three lines (narrower, more room for the menu) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
