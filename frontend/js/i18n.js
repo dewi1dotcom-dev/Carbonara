@@ -545,8 +545,8 @@ const NO = {
   'Parent spot': 'Hovedplass', 'Staff member': 'Ansatt', 'Inspection': 'Kontroll', 'List entry': 'Listeelement', 'Setting': 'Innstilling', 'Storage check ': 'Lagerkontroll ',
 
   // ---- customer car delivery (kiosk)
-  'Deliver your car': 'Lever bilen din', 'Register the car you are leaving with us. It only takes a minute.': 'Registrer bilen du leverer hos oss. Det tar bare et minutt.',
-  'Registration number': 'Registreringsnummer', 'Where did you leave the key?': 'Hvor la du nøkkelen?', 'Where is the car parked?': 'Hvor står bilen parkert?',
+  'Deliver your car': 'Innlevering av bil', 'Register the car you are leaving with us. Quick and easy.': 'Registrer bilen du leverer hos oss. Raskt og enkelt.',
+  'Registration number': 'Registreringsnummer', 'Put your key in an available box': 'Legg nøkkelen din i en ledig boks', 'Where is the car parked?': 'Hvor står bilen parkert?',
   'Tap the map where you parked the car.': 'Trykk på kartet der du parkerte bilen.', 'Tick what applies': 'Kryss av for det som gjelder',
   'Message to the workshop (optional)': 'Melding til verkstedet (valgfritt)', 'Read the privacy notice': 'Les personvernerklæringen',
   'Register delivery': 'Registrer levering', 'Choose where you left the key': 'Velg hvor du la nøkkelen', 'Choose where the car is parked': 'Velg hvor bilen står parkert',
@@ -571,12 +571,16 @@ const NO = {
     'Avkrysningsbokser på skjemaet, f.eks. hva bilen skal ha gjort. Kundene krysser av så mange de vil. Hver tekst på engelsk og norsk.',
   'No key places. Customers are not asked where the key is.': 'Ingen nøkkelsteder. Kundene blir ikke spurt om hvor nøkkelen er.', 'No tick boxes.': 'Ingen avkrysningsbokser.',
   'Kiosk tablets': 'Kiosk-nettbrett', 'Stopped': 'Stoppet', 'Stop': 'Stopp', 'No kiosk tablets yet.': 'Ingen kiosk-nettbrett ennå.',
-  'A kiosk tablet shows only the delivery form, with no login. To set one up, log in on the tablet as an administrator, open this page and press the button below. You are then logged out on the tablet.':
-    'Et kiosk-nettbrett viser bare leveringsskjemaet, uten innlogging. For å sette opp et: logg inn på nettbrettet som administrator, åpne denne siden og trykk på knappen under. Du blir da logget ut på nettbrettet.',
+  'A kiosk tablet shows only the delivery form, with no login and no language switch. To set one up, log in on the tablet as an administrator, open this page and press the button below. You are then logged out on the tablet.':
+    'Et kiosk-nettbrett viser bare leveringsskjemaet, uten innlogging og uten språkvalg. For å sette opp et: logg inn på nettbrettet som administrator, åpne denne siden og trykk på knappen under. Du blir da logget ut på nettbrettet.',
+  'Choose the language of each tablet here. To use a tablet as a normal device again, press Stop.':
+    'Velg språket på hvert nettbrett her. For å bruke et nettbrett som en vanlig enhet igjen, trykk på Stopp.',
+  'Language on the tablet': 'Språk på nettbrettet', 'Norwegian': 'Norsk', 'English': 'Engelsk',
+  'Saved. The tablet changes language within a minute.': 'Lagret. Nettbrettet bytter språk innen ett minutt.',
   'Use this device as the delivery kiosk': 'Bruk denne enheten som leveringskiosk', 'Delivery kiosk': 'Leveringskiosk', 'Name of this device': 'Navn på denne enheten',
   'e.g. Tablet at the key drop': 'f.eks. Nettbrett ved nøkkelinnleveringen', 'Make this device a kiosk': 'Gjør denne enheten til kiosk',
-  'This device will show only the customer delivery form. You are logged out here, and the rest of Carbonara can only be opened again by logging in (the "Staff login" link at the bottom of the form).':
-    'Denne enheten vil bare vise leveringsskjemaet for kunder. Du blir logget ut her, og resten av Carbonara kan bare åpnes igjen ved å logge inn (lenken «Innlogging for ansatte» nederst i skjemaet).',
+  'This device will show only the customer delivery form, with no staff login. You are logged out here. To use it as a normal device again, press Stop for it on this page from another device.':
+    'Denne enheten vil bare vise leveringsskjemaet for kunder, uten innlogging for ansatte. Du blir logget ut her. For å bruke den som en vanlig enhet igjen, trykk på Stopp for den på denne siden fra en annen enhet.',
   'Customer cars delivered – not received yet': 'Kundebiler levert – ikke mottatt ennå', 'All customer deliveries': 'Alle kundeleveringer',
   'Customer car delivery': 'Levering av kundebil', 'Open Customer deliveries': 'Åpne Kundeleveringer',
   'The kiosk form where customers register the car they drop off: maps, key places, tick boxes and kiosk tablets.':

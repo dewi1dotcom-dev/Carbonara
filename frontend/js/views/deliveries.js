@@ -17,6 +17,13 @@ const DONE_MS = 30 * 1000;       // the thank-you screen goes back to an empty f
 
 const mapUrl = (id) => `/api/kiosk/maps/${id}/image`;
 
+/** Language of a kiosk tablet (Customer deliveries → Kiosk tablets). */
+const langSelect = (value, id) => {
+  const sel = h('select', { id }, h('option', { value: 'no' }, 'Norwegian'), h('option', { value: 'en' }, 'English'));
+  sel.value = value || 'no';
+  return sel;
+};
+
 /** Label in the user's language: options ({label, label_no}), stored choices ({en, no}) and maps ({name, name_no}). */
 export function optText(o) {
   if (!o) return '';
@@ -93,12 +100,11 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
 
 /* Full screen on the kiosk tablet. Browsers only allow it after a tap (never on page load), so
  * every tap on the kiosk form asks for it while the page isn't full screen: the first customer
- * touch, and again after a reload (language switch) or someone swiping out of it. Stopped (and
- * full screen left) when staff log in. iPhones have no full screen for pages; iPads use webkit. */
+ * touch, and again after a reload (language change) or someone swiping out of it.
+ * iPhones have no full screen for pages; iPads use webkit. */
 let fullscreenOn = false;
-function fsElement() { return document.fullscreenElement || document.webkitFullscreenElement; }
-function askFullscreen(e) {
-  if (fsElement() || e.target.closest?.('.kiosk-foot')) return; // not for the "Staff login" tap
+function askFullscreen() {
+  if (document.fullscreenElement || document.webkitFullscreenElement) return;
   const root = document.documentElement;
   const req = root.requestFullscreen || root.webkitRequestFullscreen;
   if (!req) return;
@@ -107,63 +113,60 @@ function askFullscreen(e) {
     if (p?.catch) p.catch(() => {}); // refused (e.g. not allowed in this browser): just stay as is
   } catch { /* old webkit throws instead */ }
 }
-function kioskFullscreen(on) {
-  if (on === fullscreenOn) return;
-  fullscreenOn = on;
-  if (on) {
-    document.addEventListener('pointerdown', askFullscreen, true);
-  } else {
-    document.removeEventListener('pointerdown', askFullscreen, true);
-    if (fsElement()) (document.exitFullscreen || document.webkitExitFullscreen)?.call(document)?.catch?.(() => {});
-  }
+function kioskFullscreen() {
+  if (fullscreenOn) return;
+  fullscreenOn = true;
+  document.addEventListener('pointerdown', askFullscreen, true);
 }
 
+/* The kiosk tablet has no language switch and no staff login (0.33.12, the user's rule): admins set
+ * its language on the Customer deliveries page, and "Stop" there turns it back into a normal device.
+ * The tablet checks the server every minute and reloads for either, but never while a customer is
+ * filling in the form or reading the thank-you. */
+const KIOSK_CHECK_MS = 60 * 1000;
+
 /**
- * standalone: this device is a kiosk tablet (no staff logged in); shows a
- * "Staff login" link (onStaffLogin). Otherwise a staff
- * preview inside the app (#/kiosk).
+ * standalone: this device is a kiosk tablet (no staff logged in). Otherwise a staff
+ * preview inside the app (#/kiosk), in the staff member's own language.
  */
-export async function kioskView(el, _params = [], { standalone = false, onStaffLogin = null } = {}) {
+export async function kioskView(el, _params = [], { standalone = false } = {}) {
   const cfg = await api.get('/kiosk/config');
   const page = h('div', { class: 'kiosk' });
   el.replaceChildren(page);
-  if (standalone) kioskFullscreen(true);
   let idleTimer = null;
   let doneTimer = null;
+  let inUse = false; // a customer has touched the form, or the thank-you is showing
+
+  if (standalone) {
+    kioskFullscreen();
+    const check = async () => {
+      if (!page.isConnected) return;
+      if (!inUse) {
+        try {
+          const st = await api.get('/auth/state');
+          if (!page.isConnected || inUse) { /* changed while asking */ } else if (st.me || !st.kiosk) {
+            location.reload(); return; // stopped (or someone logged in): boot() shows the right screen
+          } else if (st.kiosk.language && st.kiosk.language !== lang) {
+            setLang(st.kiosk.language); location.reload(); return;
+          }
+        } catch { /* server away: try again next time */ }
+      }
+      setTimeout(check, KIOSK_CHECK_MS);
+    };
+    setTimeout(check, KIOSK_CHECK_MS);
+  }
 
   const frame = (...content) => page.replaceChildren(...[
     standalone ? null : h('div', { class: 'card notice' },
       h('span', {}, 'Preview of the kiosk form. A delivery sent from here is real and shows up for the staff. ',
         h('a', { href: '#/deliveries' }, 'Back to Customer deliveries'))),
     ...content,
-    standalone && onStaffLogin ? h('p', { class: 'kiosk-foot' },
-      h('button', { class: 'link small', type: 'button', onClick: () => { clearTimeout(idleTimer); clearTimeout(doneTimer); kioskFullscreen(false); onStaffLogin(); } },
-        'Staff login')) : null,
   ].filter(Boolean));
-
-  /** English / Norsk switch at the top right of the form. On a kiosk tablet the
-   * language is the device's (no one is logged in); in the staff preview it is
-   * the staff member's own setting, so it is saved for them like in the user menu. */
-  function langToggle() {
-    const choose = async (code) => {
-      if (code === lang) return;
-      if (!standalone) {
-        try { await api.post('/auth/language', { language: code }); } catch (e) { showError(e); return; }
-      }
-      clearTimeout(idleTimer);
-      setLang(code);
-      location.reload(); // every text is shown in the new language
-    };
-    return h('div', { class: 'lang-toggle', role: 'group', 'aria-label': 'Language', translate: 'no' },
-      [['en', 'English'], ['no', 'Norsk']].map(([code, label]) => h('button', {
-        type: 'button', class: code === lang ? 'on' : '', 'aria-pressed': String(code === lang),
-        lang: code === 'no' ? 'nb' : 'en', onClick: () => choose(code),
-      }, label)));
-  }
 
   function renderForm() {
     clearTimeout(doneTimer);
     clearTimeout(idleTimer);
+    inUse = false;
     let mapId = cfg.maps.length === 1 ? cfg.maps[0].id : null;
     let pin = null; // {x, y}
 
@@ -195,13 +198,13 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
 
     const submit = h('button', { class: 'btn primary big', type: 'submit' }, 'Register delivery');
     const form = h('form', { class: 'card kiosk-card', autocomplete: 'off' },
-      h('div', { class: 'kiosk-head' }, h('h1', {}, 'Deliver your car'), langToggle()),
-      h('p', { class: 'muted' }, 'Register the car you are leaving with us. It only takes a minute.'),
+      h('div', { class: 'kiosk-head' }, h('h1', {}, 'Deliver your car')),
+      h('p', { class: 'muted' }, 'Register the car you are leaving with us. Quick and easy.'),
       h('div', { class: 'field' }, h('label', { for: 'kd-reg' }, 'Registration number'), reg),
       h('div', { class: 'grid' },
         h('div', { class: 'field' }, h('label', { for: 'kd-name' }, 'Your name'), name),
         h('div', { class: 'field' }, h('label', { for: 'kd-phone' }, 'Phone number'), phone)),
-      cfg.key_places.length ? h('div', { class: 'field' }, h('label', {}, 'Where did you leave the key?'),
+      cfg.key_places.length ? h('div', { class: 'field' }, h('label', {}, 'Put your key in an available box'),
         h('div', { class: 'chips' }, cfg.key_places.map((o, i) =>
           h('label', { class: 'chip' }, keyRadios[i], h('span', { translate: 'no' }, optText(o)))))) : null,
       cfg.maps.length ? h('div', { class: 'field' }, h('label', {}, 'Where is the car parked?'),
@@ -219,6 +222,7 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
 
     // Walked away halfway: clear the form (the next customer must not see the details).
     const bump = () => {
+      inUse = true;
       clearTimeout(idleTimer);
       idleTimer = setTimeout(() => { if (form.isConnected) renderForm(); }, IDLE_MS);
     };
@@ -255,6 +259,7 @@ export async function kioskView(el, _params = [], { standalone = false, onStaffL
   }
 
   function renderDone(regText, keyOpt) {
+    inUse = true;
     const done = h('button', { class: 'btn big', type: 'button', onClick: () => renderForm() }, 'Done');
     const card = h('div', { class: 'card kiosk-card kiosk-done' },
       h('div', { class: 'kiosk-check', 'aria-hidden': 'true' }, '✓'),
@@ -546,11 +551,27 @@ async function setupSection() {
       if (!confirm(`Stop ${k.name} from showing the delivery form?`)) return;
       try { await api.del(`/kiosk-devices/${k.id}`); await redraw(); } catch (e) { showError(e); }
     };
+    // The tablet's language is set only here (the tablet has no switch); it follows within a minute.
+    const languageSelect = (k) => {
+      const sel = langSelect(k.language, `kiosk-lang-${k.id}`);
+      sel.className = 'kiosk-lang';
+      sel.setAttribute('aria-label', 'Language on the tablet');
+      sel.addEventListener('change', async () => {
+        try {
+          await api.put(`/kiosk-devices/${k.id}/language`, { language: sel.value });
+          k.language = sel.value;
+          toast('Saved. The tablet changes language within a minute.', 'success');
+        } catch (e) { sel.value = k.language; showError(e); }
+      });
+      return sel;
+    };
     return h('section', { class: 'card' },
       h('h2', {}, 'Kiosk tablets'),
       h('p', { class: 'muted small' },
-        'A kiosk tablet shows only the delivery form, with no login. To set one up, log in on the tablet as an administrator, '
-        + 'open this page and press the button below. You are then logged out on the tablet.'),
+        'A kiosk tablet shows only the delivery form, with no login and no language switch. To set one up, log in on the '
+        + 'tablet as an administrator, open this page and press the button below. You are then logged out on the tablet.'),
+      h('p', { class: 'muted small' },
+        'Choose the language of each tablet here. To use a tablet as a normal device again, press Stop.'),
       kiosks.length
         ? h('ul', { class: 'plain rows' }, kiosks.map((k) => h('li', { class: k.revoked_at ? 'inactive' : '' },
           h('span', {}, h('span', { translate: 'no' }, k.name), ' ',
@@ -558,7 +579,8 @@ async function setupSection() {
             h('span', { class: 'muted small block' }, `Set up ${fmtDate(k.created_at, false)}`,
               k.created_by_name ? h('span', {}, ` by ${k.created_by_name}`) : null,
               k.last_seen_at ? h('span', {}, ` · last used ${fmtDate(k.last_seen_at)}`) : null)),
-          k.revoked_at ? null : h('span', { class: 'row-actions' },
+          k.revoked_at ? null : h('span', { class: 'row-actions kiosk-actions' },
+            languageSelect(k),
             h('button', { class: 'link danger', type: 'button', onClick: () => revoke(k) }, 'Stop')))))
         : h('p', { class: 'empty' }, 'No kiosk tablets yet.'),
       h('div', { class: 'actions' },
@@ -567,16 +589,18 @@ async function setupSection() {
 
   function kioskDialog() {
     const name = h('input', { type: 'text', id: 'kiosk-name', required: true, maxlength: 60, placeholder: 'e.g. Tablet at the key drop' });
+    const language = langSelect('no', 'kiosk-new-lang');
     const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Make this device a kiosk');
     const form = h('form', {},
-      h('p', {}, 'This device will show only the customer delivery form. You are logged out here, and the rest of Carbonara '
-        + 'can only be opened again by logging in (the "Staff login" link at the bottom of the form).'),
+      h('p', {}, 'This device will show only the customer delivery form, with no staff login. You are logged out here. '
+        + 'To use it as a normal device again, press Stop for it on this page from another device.'),
       h('div', { class: 'field' }, h('label', { for: 'kiosk-name' }, 'Name of this device'), name),
+      h('div', { class: 'field' }, h('label', { for: 'kiosk-new-lang' }, 'Language on the tablet'), language),
       h('div', { class: 'actions' }, ok));
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       busy(ok, async () => {
-        await api.post('/kiosk-devices', { name: name.value });
+        await api.post('/kiosk-devices', { name: name.value, language: language.value });
         location.hash = '#/';
         location.reload();
       });

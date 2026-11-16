@@ -645,20 +645,16 @@ a.tile:hover { border-color: var(--primary); }
 .kiosk-card .actions .btn.big { flex: 1; }
 input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 1.6rem;
   letter-spacing: .08em; text-transform: uppercase; max-width: 16rem; }
-/* Title row: "Deliver your car" left, English / Norsk switch in the top right corner. */
+/* Title row of the kiosk form (no language switch on the tablet since 0.33.12). */
 .kiosk-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; flex-wrap: wrap; }
 .kiosk-head { margin-bottom: .35rem; }
 .kiosk-head h1 { margin: 0; }
-.lang-toggle { display: inline-flex; flex: none; margin-left: auto; padding: 3px; gap: 2px;
-  border: 1px solid var(--border); border-radius: 999px; background: var(--bg); }
-.lang-toggle button { min-height: 44px; min-width: 5.5rem; padding: .35rem 1rem; border: 0; border-radius: 999px;
-  background: transparent; color: var(--muted); font: inherit; font-size: 1rem; font-weight: 600; cursor: pointer; }
-.lang-toggle button.on { background: var(--primary); color: var(--primary-text); cursor: default; }
-.lang-toggle button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
+/* Customer deliveries → Kiosk tablets: language dropdown + Stop on each tablet's row. */
+.kiosk-actions { display: flex; gap: .75rem; align-items: center; }
+select.kiosk-lang { width: auto; }
 .kiosk-done { text-align: center; }
 .kiosk-check { width: 72px; height: 72px; margin: .5rem auto 1rem; border-radius: 50%; display: grid; place-items: center;
   font-size: 2.4rem; font-weight: 700; background: var(--good-bg); color: var(--good); }
-.kiosk-foot { text-align: center; margin-top: 1.5rem; }
 /* The lot picture with the customer's pin; the pin's centre is the tapped point. */
 .map-wrap { position: relative; display: inline-block; max-width: 100%; line-height: 0;
   border: 1px solid var(--border); border-radius: 8px; overflow: hidden; vertical-align: top; }

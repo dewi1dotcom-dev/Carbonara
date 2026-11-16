@@ -200,7 +200,7 @@ backend/
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet)
-  migrations/           001…034
+  migrations/           001…035
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -256,6 +256,7 @@ frontend/               no build step; plain ES modules
 | 032 | `pdi_sheets` | `pdi_templates` (model PDFs + field positions), `pdi_stamps`, `staff.signature_key`, `pdi_orders.done_km / sheet_*` |
 | 033 | `work_order` | `pdi_orders.work_order` (the workshop's work order number) |
 | 034 | `pdi_battery_checks` | `pdi_orders.done_battery_v` (12V reading), `sheet_checks` ("tick all boxes") |
+| 035 | `kiosk_language` | `kiosk_devices.language` ('en' / 'no', default 'no'), set on the Customer deliveries page |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -517,11 +518,16 @@ the server is LAN-only, so no customer phones / public internet).
   delivery kiosk" (`POST /kiosk-devices`). The device gets its own cookie `carbonara_kiosk` (365 days,
   renewed on every form load; only the token's SHA-256 in `kiosk_devices`), and the admin's session on
   it is ended. `/auth/state` returns `kiosk`; `boot()` then shows the form instead of the login screen
-  (no menu: `body.logged-out`). "Staff login" at the bottom → normal login; logging out goes back to
-  the form. Admins can stop a tablet (`revoked_at`).
+  (no menu: `body.logged-out`). Admins can stop a tablet (`revoked_at`); it then shows the login screen.
+- **No staff login and no language switch on the tablet (0.33.12, the user's rule):** the only way
+  back to a normal device is "Stop" on the Customer deliveries page (from another device). The tablet's
+  language is `kiosk_devices.language` (migration 035, default `no`), chosen when it is set up and changed
+  with the dropdown on its row (`PUT /kiosk-devices/{id}/language`). `boot()` applies it; the form checks
+  `/auth/state` every minute and reloads for a new language or a stop, but not while a customer is
+  using the form or the thank-you is showing. The staff preview (`#/kiosk`) uses the staff member's language.
 - **Full screen (0.33.11):** browsers only allow full screen after a tap, so on a kiosk tablet every tap on
-  the form asks for it while not full screen (`kioskFullscreen` in `deliveries.js`; not the "Staff login"
-  tap, which leaves full screen). iPhones can't; for a locked-down tablet use Android screen pinning.
+  the form asks for it while not full screen (`kioskFullscreen` in `deliveries.js`). iPhones can't; for a
+  locked-down tablet use Android screen pinning.
 - **`/api/kiosk/*`** is the only API open without a staff session: `auth.require_kiosk_or_staff` (kiosk
   cookie or staff). Staff can preview the form at `#/kiosk` (deliveries sent from it are real).
 - **The form:** reg. no (stored uppercase without spaces, 2–8 letters/digits; linked to the car when the
@@ -1137,6 +1143,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.9 | Rental cars: the rent-out form opens in place of the tapped car (not under the whole list) |
 | 0.33.10 | Rental cars: the tapped car stays visible with its form right under it; tapping it again (or "Cancel") closes the form |
 | 0.33.11 | Delivery kiosk: full screen on the first tap (and again after leaving it); left when staff log in |
+| 0.33.12 | Delivery kiosk: no language switch or staff login on the tablet; language set per tablet on the Customer deliveries page (migration 035) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

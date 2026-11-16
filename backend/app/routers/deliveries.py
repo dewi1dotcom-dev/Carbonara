@@ -420,12 +420,17 @@ def delete_map(map_id: int, conn=Depends(get_conn), _admin=Depends(require_admin
 
 class KioskIn(BaseModel):
     name: str = Field(min_length=1, max_length=60)
+    language: str = Field("no", pattern="^(en|no)$")
+
+
+class KioskLanguageIn(BaseModel):
+    language: str = Field(pattern="^(en|no)$")
 
 
 @router.get("/kiosk-devices")
 def list_kiosks(conn=Depends(get_conn), _admin=Depends(require_admin)):
     return conn.execute(
-        """SELECT k.id, k.name, k.created_at, k.last_seen_at, k.revoked_at, c.name AS created_by_name
+        """SELECT k.id, k.name, k.language, k.created_at, k.last_seen_at, k.revoked_at, c.name AS created_by_name
              FROM kiosk_devices k LEFT JOIN staff c ON c.id = k.created_by
             ORDER BY k.revoked_at IS NOT NULL, k.created_at DESC LIMIT 50""").fetchall()
 
@@ -438,11 +443,21 @@ def make_kiosk(body: KioskIn, request: Request, response: Response, conn=Depends
     name = " ".join(body.name.split())
     if not name:
         raise bad_request("Give the kiosk a name")
-    _set_kiosk_cookie(response, auth.new_kiosk(conn, name, admin["id"]))
+    _set_kiosk_cookie(response, auth.new_kiosk(conn, name, admin["id"], body.language))
     auth.end_session(conn, request.cookies.get(auth.COOKIE))
     response.delete_cookie(auth.COOKIE, path="/")
     log.info("staff %s made device '%s' a delivery kiosk", admin["id"], name)
     return {"ok": True}
+
+
+@router.put("/kiosk-devices/{kiosk_id}/language", status_code=204)
+def kiosk_language(kiosk_id: int, body: KioskLanguageIn, conn=Depends(get_conn), admin=Depends(require_admin)):
+    """The tablet's language; the tablet itself has no switch (it picks this up within a minute)."""
+    row = conn.execute("UPDATE kiosk_devices SET language = %s WHERE id = %s AND revoked_at IS NULL RETURNING id",
+                       (body.language, kiosk_id)).fetchone()
+    if not row:
+        raise not_found("Kiosk")
+    log.info("staff %s set kiosk %s language to %s", admin["id"], kiosk_id, body.language)
 
 
 @router.delete("/kiosk-devices/{kiosk_id}", status_code=204)

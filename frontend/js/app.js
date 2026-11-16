@@ -171,7 +171,6 @@ function renderUser() {
             onClick: async () => {
               close();
               try { await api.post('/auth/logout'); } catch { /* already logged out */ }
-              staffLogin = false; // on a kiosk tablet: back to the delivery form
               await boot();
             },
           }, 'Log out'))));
@@ -180,11 +179,9 @@ function renderUser() {
 }
 
 let booting = null;
-// A delivery kiosk tablet shows the delivery form instead of the login screen,
-// until someone taps "Staff login" (staffLogin = true).
-let staffLogin = false;
-
-/** Check the session; show the login screen (or the delivery kiosk form) or the app. */
+/** Check the session; show the login screen (or the delivery kiosk form) or the app.
+ *  A delivery kiosk tablet shows only the delivery form: no staff login there (0.33.12). An admin
+ *  sets its language and stops it on the Customer deliveries page. */
 function boot() {
   booting ??= (async () => {
     try {
@@ -200,17 +197,13 @@ function boot() {
         // Whoever logs in next starts on Today, not on the page the last user had open
         // (e.g. System, which a regular user may not see). replaceState: no hashchange.
         if ((location.hash || '#/') !== '#/') history.replaceState(null, '', `${location.pathname}${location.search}#/`);
-        const again = () => { booting = null; return boot(); };
-        if (state.kiosk && !staffLogin) {
-          await kioskView(root, [], { standalone: true, onStaffLogin: () => { staffLogin = true; again(); } });
+        if (state.kiosk) {
+          // The tablet's language is the one set for it on the Customer deliveries page.
+          if (state.kiosk.language && state.kiosk.language !== lang) { setLang(state.kiosk.language); location.reload(); return; }
+          await kioskView(root, [], { standalone: true });
           return;
         }
-        loginView(root, state, again);
-        if (state.kiosk) {
-          append(root, h('p', { class: 'kiosk-foot' }, h('button', {
-            class: 'link', type: 'button', onClick: () => { staffLogin = false; again(); },
-          }, 'Back to the delivery form')));
-        }
+        loginView(root, state, () => { booting = null; return boot(); });
         return;
       }
       setInspectorId(state.me.id); // staff pickers default to whoever is logged in

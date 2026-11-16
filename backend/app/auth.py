@@ -122,17 +122,17 @@ KIOSK_COOKIE = "carbonara_kiosk"
 KIOSK_DAYS = 365  # renewed whenever the kiosk loads its form
 
 
-def new_kiosk(conn, name: str, staff_id: int) -> str:
+def new_kiosk(conn, name: str, staff_id: int, language: str = "no") -> str:
     token = secrets.token_urlsafe(32)
-    conn.execute("INSERT INTO kiosk_devices (name, token_hash, created_by) VALUES (%s, %s, %s)",
-                 (name, token_hash(token), staff_id))
+    conn.execute("INSERT INTO kiosk_devices (name, token_hash, created_by, language) VALUES (%s, %s, %s, %s)",
+                 (name, token_hash(token), staff_id, language))
     return token
 
 
 def kiosk_device(conn, token: str | None) -> dict | None:
     if not token:
         return None
-    row = conn.execute("SELECT id, name FROM kiosk_devices WHERE token_hash = %s AND revoked_at IS NULL",
+    row = conn.execute("SELECT id, name, language FROM kiosk_devices WHERE token_hash = %s AND revoked_at IS NULL",
                        (token_hash(token),)).fetchone()
     if row:
         conn.execute("UPDATE kiosk_devices SET last_seen_at = now() WHERE id = %s "
