@@ -528,6 +528,8 @@ the server is LAN-only, so no customer phones / public internet).
 - **Full screen (0.33.11):** browsers only allow full screen after a tap, so on a kiosk tablet every tap on
   the form asks for it while not full screen (`kioskFullscreen` in `deliveries.js`). iPhones can't; for a
   locked-down tablet use Android screen pinning.
+- **On-screen keyboard (0.33.14):** `keepSubmitVisible` in `kioskView` pads the page by the keyboard height
+  (from `visualViewport`) and scrolls so the submit button shows above it, without hiding the field being typed in.
 - **`/api/kiosk/*`** is the only API open without a staff session: `auth.require_kiosk_or_staff` (kiosk
   cookie or staff). Staff can preview the form at `#/kiosk` (deliveries sent from it are real).
 - **The form:** reg. no (stored uppercase without spaces, 2–8 letters/digits; linked to the car when the
@@ -1145,6 +1147,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.11 | Delivery kiosk: full screen on the first tap (and again after leaving it); left when staff log in |
 | 0.33.12 | Delivery kiosk: no language switch or staff login on the tablet; language set per tablet on the Customer deliveries page (migration 035) |
 | 0.33.13 | Name fields (kiosk and staff) capitalize on phone / tablet keyboards too (after each word, and on leaving the field) |
+| 0.33.14 | Kiosk form: the "Register delivery" button stays visible above the on-screen keyboard while typing |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

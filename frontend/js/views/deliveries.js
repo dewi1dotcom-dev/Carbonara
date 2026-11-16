@@ -156,6 +156,35 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
     setTimeout(check, KIOSK_CHECK_MS);
   }
 
+  /* On-screen keyboard: keep the "Register delivery" button visible above it while typing (the message
+   * field is right above it, and the keyboard covered the button). In full screen the keyboard is laid
+   * over the page instead of shrinking it, so the page gets bottom padding the keyboard's height (else it
+   * can't scroll far enough) and is scrolled by what the visual viewport hides. The field being typed
+   * in never scrolls out of sight at the top. */
+  const vv = window.visualViewport;
+  let kbTimer = null;
+  const keepSubmitVisible = () => {
+    if (!page.isConnected) { vv?.removeEventListener('resize', keepSubmitVisible); return; }
+    const field = document.activeElement;
+    const btn = page.querySelector('form.kiosk-card button[type=submit]');
+    const typing = field?.closest?.('form.kiosk-card') && field.matches('textarea, input[type=text], input[type=tel]');
+    const keyboard = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+    if (!btn || !typing || keyboard < 80) { // no keyboard open (a PC, or a tap on a chip / the map)
+      page.style.paddingBottom = '';
+      return;
+    }
+    page.style.paddingBottom = `${keyboard + 16}px`;
+    const top = vv.offsetTop + 12;
+    const bottom = vv.offsetTop + vv.height - 12;
+    const need = btn.getBoundingClientRect().bottom - bottom;
+    const room = field.getBoundingClientRect().top - top;
+    const by = Math.min(need, room);
+    if (by > 0) window.scrollBy(0, by);
+  };
+  vv?.addEventListener('resize', keepSubmitVisible);
+  page.addEventListener('focusin', () => { clearTimeout(kbTimer); kbTimer = setTimeout(keepSubmitVisible, 350); });
+  page.addEventListener('focusout', () => { clearTimeout(kbTimer); kbTimer = setTimeout(keepSubmitVisible, 350); });
+
   const frame = (...content) => page.replaceChildren(...[
     standalone ? null : h('div', { class: 'card notice' },
       h('span', {}, 'Preview of the kiosk form. A delivery sent from here is real and shows up for the staff. ',
