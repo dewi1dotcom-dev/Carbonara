@@ -1132,6 +1132,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.7 | PDI sheets: tick box finder also finds wide light-grey tick cells (MG S6 "S6 2" form) |
 | 0.33.8 | Top bar clock: time, weekday and date on three lines (narrower, more room for the menu) |
 | 0.33.9 | Rental cars: the rent-out form opens in place of the tapped car (not under the whole list) |
+| 0.33.10 | Rental cars: the tapped car stays visible with its form right under it; tapping it again (or "Cancel") closes the form |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

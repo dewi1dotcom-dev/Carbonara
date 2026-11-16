@@ -283,18 +283,22 @@ function rentCard(data, staff, done) {
     return btn;
   }));
 
-  // The form opens in place of the tapped car (the other cars stay in the list). `style.display`,
-  // not `hidden`: `.list-card` is display: grid/flex via CSS, which beats the hidden attribute.
-  let open = null; // the form that is open now
+  // The form opens right under the tapped car (the other cars stay in the list); tapping the same
+  // car again closes it, tapping another car moves it there.
+  let open = null; // { form, btn } open now
   function choose(c, btn) {
-    open?.closeForm();
+    const same = open?.btn === btn;
+    open?.form.closeForm();
+    if (same) return;
     const form = rentForm(c, staff, data, done, () => {
       form.remove();
-      btn.style.display = '';
-      if (open === form) open = null;
+      btn.classList.remove('rc-open');
+      btn.setAttribute('aria-expanded', 'false');
+      if (open?.form === form) open = null;
     });
-    open = form;
-    btn.style.display = 'none';
+    open = { form, btn };
+    btn.classList.add('rc-open');
+    btn.setAttribute('aria-expanded', 'true');
     btn.after(form);
     form.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   }
@@ -372,11 +376,8 @@ function rentForm(c, staff, data, done, cancel) {
   const shootBtn = h('button', { class: 'btn', type: 'button', onClick: () => picker.open() }, '📷 Photo of driving licence');
 
   const submit = h('button', { class: 'btn primary', type: 'submit' }, 'Rent out');
-  const form = h('form', { class: 'form' },
-    h('div', { class: 'card inner notice' },
-      h('span', { class: 'rc-reg', translate: 'no' }, c.registration_number), ' ', h('strong', { translate: 'no' }, carName(c)),
-      h('div', { class: 'rc-badges' }, euBadge(c.eu_control_due), regBadge(c), tyreBadge(c.tyre_warning)),
-      h('button', { class: 'link small', type: 'button', onClick: () => form.closeForm() }, 'Choose another car')),
+  // The car itself is the tapped box right above the form (rentCard), so it isn't repeated here.
+  const form = h('form', { class: 'form rc-rent-form' },
     euWarn,
     h('h3', {}, 'Customer'),
     h('div', { class: 'field' }, h('label', {}, 'Driving licence'),
@@ -398,7 +399,8 @@ function rentForm(c, staff, data, done, cancel) {
         h('button', { class: 'link', type: 'button', onClick: () => rentalPrivacyDialog(data.privacy, data.trash_days) }, '(show / print)'))),
     h('p', { class: 'muted small' },
       `Customer details and the licence photo are moved to the trash when the car is returned, and deleted for good after ${data.trash_days} days.`),
-    h('div', { class: 'actions' }, submit));
+    h('div', { class: 'actions' }, submit,
+      h('button', { class: 'btn', type: 'button', onClick: () => form.closeForm() }, 'Cancel')));
 
   form.addEventListener('submit', (e) => {
     e.preventDefault();

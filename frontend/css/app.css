@@ -685,6 +685,9 @@ input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospa
 /* Rental cars: registration number as the car's name, badges (EU-kontroll first) on one line. */
 .rc-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-weight: 700; letter-spacing: .04em; }
 .rc-badges { display: flex; flex-wrap: wrap; gap: .35rem; margin: .3rem 0 .15rem; }
+/* Rent out: the tapped car is marked, and its form sits right under it, indented with the same bar. */
+button.list-card.rc-open { border-left: 4px solid var(--primary); border-color: var(--primary); }
+.rc-rent-form { border-left: 4px solid var(--primary); padding: .25rem 0 .75rem 1rem; margin-bottom: .5rem; }
 .rc-row { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; }
 .rc-row .list-main { flex: 1 1 260px; min-width: 0; }
 /* Fleet list: each car in its own box, set apart from the heading and the Add button. */
