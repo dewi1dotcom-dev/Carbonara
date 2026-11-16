@@ -1144,6 +1144,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.10 | Rental cars: the tapped car stays visible with its form right under it; tapping it again (or "Cancel") closes the form |
 | 0.33.11 | Delivery kiosk: full screen on the first tap (and again after leaving it); left when staff log in |
 | 0.33.12 | Delivery kiosk: no language switch or staff login on the tablet; language set per tablet on the Customer deliveries page (migration 035) |
+| 0.33.13 | Name fields (kiosk and staff) capitalize on phone / tablet keyboards too (after each word, and on leaving the field) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

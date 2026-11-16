@@ -462,16 +462,22 @@ export const readyBadge = (v) => (v.ready_for_delivery
 /** 'anne-lise berg' -> 'Anne-Lise Berg' (the server does the same). The rest is kept as typed. */
 export const capName = (s) => String(s ?? '').replace(/(^|[\s-])(\p{Ll})/gu, (_, sep, ch) => sep + ch.toUpperCase());
 
-/** A text input for a person's name that capitalizes as you type. */
+/** A text input for a person's name that capitalizes as you type (first letter, and after a space or "-").
+ *  Phone/tablet keyboards (Gboard etc.) "compose" the word being typed and overwrite a value changed
+ *  meanwhile, so the fix waits for the word to be finished (compositionend), and runs again on blur. */
 export function nameInput(attrs = {}) {
   const input = h('input', { type: 'text', autocapitalize: 'words', autocomplete: 'off', ...attrs });
-  input.addEventListener('input', () => {
+  const fix = () => {
     const fixed = capName(input.value);
     if (fixed === input.value) return;
+    const focused = document.activeElement === input;
     const pos = input.selectionStart; // same length, so the cursor can stay put
     input.value = fixed;
-    input.setSelectionRange(pos, pos);
-  });
+    if (focused && pos != null) input.setSelectionRange(pos, pos);
+  };
+  input.addEventListener('input', (e) => { if (!e.isComposing) fix(); });
+  input.addEventListener('compositionend', () => setTimeout(fix, 0)); // after the keyboard's own last input
+  input.addEventListener('blur', fix);
   return input;
 }
 
