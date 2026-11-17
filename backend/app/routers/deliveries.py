@@ -20,7 +20,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from .. import auth, photostore, vegvesen
-from ..auth import require_admin, require_kiosk_or_staff
+from ..auth import require_admin, require_kiosk_or_staff, require_superadmin
 from ..common import (bad_request, cap_name, clean_phone, conflict, log_event, name_match, not_found,
                       tidy_name, update_row)
 from ..config import settings
@@ -467,3 +467,30 @@ def revoke_kiosk(kiosk_id: int, conn=Depends(get_conn), admin=Depends(require_ad
                        "WHERE id = %s AND revoked_at IS NULL RETURNING id", (admin["id"], kiosk_id)).fetchone()
     if not row:
         raise not_found("Kiosk")
+
+
+# Stopped tablets are deleted for good this many days after they were stopped (sync_worker).
+KIOSK_KEEP_STOPPED_DAYS = 30
+
+
+def delete_kiosk(conn, kiosk_id: int) -> bool:
+    """Delete a tablet's record. Deliveries sent from it are kept; they just lose the tablet's name.
+    Its cookie stops working at once (the token hash is gone)."""
+    conn.execute("UPDATE car_deliveries SET kiosk_id = NULL WHERE kiosk_id = %s", (kiosk_id,))
+    return conn.execute("DELETE FROM kiosk_devices WHERE id = %s RETURNING id", (kiosk_id,)).fetchone() is not None
+
+
+def purge_stopped_kiosks(conn) -> int:
+    rows = conn.execute("SELECT id FROM kiosk_devices WHERE revoked_at < now() - make_interval(days => %s)",
+                        (KIOSK_KEEP_STOPPED_DAYS,)).fetchall()
+    for r in rows:
+        delete_kiosk(conn, r["id"])
+    return len(rows)
+
+
+@router.delete("/kiosk-devices/{kiosk_id}/record", status_code=204)
+def remove_kiosk_record(kiosk_id: int, conn=Depends(get_conn), admin=Depends(require_superadmin)):
+    """System admins: delete a tablet from the list now (an active one stops showing the form too)."""
+    if not delete_kiosk(conn, kiosk_id):
+        raise not_found("Kiosk")
+    log.info("staff %s deleted kiosk %s", admin["id"], kiosk_id)

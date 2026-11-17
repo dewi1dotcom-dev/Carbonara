@@ -66,6 +66,7 @@ async function render() {
 
   document.querySelectorAll('[data-nav]').forEach((a) =>
     a.classList.toggle('active', match && a.dataset.nav === match[2]));
+  markMore();
 
   if (!match) {
     container.replaceChildren(h('h1', {}, 'Not found'), h('a', { href: '#/' }, 'Back to Today'));
@@ -140,13 +141,55 @@ async function refreshDm() {
 setInterval(refreshDm, 60 * 1000); // new messages show up without navigating
 window.addEventListener('carbonara:dm-changed', refreshDm); // read / sent in a conversation
 
+// "More" at the end of the top menu: the items a system admin chose (System page → Top menu) are moved
+// into its dropdown. Hidden when nothing is chosen, or when none of the chosen items is open to this user.
+// The panel is position: fixed, because the menu line scrolls sideways (overflow) and would clip it.
+const navEl = document.querySelector('.topbar nav');
+const navLinks = [...navEl.querySelectorAll(':scope > a[data-nav]')]; // the order in index.html
+const morePanel = h('div', { class: 'nav-more-panel', hidden: true });
+const moreBtn = h('button', {
+  class: 'nav-more-btn', type: 'button', 'aria-haspopup': 'true', 'aria-expanded': 'false',
+  onClick: (e) => { e.stopPropagation(); toggleMore(morePanel.hidden); },
+}, h('span', {}, 'More'), ' ▾');
+const moreBox = h('div', { class: 'nav-more', hidden: true }, moreBtn);
+document.body.append(morePanel);
+
+function toggleMore(open) {
+  morePanel.hidden = !open;
+  moreBtn.setAttribute('aria-expanded', String(open));
+  if (!open) return;
+  const r = moreBtn.getBoundingClientRect();
+  morePanel.style.top = `${r.bottom + 4}px`;
+  morePanel.style.right = `${Math.max(8, window.innerWidth - r.right)}px`;
+}
+document.addEventListener('click', (e) => { if (!morePanel.hidden && !morePanel.contains(e.target)) toggleMore(false); });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') toggleMore(false); });
+window.addEventListener('hashchange', () => toggleMore(false));
+window.addEventListener('resize', () => toggleMore(false));
+morePanel.addEventListener('click', (e) => { if (e.target.closest('a')) toggleMore(false); });
+
+function layoutNav() {
+  const more = new Set(session.me?.menu_more || []);
+  navEl.replaceChildren(...navLinks.filter((a) => !more.has(a.dataset.nav)), moreBox);
+  morePanel.replaceChildren(...navLinks.filter((a) => more.has(a.dataset.nav)));
+  moreBox.hidden = !morePanel.querySelector('a:not([hidden])');
+  if (moreBox.hidden) toggleMore(false);
+  markMore();
+}
+/** "More" looks active while one of its pages is open. */
+function markMore() {
+  moreBtn.classList.toggle('active', !!morePanel.querySelector('a.active'));
+}
+window.addEventListener('carbonara:menu-changed', layoutNav); // changed on the System page
+
 function renderUser() {
   const me = session.me;
   document.getElementById('nav-system').hidden = !me?.is_superadmin;
   // The team decides which menu items show (System page → Teams).
-  document.querySelectorAll('nav [data-nav]').forEach((a) => {
+  navLinks.forEach((a) => {
     if (a.dataset.nav !== 'system') a.hidden = !canSee(a.dataset.nav);
   });
+  layoutNav();
   if (!me) { userMenu.replaceChildren(); return; }
   userMenu.replaceChildren(dmButton, h('button', {
     // Silhouette only (user's request); the name shows on hover and as the dialog title.

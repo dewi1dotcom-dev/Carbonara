@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from ..auth import MENU_ITEMS, require_superadmin
+from ..auth import MENU_ITEMS, MORE_ITEMS, MORE_KEY, menu_more, require_superadmin
 from ..common import bad_request, conflict, not_found
 from ..config import BY_NAME, SETTINGS, convert, settings
 from ..db import get_conn
@@ -153,6 +153,36 @@ def delete_team(team_id: int, request: Request, conn=Depends(get_conn)):
     if not conn.execute("DELETE FROM teams WHERE id = %s RETURNING id", (team_id,)).fetchone():
         raise not_found("Team")
     log.info("team %s deleted by staff %s", team_id, request.state.staff["id"])
+
+
+# --------------------------------------------------------------------------- #
+# Top menu: items moved into the "More" dropdown (the same for everyone)
+# --------------------------------------------------------------------------- #
+
+class MenuMoreIn(BaseModel):
+    more: list[str] = Field(default_factory=list, max_length=20)
+
+
+@router.get("/system/menu-more")
+def get_menu_more(conn=Depends(get_conn)):
+    return {"items": list(MORE_ITEMS), "more": menu_more(conn)}
+
+
+@router.put("/system/menu-more")
+def save_menu_more(body: MenuMoreIn, request: Request, conn=Depends(get_conn)):
+    unknown = [m for m in body.more if m not in MORE_ITEMS]
+    if unknown:
+        raise bad_request(f"Unknown menu item: {', '.join(unknown)}")
+    more = [m for m in MORE_ITEMS if m in body.more]
+    if more:
+        conn.execute(
+            """INSERT INTO app_settings (key, value, updated_by) VALUES (%s, %s, %s)
+               ON CONFLICT (key) DO UPDATE SET value = excluded.value, updated_at = now(), updated_by = excluded.updated_by""",
+            (MORE_KEY, ",".join(more), request.state.staff["id"]))
+    else:  # nothing chosen: no "More" in the menu
+        conn.execute("DELETE FROM app_settings WHERE key = %s", (MORE_KEY,))
+    log.info("top menu 'More' set to %s by staff %s", more, request.state.staff["id"])
+    return {"more": more}
 
 
 @router.put("/system/staff/{staff_id}/team")

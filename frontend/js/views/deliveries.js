@@ -14,6 +14,8 @@ import {
 
 const IDLE_MS = 3 * 60 * 1000;   // a half-filled form is cleared when the customer walks away
 const DONE_MS = 30 * 1000;       // the thank-you screen goes back to an empty form
+const SHOW_KIOSKS = 3;           // kiosk tablets listed before "More tablets"
+const KIOSK_KEEP_DAYS = 30;      // stopped tablets are deleted after this (deliveries.KIOSK_KEEP_STOPPED_DAYS)
 
 const mapUrl = (id) => `/api/kiosk/maps/${id}/image`;
 
@@ -595,6 +597,25 @@ async function setupSection() {
       });
       return sel;
     };
+    // System admins can delete a tablet from the list at once (an active one also stops).
+    const remove = async (k) => {
+      const q = k.revoked_at ? `Delete ${k.name} from the list for good?`
+        : `Delete ${k.name} for good? The tablet stops showing the delivery form.`;
+      if (!confirm(q)) return;
+      try { await api.del(`/kiosk-devices/${k.id}/record`); toast(`${k.name} deleted`, 'success'); await redraw(); } catch (e) { showError(e); }
+    };
+    const sysAdmin = !!session.me?.is_superadmin;
+    const row = (k) => h('li', { class: k.revoked_at ? 'inactive' : '' },
+      h('span', {}, h('span', { translate: 'no' }, k.name), ' ',
+        k.revoked_at ? h('span', { class: 'badge' }, 'Stopped') : null,
+        h('span', { class: 'muted small block' }, `Set up ${fmtDate(k.created_at, false)}`,
+          k.created_by_name ? h('span', {}, ` by ${k.created_by_name}`) : null,
+          k.last_seen_at ? h('span', {}, ` · last used ${fmtDate(k.last_seen_at)}`) : null,
+          k.revoked_at ? h('span', {}, ` · stopped ${fmtDate(k.revoked_at, false)}`) : null)),
+      h('span', { class: 'row-actions kiosk-actions' },
+        k.revoked_at ? null : languageSelect(k),
+        k.revoked_at ? null : h('button', { class: 'link danger', type: 'button', onClick: () => revoke(k) }, 'Stop'),
+        sysAdmin ? h('button', { class: 'link danger', type: 'button', onClick: () => remove(k) }, 'Delete') : null));
     return h('section', { class: 'card' },
       h('h2', {}, 'Kiosk tablets'),
       h('p', { class: 'muted small' },
@@ -602,17 +623,13 @@ async function setupSection() {
         + 'tablet as an administrator, open this page and press the button below. You are then logged out on the tablet.'),
       h('p', { class: 'muted small' },
         'Choose the language of each tablet here. To use a tablet as a normal device again, press Stop.'),
-      kiosks.length
-        ? h('ul', { class: 'plain rows' }, kiosks.map((k) => h('li', { class: k.revoked_at ? 'inactive' : '' },
-          h('span', {}, h('span', { translate: 'no' }, k.name), ' ',
-            k.revoked_at ? h('span', { class: 'badge' }, 'Stopped') : null,
-            h('span', { class: 'muted small block' }, `Set up ${fmtDate(k.created_at, false)}`,
-              k.created_by_name ? h('span', {}, ` by ${k.created_by_name}`) : null,
-              k.last_seen_at ? h('span', {}, ` · last used ${fmtDate(k.last_seen_at)}`) : null)),
-          k.revoked_at ? null : h('span', { class: 'row-actions kiosk-actions' },
-            languageSelect(k),
-            h('button', { class: 'link danger', type: 'button', onClick: () => revoke(k) }, 'Stop')))))
+      kiosks.length ? h('ul', { class: 'plain rows' }, kiosks.slice(0, SHOW_KIOSKS).map(row))
         : h('p', { class: 'empty' }, 'No kiosk tablets yet.'),
+      // More than three: the rest folded away (active tablets come first, so these are mostly stopped ones).
+      kiosks.length > SHOW_KIOSKS ? h('details', { class: 'more' },
+        h('summary', {}, `More tablets (${kiosks.length - SHOW_KIOSKS})`),
+        h('ul', { class: 'plain rows' }, kiosks.slice(SHOW_KIOSKS).map(row))) : null,
+      h('p', { class: 'muted small' }, `Stopped tablets are deleted automatically ${KIOSK_KEEP_DAYS} days after they were stopped.`),
       h('div', { class: 'actions' },
         h('button', { class: 'btn', type: 'button', onClick: kioskDialog }, 'Use this device as the delivery kiosk')));
   }

@@ -196,6 +196,7 @@ backend/
   app/photostore.py     original + 1600px + 400px JPEG
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
                         test drive + rental customer purge, rental car SVV refresh, received customer deliveries,
+                        stopped kiosk tablets,
                         Today messages); expired private messages + files every loop (~1 min)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, rentals, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
@@ -399,6 +400,8 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
 - **Search** covers VIN, make, model, variant, colour, reg. no (spaces ignored) and spot.
 - **Filters:** status, and **New/used** (factory new / used / not chosen).
 - A result count shows above the list.
+- **"+ New arrival" (0.35.1, the user's request, for the workflow):** the same button as on Today / Arrivals
+  (`#/intake`), top right of the Vehicles page; only shown when the team can open Arrivals (`canOpen`).
 - **Card layout (0.21.1, user's request):** text on the left (make and model; reg. no, an empty
   line when missing; VIN; status + notification badges; colour · spot · EU-kontroll), and
   the **right-side photo** from the latest arrival inspection on the right
@@ -532,6 +535,12 @@ the server is LAN-only, so no customer phones / public internet).
   with the dropdown on its row (`PUT /kiosk-devices/{id}/language`). `boot()` applies it; the form checks
   `/auth/state` every minute and reloads for a new language or a stop, but not while a customer is
   using the form or the thank-you is showing. The staff preview (`#/kiosk`) uses the staff member's language.
+- **Tablet records (0.34.2):** a tablet is known only by its cookie token (no hardware ID). "Stop" is one-way (to reuse
+  a tablet, set it up again: new token, new row). Stopped tablets are deleted by the worker's `housekeeping()`
+  30 days after stopping (`deliveries.KIOSK_KEEP_STOPPED_DAYS`, `purge_stopped_kiosks`). **System admins** can delete
+  any tablet at once (`DELETE /kiosk-devices/{id}/record`; an active one stops too). Deleting sets
+  `car_deliveries.kiosk_id` to NULL (the delivery is kept, without the tablet name). The page lists 3 tablets, the
+  rest folded under "More tablets (n)".
 - **Full screen (0.33.11):** browsers only allow full screen after a tap, so on a kiosk tablet every tap on
   the form asks for it while not full screen (`kioskFullscreen` in `deliveries.js`). iPhones can't; for a
   locked-down tablet use Android screen pinning.
@@ -650,6 +659,12 @@ the server is LAN-only, so no customer phones / public internet).
   `#/pdi-orders?car=<vehicle id>` (scrolls to and marks that car) for everyone who sees PDI orders (0.33.19, the
   user's rule; before, only teams without Vehicles); others get the car page.
 - A change applies when the user next opens or reloads the app.
+- **"More" dropdown (0.35.0, the user's request):** System page → **Top menu** ticks items (`auth.MORE_ITEMS` = the
+  team items + `system`) that move from the menu line into a "More" dropdown at its end, **the same for everyone**.
+  Saved in `app_settings` under `menu_more` (comma list, not in the `SETTINGS` registry; `GET/PUT /system/menu-more`);
+  `/auth/state` sends it as `me.menu_more`. `layoutNav()` in `app.js` moves the `<a data-nav>` links into the panel
+  (a `position: fixed` element on `<body>`, since the nav scrolls sideways and would clip it). "More" is hidden when
+  nothing is ticked or none of the ticked items is open to the user; it looks active while one of its pages is open.
 
 **System page (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`, `views/system.js`):
 - **Groups:**
@@ -1204,6 +1219,9 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.20 | PDI orders page: "PDI done" group shows the latest marked done on top |
 | 0.34.0 | **Message board on Today:** notes for the writer's team (admins also to everyone or another team), marked with the writer's initials, shown 24 hours; several messages change by themselves every 8 s. **Private messages** between users with photos and files (💬 in the top bar), deleted after 72 working hours (migration 036) |
 | 0.34.1 | Vehicle page: latest recorded mileage (from the arrival inspection, service, test drive or PDI) on the overview card |
+| 0.34.2 | Kiosk tablets: stopped ones deleted after 30 days; list folds after 3; system admins can delete a tablet |
+| 0.35.0 | **"More" in the top menu:** a dropdown for the menu items a system admin picks on the System page (Top menu); not shown when none are picked |
+| 0.35.1 | Vehicles page: "+ New arrival" button (as on Today / Arrivals) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

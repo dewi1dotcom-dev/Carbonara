@@ -34,6 +34,17 @@ STAFF_PUBLIC = ("id, name, first_name, last_name, phone, active, is_admin, is_su
 # always there; System is for system admins only, so neither is listed.
 MENU_ITEMS = ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive", "rental", "deliveries", "settings")
 
+# Items a system admin can move into the "More" dropdown of the top menu (System page → Top menu).
+# Saved in app_settings under MORE_KEY as a comma-separated list; the same for everyone.
+MORE_ITEMS = (*MENU_ITEMS, "system")
+MORE_KEY = "menu_more"
+
+
+def menu_more(conn) -> list[str]:
+    row = conn.execute("SELECT value FROM app_settings WHERE key = %s", (MORE_KEY,)).fetchone()
+    saved = set((row["value"] if row else "").split(","))
+    return [m for m in MORE_ITEMS if m in saved]
+
 
 def menu_for(staff: dict) -> list[str]:
     """The menu items this person sees. System admins: all (they can't lock

@@ -3,7 +3,7 @@ import { documentDialog, documentsCard } from './documents.js';
 import { editDialog as pdiEditDialog, pdiBanner, pdiCard } from './pdi.js';
 import { batteryCard, storageCard } from './storagecare.js';
 import {
-  api, append, badge, busy, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, append, badge, busy, canOpen, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   readyBadge, regStatus, showError, spotLabel, STATUS,
   toast, tyreBadge, vehicleTitle, viewPhoto, WHEELS, wheelsSelect,
 } from '../ui.js';
@@ -43,8 +43,11 @@ export async function vehiclesView(el) {
   conditionSel.addEventListener('change', load);
 
   el.append(
-    h('div', { class: 'page-head' }, h('h1', {}, 'Vehicles'),
-      h('a', { href: '#/vehicles/deleted', class: 'small' }, '🗑 Recently deleted')),
+    h('div', { class: 'page-head' },
+      h('div', {}, h('h1', {}, 'Vehicles'),
+        h('a', { href: '#/vehicles/deleted', class: 'small' }, '🗑 Recently deleted')),
+      // Same as on Today / Arrivals (a smoother workflow); only for teams that can open the arrival inspection.
+      canOpen('#/intake') ? h('a', { class: 'btn primary big', href: '#/intake' }, '+ New arrival') : null),
     h('div', { class: 'toolbar' }, search, statusSel, conditionSel),
     count,
     results);

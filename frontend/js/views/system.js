@@ -16,7 +16,8 @@ export async function systemView(el, _params = [], host = el) {
     el.append(h('h1', {}, 'System'), h('div', { class: 'card notice warn' }, 'Only a system admin can open this page.'));
     return;
   }
-  const [rows, teams] = await Promise.all([api.get('/system/settings'), api.get('/system/teams')]);
+  const [rows, teams, more] = await Promise.all([
+    api.get('/system/settings'), api.get('/system/teams'), api.get('/system/menu-more')]);
   const groups = [...new Set(rows.map((r) => r.group))];
   const rerender = async () => {
     try {
@@ -32,6 +33,7 @@ export async function systemView(el, _params = [], host = el) {
       'Server settings. A value saved here takes effect within half a minute and overrides the server environment (.env / Portainer). ',
       '“Reset” goes back to the environment or the default. Passwords and keys are never shown – only their last characters.'),
     teamsCard(teams, rerender),
+    moreCard(more),
     groups.map((g) => h('section', { class: 'card' },
       h('h2', {}, g),
       h('div', { class: 'sys-rows' }, rows.filter((r) => r.group === g).map((r) => settingRow(r, rerender))))));
@@ -125,6 +127,33 @@ function teamsCard(data, done) {
       h('span', {}, `Without a team (only Today): ${noTeam.map((s) => s.name).join(', ')}`)) : null,
     data.teams.length ? h('div', { class: 'list' }, data.teams.map(teamBox)) : h('p', { class: 'empty' }, 'No teams yet.'),
     form);
+}
+
+/** Top menu → "More": items ticked here leave the menu line and go into a "More" dropdown, for
+ *  everyone (each user still sees only their team's items). Nothing ticked = no "More". */
+function moreCard(data) {
+  const boxes = data.items.map((key) => {
+    const box = h('input', { type: 'checkbox', checked: data.more.includes(key) });
+    box.addEventListener('change', async () => {
+      const chosen = data.items.filter((k, i) => boxes[i].querySelector('input').checked);
+      try {
+        const res = await api.put('/system/menu-more', { more: chosen });
+        data.more = res.more;
+        if (session.me) session.me.menu_more = res.more;
+        window.dispatchEvent(new Event('carbonara:menu-changed')); // this admin's own menu at once
+        toast('Saved', 'success');
+      } catch (e) { box.checked = !box.checked; showError(e); }
+    });
+    return h('label', { class: 'chip' }, box, h('span', {}, key === 'system' ? 'System' : MENU_LABEL[key] ?? key));
+  });
+  return h('section', { class: 'card' },
+    h('h2', {}, 'Top menu'),
+    h('p', { class: 'muted small' },
+      'Items ticked here are moved into a “More” dropdown at the end of the top menu, for everyone. '
+      + 'Each user still sees only their team’s items. With nothing ticked, there is no “More”. '
+      + 'A change takes effect the next time a user opens or reloads Carbonara.'),
+    h('div', { class: 'small muted' }, 'Show under “More”:'),
+    h('div', { class: 'chips' }, boxes));
 }
 
 // Readable names for settings stored as short keys (others show the value itself).

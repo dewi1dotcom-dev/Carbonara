@@ -618,6 +618,10 @@ const NO = {
   'Statens vegvesen lookup failed': 'Oppslaget hos Statens vegvesen feilet', 'Statens vegvesen is not set up (System page)': 'Statens vegvesen er ikke satt opp (System-siden)',
   'Not looked up at Statens vegvesen yet': 'Ikke slått opp hos Statens vegvesen ennå', 'Lookup failed': 'Oppslaget feilet',
   'no deadline from Statens vegvesen': 'ingen frist fra Statens vegvesen',
+  // ---- top menu "More" (System page, 0.35.0)
+  'More': 'Mer', 'Top menu': 'Toppmeny', 'Show under “More”': 'Vis under «Mer»',
+  'Items ticked here are moved into a “More” dropdown at the end of the top menu, for everyone. Each user still sees only their team’s items. With nothing ticked, there is no “More”. A change takes effect the next time a user opens or reloads Carbonara.':
+    'Punktene som er krysset av her, flyttes til en «Mer»-meny på slutten av toppmenyen, for alle. Hver bruker ser fortsatt bare punktene til sitt team. Uten noe krysset av vises ikke «Mer». En endring gjelder neste gang en bruker åpner eller laster inn Carbonara på nytt.',
   // ---- teams (System page)
   'Teams': 'Team', 'Add team': 'Legg til team', 'Team added': 'Team lagt til', 'No teams yet.': 'Ingen team ennå.', 'No members.': 'Ingen medlemmer.',
   'Remove from team': 'Fjern fra teamet', 'Add a user': 'Legg til en bruker', 'Add a user to the team': 'Legg til en bruker i teamet',
@@ -882,6 +886,11 @@ const NO_PATTERNS = [
     'Slette teamet {1}? Medlemmene ({2}) ser bare I dag til du plasserer dem i et annet team.'],
   ['Delete the team {}?', 'Slette teamet {1}?'],
   ['Stop {} from showing the delivery form?', 'Stoppe {1} fra å vise leveringsskjemaet?'], ['Set up {}', 'Satt opp {1}'], ['last used {}', 'sist brukt {1}'],
+  // kiosk tablets: folded list, cleanup, delete (0.34.2)
+  ['stopped {}', 'stoppet {1}'], ['More tablets ({n})', 'Flere nettbrett ({1})'],
+  ['Stopped tablets are deleted automatically {n} days after they were stopped.', 'Stoppede nettbrett slettes automatisk {1} dager etter at de ble stoppet.'],
+  ['Delete {} from the list for good?', 'Slette {1} fra listen for godt?'],
+  ['Delete {} for good? The tablet stops showing the delivery form.', 'Slette {1} for godt? Nettbrettet slutter å vise leveringsskjemaet.'],
   // Summer / winter wheels (0.29.0)
   ['Summer wheels – studded tyre season since {}', 'Sommerhjul – piggdekksesongen startet {1}'],
   ['Summer wheels – studded tyre season starts {}', 'Sommerhjul – piggdekksesongen starter {1}'],
