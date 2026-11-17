@@ -3,6 +3,7 @@
 import { lang } from '../i18n.js';
 import { api, append, boardBlock as block, boardRow as row, canOpen, canSee, carText, fmtDate, h, pdiCarHref, tyreText, vehicleTitle } from '../ui.js';
 import { optText } from './deliveries.js';
+import { messageBoard } from './messages.js';
 
 // Summer / winter wheels against the studded tyre season: cars here, plus rental cars for users
 // who see Rental cars. The meta is separate nodes so each part translates.
@@ -37,6 +38,9 @@ export async function todayView(el) {
       h('div', {}, h('h1', {}, 'Today'),
         h('div', { class: 'muted' }, `${weekday.format(day)} ${fmtDate(d.today, false)}`)),
       h('a', { class: 'btn primary big', href: '#/intake' }, '+ New arrival')),
+
+    // ---- message board: notes to everyone, 24 hours each (loads itself)
+    messageBoard(),
 
     // ---- today & tomorrow
     block('🔧', 'PDI tomorrow – make the car ready', d.pdi_tomorrow.map((o) => pdiRow(o, true)), { cls: 'warn' }),

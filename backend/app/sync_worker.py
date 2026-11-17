@@ -28,6 +28,8 @@ from .common import (RETENTION_DUE_SQL, TEST_DRIVE_PURGE_DUE_SQL, purge_test_dri
                      soft_delete_vehicle)
 from .config import settings
 from .migrate import run_migrations
+from .routers.dm import purge_expired as purge_expired_private_messages
+from .routers.messages import DELETE_EXPIRED_SQL as MESSAGES_EXPIRED_SQL
 from .routers.rentals import RENTAL_PURGE_DUE_SQL, purge_rental_customer, refresh_due_rental_cars
 
 log = logging.getLogger("carbonara.sync_worker")
@@ -95,6 +97,22 @@ def housekeeping() -> None:
     if gone:
         log.info("Deleted %d received customer deliveries for good", len(gone))
 
+    # Today page messages older than 24 hours (also deleted whenever someone opens Today).
+    with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+        conn.execute(MESSAGES_EXPIRED_SQL)
+
+
+def expire_private_messages() -> None:
+    """Private messages and their files, 72 working hours after sending. Runs every loop
+    (about once a minute), not just with the daily housekeeping, so they go on time."""
+    with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+        files = purge_expired_private_messages(conn)
+        conn.commit()  # remove the files only once the delete is final
+    for row in files:
+        photostore.remove(row)
+    if files:
+        log.info("Deleted %d expired private message file(s)", len(files))
+
 
 def run_once(max_vehicles: int = 50) -> int:
     done = 0
@@ -119,6 +137,10 @@ def main() -> None:
              f"{settings.retention_years} years" if settings.retention_years > 0 else "off", settings.trash_days)
     last_housekeeping = 0.0
     while True:
+        try:
+            expire_private_messages()
+        except Exception:
+            log.exception("deleting expired private messages failed")
         if time.monotonic() - last_housekeeping >= HOUSEKEEPING_EVERY_S or not last_housekeeping:
             try:
                 housekeeping()

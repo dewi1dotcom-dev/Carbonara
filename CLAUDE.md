@@ -195,12 +195,13 @@ backend/
                         OCR field suggestions, stamp / signature pictures
   app/photostore.py     original + 1600px + 400px JPEG
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
-                        test drive + rental customer purge, rental car SVV refresh, received customer deliveries)
+                        test drive + rental customer purge, rental car SVV refresh, received customer deliveries,
+                        Today messages); expired private messages + files every loop (~1 min)
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, rentals, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
-                        the order's sheet)
-  migrations/           001…035
+                        the order's sheet), messages (Today message board), dm (private messages)
+  migrations/           001…036
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -214,7 +215,7 @@ frontend/               no build step; plain ES modules
   js/views/             today (start page), dashboard (= arrivals list), intake, inspection,
                         vehicles, documents, pdi (card + banner + PDI page), pdiorders (PDI orders page), pdisheet (PDI sheets,
                         stamps, signature, PDI done dialog), storagecare (card + check form
-                        + report), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
+                        + report), messages (Today message board), dm (private messages), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
                         login, settings, system
 ```
 
@@ -257,6 +258,7 @@ frontend/               no build step; plain ES modules
 | 033 | `work_order` | `pdi_orders.work_order` (the workshop's work order number) |
 | 034 | `pdi_battery_checks` | `pdi_orders.done_battery_v` (12V reading), `sheet_checks` ("tick all boxes") |
 | 035 | `kiosk_language` | `kiosk_devices.language` ('en' / 'no', default 'no'), set on the Customer deliveries page |
+| 036 | `messages` | Today page message board (`body` ≤ 300, `team_id` (NULL = everyone), `created_by`, `created_at`; shown 24 h, then deleted); `private_messages` (sender, recipient, text and/or file / picture, `expires_at` = 72 working hours, `read_at`) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -279,6 +281,8 @@ frontend/               no build step; plain ES modules
 - **Rental cars:** `#/rental` (fleet, rent out, cars out, trash; top menu "Rental cars").
 - **Customer deliveries:** `#/deliveries` (list + kiosk setup; top menu "Deliveries" since 0.25.1, also from
   Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
+- **Private messages:** `#/messages` (people) · `#/messages/:staffId` (conversation); the 💬 button in the top bar, every
+  user whatever the team (`canSee` always allows `messages`).
 - **Admin:** `#/settings` · `#/system` (system admins only).
 
 ---
@@ -904,6 +908,37 @@ storage, periodic checklist, 12V battery form).
   (notice), cars here + rental cars (rental rows only for users who see Rental cars).
 - **Then:** upcoming PDIs and number tiles. Attention lists only cover cars that aren't off
   site.
+- **Message board (0.34.0)** (`messages`, migration 036; `routers/messages.py`, `views/messages.js`): right under
+  the page title (the user's request).
+  - **Limited to the team (the user's rule):** a user sees their own team's messages plus messages to everyone
+    (`team_id` NULL). Staff write to their own team; staff without a team can't write (no button). **Admins**
+    choose "Who sees it": Everyone or any team (own team preselected; `GET /messages/teams`, `to` = `all` / team id).
+    Deleting a team deletes its messages.
+  - One line, max 300 characters ("+ Write a message"). Shown with the writer's **initials** (first + last name;
+    the full name on hover), the time written and "To everyone" / the team name.
+  - A message is shown for **24 hours**. Expired rows are deleted on every `GET /messages` and by the worker's
+    `housekeeping()`; the board also drops them while the page stays open.
+  - Several messages: one at a time, newest first, **changing every 8 s**, with "n / m" and dots to switch.
+    The board reloads every minute so new messages show up.
+  - The writer or an admin can delete a message (✕). Message texts are never logged.
+
+**Private messages (0.34.0)** (`private_messages`, migration 036; `routers/dm.py`, `views/dm.js`; the user's request):
+- **Between two users**, any team (no menu item; 💬 in the top bar with a red unread count, `GET /dm/unread`, polled every
+  minute and on `carbonara:dm-changed`). `#/messages` lists every active user (latest conversation first, "n new");
+  `#/messages/:id` is the conversation (polls every 10 s; opening it marks the messages to you as read; the sender sees
+  "✓ Read" / "Not read yet").
+- **Text and/or one file per message** (`POST /dm/with/{id}`, multipart). Text max 2 000 characters. Files: the same
+  whitelist as car documents (`documents.FILE_TYPES`), max `MAX_UPLOAD_MB`. Pictures go through `photostore.store`
+  (original + 1600 / 400 px JPEG, so HEIC shows too) and show as a thumbnail; other files are stored as uploaded under
+  `PHOTO_DIR/dm/yyyy/mm/`. Served at `/api/dm/{id}/file[?variant=thumb|display]`, `no-store` + `nosniff`.
+- **Only the sender and the recipient** can read a message or open its file, **admins included** (no exception).
+  The sender can delete their own message (file removed after commit).
+- **Deleted after 72 working hours (the user's rule):** `expires_at = dm.expires_after_work_hours(sent)`, counting only
+  Monday–Friday hours in Oslo time: Friday 10:00 → Wednesday 10:00; Saturday / Sunday → Thursday 00:00; Thursday 10:00 →
+  Tuesday 10:00. No public holidays. Each message shows "deleted dd.mm.yyyy HH:mm". The worker's
+  `expire_private_messages()` deletes rows + files every loop (~1 min); reads never show expired messages meanwhile.
+- **Staff delete:** the FK has no ON DELETE, so a person with messages is soft-deleted (the usual savepoint fallback).
+- Texts and file names are never logged.
 
 **finn.no:**
 - Crawling is prohibited (robots.txt and terms). Staff paste the ad link or FINN code; the
@@ -1164,6 +1199,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.18 | PDI date entered the first time ("Enter PDI date" or "given to the workshop?") also asks for the work order no. (optional there) |
 | 0.33.19 | PDI rows on Today, the PDI page and the 🔔 bar open the order on the PDI orders page (car page only for teams without PDI orders) |
 | 0.33.20 | PDI orders page: "PDI done" group shows the latest marked done on top |
+| 0.34.0 | **Message board on Today:** notes for the writer's team (admins also to everyone or another team), marked with the writer's initials, shown 24 hours; several messages change by themselves every 8 s. **Private messages** between users with photos and files (💬 in the top bar), deleted after 72 working hours (migration 036) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

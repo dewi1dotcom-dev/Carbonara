@@ -6,6 +6,7 @@ import { lang, setLang, startTranslator } from './i18n.js';
 import { changePinForm, loginView } from './views/login.js';
 import { arrivalsView } from './views/dashboard.js';
 import { deliveriesView, kioskView } from './views/deliveries.js';
+import { dmChatView, dmListView } from './views/dm.js';
 import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
@@ -37,6 +38,8 @@ const routes = [
   [/^#\/rental$/, rentalView, 'rental'], // rental cars: their own fleet, not in the car database
   [/^#\/deliveries$/, deliveriesView, 'deliveries'],
   [/^#\/kiosk$/, kioskView, 'deliveries'], // staff preview of the delivery kiosk form
+  [/^#\/messages$/, dmListView, 'messages'], // private messages: every user, whatever the team
+  [/^#\/messages\/(\d+)$/, dmChatView, 'messages'],
   [/^#\/settings$/, settingsView, 'settings'],
   [/^#\/system$/, systemView, 'system'],
 ];
@@ -51,6 +54,7 @@ const root = document.getElementById('app');
 
 async function render() {
   refreshNotify(); // not awaited: the page doesn't wait for the notification bar
+  refreshDm();
   const hash = (location.hash || '#/').split('?')[0]; // "?…" holds page filters, not part of the route
   const match = routes.map(([re, view, nav]) => [hash.match(re), view, nav]).find(([m]) => m);
 
@@ -119,6 +123,23 @@ window.addEventListener('carbonara:pdi-changed', refreshNotify); // prepared / b
 
 const userMenu = document.getElementById('user-menu');
 
+// 💬 Private messages, beside the account button, with the number of unread messages.
+// data-nav: highlighted like a menu item while a conversation is open.
+const dmCount = h('span', { class: 'dm-count', hidden: true });
+const dmButton = h('a', { class: 'user-btn dm-btn', href: '#/messages', 'data-nav': 'messages', title: 'Private messages', 'aria-label': 'Private messages' },
+  '💬', dmCount);
+
+async function refreshDm() {
+  if (!session.me) return;
+  let n;
+  try { ({ count: n } = await api.get('/dm/unread')); } catch { return; }
+  dmCount.textContent = n > 99 ? '99+' : String(n);
+  dmCount.hidden = !n;
+  dmButton.classList.toggle('has-new', n > 0);
+}
+setInterval(refreshDm, 60 * 1000); // new messages show up without navigating
+window.addEventListener('carbonara:dm-changed', refreshDm); // read / sent in a conversation
+
 function renderUser() {
   const me = session.me;
   document.getElementById('nav-system').hidden = !me?.is_superadmin;
@@ -127,7 +148,7 @@ function renderUser() {
     if (a.dataset.nav !== 'system') a.hidden = !canSee(a.dataset.nav);
   });
   if (!me) { userMenu.replaceChildren(); return; }
-  userMenu.replaceChildren(h('button', {
+  userMenu.replaceChildren(dmButton, h('button', {
     // Silhouette only (user's request); the name shows on hover and as the dialog title.
     class: 'user-btn', type: 'button', title: me.name, 'aria-label': me.name, translate: 'no',
     onClick: () => {
