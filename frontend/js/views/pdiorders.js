@@ -3,7 +3,7 @@
 // the order, the PDI date (confirm / change, expected completion) and the car's history.
 // No documents (contracts hold personal data; the server leaves their events out too).
 import {
-  api, append, canSee, CONDITION, fmtDate, fmtKm, h, photoUrl, pill, showError, toast, tyreBadge, vehicleTitle, viewPhoto, WHEELS,
+  api, append, busy, canSee, CONDITION, fmtDate, fmtKm, h, openDialog, photoUrl, pill, session, showError, toast, tyreBadge, vehicleTitle, viewPhoto, WHEELS,
 } from '../ui.js';
 import { bookingDialog, confirmDate, confirmedText, itemsList, STATUS_CLS, STATUS_TEXT, workOrderLine } from './pdi.js';
 import { doneDialog, sheetActions } from './pdisheet.js';
@@ -44,6 +44,48 @@ export async function pdiOrdersView(el, _params = [], host = el) {
       card.scrollIntoView({ block: 'start', behavior: 'smooth' });
     }, 50);
   }
+}
+
+/* "Delivered" (0.35.3, the user's rule): confirm the delivery and/or the registration in one dialog.
+ * - Delivered: off site with the note "Delivered" (the same as Move car → Off site).
+ * - Registered: the same as "Mark as registered" on the car page (starts the Statens vegvesen sync).
+ *   Ticked by default; not offered when the car is already marked as registered (by hand or by a sync
+ *   that found it registered). */
+function deliveredDialog(o, rerender) {
+  const box = (checked) => h('input', { type: 'checkbox', checked });
+  const deliver = o.vehicle_status !== 'off_site' ? box(true) : null;
+  const register = o.registered_marked_at ? null : box(true);
+  const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Confirm');
+  const form = h('form', {},
+    h('p', {}, h('strong', { translate: 'no' }, vehicleTitle(o)), ' ',
+      h('span', { class: 'mono', translate: 'no' }, o.registration_number || o.vin)),
+    deliver ? h('label', { class: 'check' }, deliver, h('span', {}, 'Delivered to the customer – the car is taken off site'))
+      : h('p', { class: 'muted' }, '✓ Already off site'),
+    register ? h('label', { class: 'check' }, register, h('span', {}, 'Registered in Norway – mark the car as registered'))
+      : h('p', { class: 'muted' }, h('span', {}, '✓ Already marked as registered'),
+        o.registration_number ? h('span', { class: 'mono', translate: 'no' }, ` (${o.registration_number})`) : null),
+    h('div', { class: 'actions' }, ok));
+  const { close } = openDialog('Delivered', form);
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const doDeliver = !!deliver?.checked;
+    const doRegister = !!register?.checked;
+    if (!doDeliver && !doRegister) { showError(new Error('Tick at least one')); return; }
+    busy(ok, async () => {
+      // Registration first: it fetches the reg. no from Statens vegvesen while the car is still here.
+      if (doRegister) {
+        await api.post(`/vehicles/${o.vehicle_id}/registered`, { staff_id: session.me?.id ?? null });
+        register.checked = false; // done: a retry after a failed delivery mustn't mark it again
+        register.disabled = true;
+        o.registered_marked_at = new Date().toISOString();
+      }
+      if (doDeliver) await api.post(`/vehicles/${o.vehicle_id}/move`, { location_id: null, note: 'Delivered' });
+      close();
+      toast(doDeliver && doRegister ? 'Delivered and marked as registered'
+        : doDeliver ? 'Delivered – the car is off site' : 'Marked as registered', 'success');
+      await rerender();
+    });
+  });
 }
 
 function orderCard(o, opts, rerender) {
@@ -105,21 +147,9 @@ function orderCard(o, opts, rerender) {
         class: o.pdi_confirmed_at ? 'btn primary' : 'btn', type: 'button', onClick: () => doneDialog(o, rerender),
       }, '✓ PDI done') : null,
       o.status === 'done' ? sheetActions(o, rerender) : null,
-      // Handed over to the customer: off site with the note "Delivered" (the same as "Move car" → Off site).
-      // The car stays on this page until it is also marked as registered.
-      o.status === 'done' && o.vehicle_status !== 'off_site' ? h('button', {
-        class: 'btn primary', type: 'button',
-        onClick: async (ev) => {
-          if (!confirm(`Mark ${o.registration_number || vehicleTitle(o)} as delivered? The car is taken off site.`)) return;
-          const btn = ev.currentTarget; // null once the click has been handled, so keep it
-          btn.disabled = true;
-          try {
-            await api.post(`/vehicles/${o.vehicle_id}/move`, { location_id: null, note: 'Delivered' });
-            toast('Delivered – the car is off site', 'success');
-            await rerender();
-          } catch (e) { btn.disabled = false; showError(e); }
-        },
-      }, '✓ Delivered') : null),
+      // Handed over / registered: a dialog with both (every car in this group still lacks one of them).
+      o.status === 'done' ? h('button', { class: 'btn primary', type: 'button', onClick: () => deliveredDialog(o, rerender) },
+        o.vehicle_status !== 'off_site' ? '✓ Delivered' : '✓ Registered') : null),
 
     h('details', { class: 'more' }, h('summary', {}, `History (${o.events.length})`),
       o.events.length ? h('ol', { class: 'timeline' }, o.events.map((e) => h('li', {},

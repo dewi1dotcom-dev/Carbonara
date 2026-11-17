@@ -778,10 +778,12 @@ the server is LAN-only, so no customer phones / public internet).
     (folded; `EVENT_LABELS` / `eventDetail` exported from `vehicles.js`).
   - **No documents (the user's rule):** no document list, and `document_*` events are left out of the history
     on the server (`HIDDEN_EVENTS`).
-  - **"✓ Delivered" (0.35.2, the user's request):** on "PDI done" cars still in storage. Same as Move car → Off site
-    (`POST /vehicles/{id}/move` `{location_id: null, note: "Delivered"}`, event `moved_off_site`). The car stays on the
-    page until it is also marked as registered. The note is shown through `tr()` (`trText` in `vehicles.js`), so it reads
-    "Levert" in Norwegian.
+  - **"✓ Delivered" (0.35.2–0.35.3, the user's request):** on every "PDI done" car ("✓ Registered" once it is off site).
+    Opens `deliveredDialog` with two tick boxes, both ticked by default and only offered when still needed:
+    - **Delivered:** the same as Move car → Off site (`POST /vehicles/{id}/move` `{location_id: null, note: "Delivered"}`,
+      event `moved_off_site`). The note is shown through `tr()` (`trText` in `vehicles.js`), so it reads "Levert" in Norwegian.
+    - **Registered:** the same as "Mark as registered" (`POST /vehicles/{id}/registered`, starts the SVV sync); done
+      first. Not offered when the car is already marked as registered (by hand or by a sync that found it registered).
   - Actions: "✓ Confirm PDI date", "Enter / Change PDI date" (the same `bookingDialog`), "Open car page"
     (only for teams that see Vehicles). Made so a workshop team can be given only this page, but like all
     teams it's a menu filter, not a server lock.
@@ -1227,6 +1229,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.35.0 | **"More" in the top menu:** a dropdown for the menu items a system admin picks on the System page (Top menu); not shown when none are picked |
 | 0.35.1 | Vehicles page: "+ New arrival" button (as on Today / Arrivals) |
 | 0.35.2 | PDI orders page: "✓ Delivered" on PDI-done cars takes the car off site with the note "Delivered" |
+| 0.35.3 | "Delivered" opens a dialog: confirm delivery and/or registration (marks the car as registered unless it already is) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

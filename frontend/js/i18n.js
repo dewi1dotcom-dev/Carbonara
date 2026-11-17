@@ -620,6 +620,11 @@ const NO = {
   'no deadline from Statens vegvesen': 'ingen frist fra Statens vegvesen',
   // ---- PDI orders page: delivered (0.35.2)
   'Delivered': 'Levert', 'Delivered – the car is off site': 'Levert – bilen er ikke på lager',
+  'Delivered and marked as registered': 'Levert og merket som registrert',
+  'Delivered to the customer – the car is taken off site': 'Levert til kunden – bilen tas ut av lageret',
+  'Registered in Norway – mark the car as registered': 'Registrert i Norge – merk bilen som registrert',
+  'Already off site': 'Allerede ikke på lager', 'Already marked as registered': 'Allerede merket som registrert',
+  'Tick at least one': 'Kryss av for minst én',
   // ---- top menu "More" (System page, 0.35.0)
   'More': 'Mer', 'Top menu': 'Toppmeny', 'Show under “More”': 'Vis under «Mer»',
   'Items ticked here are moved into a “More” dropdown at the end of the top menu, for everyone. Each user still sees only their team’s items. With nothing ticked, there is no “More”. A change takes effect the next time a user opens or reloads Carbonara.':
@@ -889,7 +894,6 @@ const NO_PATTERNS = [
   ['Delete the team {}?', 'Slette teamet {1}?'],
   ['Stop {} from showing the delivery form?', 'Stoppe {1} fra å vise leveringsskjemaet?'], ['Set up {}', 'Satt opp {1}'], ['last used {}', 'sist brukt {1}'],
   // kiosk tablets: folded list, cleanup, delete (0.34.2)
-  ['Mark {} as delivered? The car is taken off site.', 'Markere {1} som levert? Bilen tas ut av lageret.'],
   ['stopped {}', 'stoppet {1}'], ['More tablets ({n})', 'Flere nettbrett ({1})'],
   ['Stopped tablets are deleted automatically {n} days after they were stopped.', 'Stoppede nettbrett slettes automatisk {1} dager etter at de ble stoppet.'],
   ['Delete {} from the list for good?', 'Slette {1} fra listen for godt?'],
