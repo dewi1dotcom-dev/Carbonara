@@ -749,7 +749,7 @@ the server is LAN-only, so no customer phones / public internet).
   "Nybilklargjøring", team menu key `pdi_orders`; migration 031 gave it to teams that see Vehicles):
   - **Which cars:** every car with a PDI order (its open one, else its latest done one; cancelled ones don't
     count) **until the car is both marked as registered and taken off site** (the user's rule). Open orders
-    first (by PDI date), then "PDI done – waiting for registration or delivery".
+    first (by PDI date), then "PDI done – waiting for registration or delivery" (latest done on top, 0.33.20).
   - **Per car:** make / model, reg. no, VIN, status + registered + wheels badges, the **right-side photo**
     (`RIGHT_PHOTO_SQL`, tap to enlarge), colour / fuel / new-used / spot / wheels, the order (items, tyres,
     other, note, preparation), PDI date, expected completion, sent / done, and the car's **history**
@@ -1163,6 +1163,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.17 | Today: links only lead to pages the team can see (others shown as plain text); PDI rows open the PDI orders page at that car for teams without Vehicles |
 | 0.33.18 | PDI date entered the first time ("Enter PDI date" or "given to the workshop?") also asks for the work order no. (optional there) |
 | 0.33.19 | PDI rows on Today, the PDI page and the 🔔 bar open the order on the PDI orders page (car page only for teams without PDI orders) |
+| 0.33.20 | PDI orders page: "PDI done" group shows the latest marked done on top |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

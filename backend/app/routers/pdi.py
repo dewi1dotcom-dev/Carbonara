@@ -401,7 +401,10 @@ def pdi_orders_page(conn=Depends(get_conn)):
            AND o.id = (SELECT o2.id FROM pdi_orders o2 WHERE o2.vehicle_id = v.id AND o2.status <> 'cancelled'
                         ORDER BY (o2.status <> 'done') DESC, o2.created_at DESC LIMIT 1)
            AND NOT (v.registered_marked_at IS NOT NULL AND v.status = 'off_site')
-         ORDER BY (o.status = 'done'), o.pdi_at NULLS LAST, o.created_at""").fetchall()
+         ORDER BY (o.status = 'done'),
+                  -- done orders: the latest marked done on top (0.33.20, the user's rule)
+                  CASE WHEN o.status = 'done' THEN o.done_at END DESC NULLS LAST,
+                  o.pdi_at NULLS LAST, o.created_at""").fetchall()
     events: dict[int, list] = {r["vehicle_id"]: [] for r in rows}
     if rows:
         for e in conn.execute(
