@@ -616,6 +616,7 @@ function overviewCard(v, rerender) {
         : h('span', { class: 'inline' }, h('span', { class: 'muted' }, 'Not on finn.no'),
           h('button', { class: 'link', type: 'button', onClick: () => finnDialog(v, rerender) }, '+ Add finn.no link'))],
       ['Service', serviceRow(v)],
+      ['Mileage', mileageRow(v.mileage)],
       ['Condition', v.condition ? CONDITION[v.condition] : null],
       ['Wheels', wheelsRow(v, rerender)],
       ['Colour', v.color ?? r.color ?? '–'],
@@ -628,6 +629,17 @@ function overviewCard(v, rerender) {
       h('button', { class: 'btn', type: 'button', onClick: () => serviceDialog(v, rerender) }, 'Service done'),
       h('button', { class: 'btn', type: 'button', onClick: () => editDialog(v, rerender) }, 'Edit details')));
 }
+
+// The latest recorded mileage (server: LATEST_KM_SQL) and where it came from. The parts are
+// separate nodes so each translates.
+const KM_SOURCE = {
+  inspection: 'from the arrival inspection', service: 'from the service',
+  test_drive: 'from a test drive', pdi: 'from the PDI',
+};
+const mileageRow = (m) => (m ? h('span', { class: 'inline' },
+  h('span', {}, fmtKm(m.km)),
+  h('span', { class: 'muted small' }, '· ', h('span', {}, KM_SOURCE[m.source] ?? ''), ' ', fmtDate(m.at, m.source !== 'service')))
+  : null);
 
 function storageText(v) {
   const loc = v.current_location;

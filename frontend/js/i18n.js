@@ -588,6 +588,7 @@ const NO = {
   'Choose who should see the message': 'Velg hvem som skal se meldingen', 'Team not found': 'Fant ikke teamet',
   'Write a message first': 'Skriv en melding først', 'Message not found': 'Fant ikke meldingen',
   'Only the writer or an administrator can delete this message': 'Bare den som skrev meldingen eller en administrator kan slette den',
+  'from the arrival inspection': 'fra mottakskontrollen', 'from the service': 'fra servicen', 'from a test drive': 'fra en prøvekjøring', 'from the PDI': 'fra nybilklargjøringen',
   // Private messages (0.34.0)
   'Private messages': 'Private meldinger', 'All conversations': 'Alle samtaler', '← All conversations': '← Alle samtaler',
   'Messages and files are deleted after 72 working hours. Saturdays and Sundays don’t count.': 'Meldinger og filer slettes etter 72 arbeidstimer. Lørdager og søndager teller ikke.',

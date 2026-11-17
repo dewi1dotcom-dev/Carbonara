@@ -14,6 +14,28 @@ from ..schemas import MarkRegisteredIn, MoveIn, RepairIn, ResolveMismatchIn, Veh
 log = logging.getLogger("carbonara.vehicles")
 router = APIRouter(tags=["vehicles"])
 
+# The latest recorded mileage, from wherever it was entered: arrival inspection, service, test drive
+# (out and back) or PDI done. Newest date wins (a service has a date only: midnight that day).
+LATEST_KM_SQL = """
+SELECT km, at, source FROM (
+    SELECT odometer_km AS km, coalesce(completed_at, started_at) AS at, 'inspection' AS source
+      FROM inspections WHERE vehicle_id = %(v)s AND status <> 'cancelled' AND odometer_km IS NOT NULL
+    UNION ALL
+    SELECT last_service_km, last_service_date::timestamptz, 'service'
+      FROM vehicles WHERE id = %(v)s AND last_service_km IS NOT NULL AND last_service_date IS NOT NULL
+    UNION ALL
+    SELECT odometer_out, started_at, 'test_drive'
+      FROM test_drives WHERE vehicle_id = %(v)s AND odometer_out IS NOT NULL
+    UNION ALL
+    SELECT odometer_in, returned_at, 'test_drive'
+      FROM test_drives WHERE vehicle_id = %(v)s AND odometer_in IS NOT NULL AND returned_at IS NOT NULL
+    UNION ALL
+    SELECT done_km, done_at, 'pdi'
+      FROM pdi_orders WHERE vehicle_id = %(v)s AND done_km IS NOT NULL AND done_at IS NOT NULL
+) m
+ORDER BY at DESC, km DESC
+LIMIT 1"""
+
 REGISTRY_COLUMNS = """r.sync_status, r.next_sync_at, r.last_attempt_at, r.last_success_at,
     r.failures, r.last_error, r.registration_number, r.registration_status,
     r.first_registered_norway, r.first_registered, r.eu_control_due, r.eu_control_last_approved,
@@ -212,6 +234,7 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "service": service_due(vehicle, registry and (registry["first_registered"] or registry["first_registered_norway"])),
         "possible_duplicates": similar_vehicles(conn, vehicle["vin"], vehicle["registration_number"], vehicle_id),
         "tyre_warning": add_tyre_warnings([vehicle])[0]["tyre_warning"],  # summer / winter wheels vs. the season
+        "mileage": conn.execute(LATEST_KM_SQL, {"v": vehicle_id}).fetchone(),  # {km, at, source} or None
     }
 
 

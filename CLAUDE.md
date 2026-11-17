@@ -408,6 +408,9 @@ These **warn, never block** ("Use this VIN" on the arrival screen).
   photo (angles, VIN, damage, other) of the latest completed arrival inspection with photos
   (cancelled ones skipped; one in progress only if none is completed)
   (`arrival_photos` from `GET /vehicles/{id}`); tap to enlarge, link to the inspection.
+- **Mileage (0.34.1, the user's request):** the overview card shows the latest recorded km and where it came from
+  (`LATEST_KM_SQL` in `routers/vehicles.py` → `mileage` `{km, at, source}`): arrival inspection, service, test drive
+  out / back, PDI done; newest date wins (a service counts as midnight on its date).
 - **Quick actions (0.22.0)** under the vehicle header (`topActions`): "🔑 Start test drive" (not
   while out), "🔧 Create PDI order" (no open order; opens `pdi.editDialog`), "📄 Add document".
 
@@ -1200,6 +1203,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.33.19 | PDI rows on Today, the PDI page and the 🔔 bar open the order on the PDI orders page (car page only for teams without PDI orders) |
 | 0.33.20 | PDI orders page: "PDI done" group shows the latest marked done on top |
 | 0.34.0 | **Message board on Today:** notes for the writer's team (admins also to everyone or another team), marked with the writer's initials, shown 24 hours; several messages change by themselves every 8 s. **Private messages** between users with photos and files (💬 in the top bar), deleted after 72 working hours (migration 036) |
+| 0.34.1 | Vehicle page: latest recorded mileage (from the arrival inspection, service, test drive or PDI) on the overview card |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
