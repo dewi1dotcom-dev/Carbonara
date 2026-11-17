@@ -3,7 +3,7 @@
 // the order, the PDI date (confirm / change, expected completion) and the car's history.
 // No documents (contracts hold personal data; the server leaves their events out too).
 import {
-  api, append, canSee, CONDITION, fmtDate, fmtKm, h, photoUrl, pill, showError, tyreBadge, vehicleTitle, viewPhoto, WHEELS,
+  api, append, canSee, CONDITION, fmtDate, fmtKm, h, photoUrl, pill, showError, toast, tyreBadge, vehicleTitle, viewPhoto, WHEELS,
 } from '../ui.js';
 import { bookingDialog, confirmDate, confirmedText, itemsList, STATUS_CLS, STATUS_TEXT, workOrderLine } from './pdi.js';
 import { doneDialog, sheetActions } from './pdisheet.js';
@@ -104,7 +104,22 @@ function orderCard(o, opts, rerender) {
       o.status === 'booked' ? h('button', {
         class: o.pdi_confirmed_at ? 'btn primary' : 'btn', type: 'button', onClick: () => doneDialog(o, rerender),
       }, '✓ PDI done') : null,
-      o.status === 'done' ? sheetActions(o, rerender) : null),
+      o.status === 'done' ? sheetActions(o, rerender) : null,
+      // Handed over to the customer: off site with the note "Delivered" (the same as "Move car" → Off site).
+      // The car stays on this page until it is also marked as registered.
+      o.status === 'done' && o.vehicle_status !== 'off_site' ? h('button', {
+        class: 'btn primary', type: 'button',
+        onClick: async (ev) => {
+          if (!confirm(`Mark ${o.registration_number || vehicleTitle(o)} as delivered? The car is taken off site.`)) return;
+          const btn = ev.currentTarget; // null once the click has been handled, so keep it
+          btn.disabled = true;
+          try {
+            await api.post(`/vehicles/${o.vehicle_id}/move`, { location_id: null, note: 'Delivered' });
+            toast('Delivered – the car is off site', 'success');
+            await rerender();
+          } catch (e) { btn.disabled = false; showError(e); }
+        },
+      }, '✓ Delivered') : null),
 
     h('details', { class: 'more' }, h('summary', {}, `History (${o.events.length})`),
       o.events.length ? h('ol', { class: 'timeline' }, o.events.map((e) => h('li', {},

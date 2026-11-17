@@ -778,6 +778,10 @@ the server is LAN-only, so no customer phones / public internet).
     (folded; `EVENT_LABELS` / `eventDetail` exported from `vehicles.js`).
   - **No documents (the user's rule):** no document list, and `document_*` events are left out of the history
     on the server (`HIDDEN_EVENTS`).
+  - **"✓ Delivered" (0.35.2, the user's request):** on "PDI done" cars still in storage. Same as Move car → Off site
+    (`POST /vehicles/{id}/move` `{location_id: null, note: "Delivered"}`, event `moved_off_site`). The car stays on the
+    page until it is also marked as registered. The note is shown through `tr()` (`trText` in `vehicles.js`), so it reads
+    "Levert" in Norwegian.
   - Actions: "✓ Confirm PDI date", "Enter / Change PDI date" (the same `bookingDialog`), "Open car page"
     (only for teams that see Vehicles). Made so a workshop team can be given only this page, but like all
     teams it's a menu filter, not a server lock.
@@ -1222,6 +1226,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.34.2 | Kiosk tablets: stopped ones deleted after 30 days; list folds after 3; system admins can delete a tablet |
 | 0.35.0 | **"More" in the top menu:** a dropdown for the menu items a system admin picks on the System page (Top menu); not shown when none are picked |
 | 0.35.1 | Vehicles page: "+ New arrival" button (as on Today / Arrivals) |
+| 0.35.2 | PDI orders page: "✓ Delivered" on PDI-done cars takes the car off site with the note "Delivered" |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

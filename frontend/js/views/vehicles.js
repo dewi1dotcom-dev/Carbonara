@@ -1,4 +1,5 @@
 import { PANEL_LABELS } from '../diagram.js';
+import { tr as trText } from '../i18n.js';
 import { documentDialog, documentsCard } from './documents.js';
 import { editDialog as pdiEditDialog, pdiBanner, pdiCard } from './pdi.js';
 import { batteryCard, storageCard } from './storagecare.js';
@@ -198,7 +199,8 @@ export function eventDetail(e) {
     case 'moved':
       return [d.from ? `${d.from} → ${d.to}` : `To ${d.to}`, d.note].filter(Boolean).join(' — ');
     case 'moved_off_site':
-      return [d.from && `From ${d.from}`, d.note].filter(Boolean).join(' — ');
+      // trText: a note set by Carbonara itself ("Delivered" from the PDI orders page) in the user's language.
+      return [d.from && `From ${d.from}`, d.note && trText(d.note)].filter(Boolean).join(' — ');
     case 'marked_registered':
       return d.source === 'statens_vegvesen' ? 'Automatically — listed as registered in Statens vegvesen' : '';
     case 'registry_mismatch_resolved':
@@ -650,7 +652,7 @@ function storageText(v) {
   if (v.status === 'off_site') {
     const ev = v.events.find((e) => e.event_type === 'moved_off_site');
     return h('span', { class: 'inline' }, h('span', { class: 'badge warn' }, 'Off site'),
-      ev ? `${ev.data?.note ? `${ev.data.note} · ` : ''}since ${fmtDate(ev.occurred_at)}` : '');
+      ev ? `${ev.data?.note ? `${trText(ev.data.note)} · ` : ''}since ${fmtDate(ev.occurred_at)}` : '');
   }
   return v.status === 'intake' ? 'Placed when the arrival inspection is completed' : '–';
 }
