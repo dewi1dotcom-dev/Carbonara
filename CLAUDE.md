@@ -74,7 +74,7 @@ like the one above. Never write staff PINs (e.g. the Claude test account's) into
 | Server | `192.168.10.45`, Ubuntu + Docker, managed via Portainer |
 | App URL | `http://192.168.10.45:8080` (port **8080**; 8000 on the host is taken by Portainer). **HTTPS (0.37.0):** `https://192.168.10.45:8443` through the `caddy` container, once `CARBONARA_HOST=192.168.10.45` is set in the stack (see *HTTPS*). |
 | Repo | GitHub, branch `main` (git user `dewi1dotcom-dev`) |
-| Containers | `db` (postgres:16), `app` (uvicorn on container port 8000 → host `APP_PORT`), `worker` (`python -m app.sync_worker`), `caddy` (caddy:2.8.4-alpine, HTTPS on host `HTTPS_PORT` → `app:8000`) |
+| Containers | `db` (postgres:16), `app` (uvicorn on container port 8000 → host `APP_PORT`), `worker` (`python -m app.sync_worker`), `caddy` (built from `caddy/Dockerfile` = caddy:2.8.4-alpine + Caddyfile, HTTPS on host `HTTPS_PORT` → `app:8000`) |
 | Photos | `./data/photos` mounted at `/data/photos` in **both** `app` and `worker` (the worker deletes files during retention) |
 | Timezone | `TZ=Europe/Oslo` on all containers |
 
@@ -92,6 +92,10 @@ like the one above. Never write staff PINs (e.g. the Claude test account's) into
     e-mail app)
 
 **HTTPS (0.37.0)** (`caddy/Caddyfile`, the `caddy` service; the user's request, "local fix first"):
+- **The Caddyfile is built into the image (0.37.1)** (`caddy/Dockerfile`, `build: ./caddy`). Don't bind-mount it:
+  under Portainer's Git stack the relative path `./caddy/Caddyfile` didn't exist on the server, Docker made an empty
+  folder there and the container stayed "created" (never started, no log). (So `./data/photos` may also not be where
+  the repo is on the host; find the real path before setting up backups.)
 - Caddy is its own small certificate authority (`tls internal`, root CN "Carbonara Local Root"). The root + its key
   live in the `caddy_data` volume: **keep it and back it up**, or every device must install a new root.
   `default_sni` = `CARBONARA_HOST`, because browsers send no SNI for an IP address.
@@ -1263,6 +1267,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.36.0 | **Background worker warning:** the worker reports in every round; the System page and Today (system admins) warn when it has stopped, a step failed or the daily cleanup is late (migration 037) |
 | 0.36.1 | **Disk space warning:** System page card (free space, usage bar, database size); amber / red warning on Today for system admins |
 | 0.37.0 | **HTTPS (local):** `caddy` container on 8443 with Carbonara's own certificate (installed once per device, System page → HTTPS); secure cookies over HTTPS; devices that trust it move from http:// by themselves |
+| 0.37.1 | Fix: caddy container never started under Portainer (Caddyfile now built into a small image instead of mounted) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

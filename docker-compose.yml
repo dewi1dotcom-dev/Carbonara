@@ -55,7 +55,7 @@ services:
   # HTTPS on HTTPS_PORT (default 8443), in front of the app. Plain HTTP on APP_PORT keeps working
   # until every device has moved over. See caddy/Caddyfile.
   caddy:
-    image: caddy:2.8.4-alpine
+    build: ./caddy        # caddy:2.8.4-alpine + the Caddyfile (see caddy/Dockerfile)
     restart: unless-stopped
     depends_on:
       - app
@@ -63,7 +63,6 @@ services:
       CARBONARA_HOST: ${CARBONARA_HOST:-localhost}
       TZ: Europe/Oslo
     volumes:
-      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
       - caddy_config:/config
     ports:
