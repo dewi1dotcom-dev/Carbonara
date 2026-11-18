@@ -630,6 +630,28 @@ const NO = {
   'The daily cleanup has not run yet.': 'Den daglige oppryddingen har ikke kjørt ennå.',
   'Automatic deletions of personal data may be late. Restart the stack in Portainer and check the worker container’s log.':
     'Automatisk sletting av personopplysninger kan bli forsinket. Start stacken på nytt i Portainer og se i loggen til worker-containeren.',
+  // ---- HTTPS (System page, 0.37.0)
+  'This page is open over HTTPS (encrypted).': 'Denne siden er åpnet over HTTPS (kryptert).',
+  'This page is open over plain HTTP (not encrypted).': 'Denne siden er åpnet over vanlig HTTP (ikke kryptert).',
+  'Carbonara has its own certificate. Install it once on each phone, tablet and PC, then use the https address. Plain HTTP keeps working until every device has moved over.':
+    'Carbonara har sitt eget sertifikat. Installer det én gang på hver telefon, nettbrett og PC, og bruk så https-adressen. Vanlig HTTP virker fortsatt til alle enhetene har gått over.',
+  'HTTPS address': 'HTTPS-adresse',
+  'The certificate is not ready yet. Check that the caddy container is running and CARBONARA_HOST is set in the stack.':
+    'Sertifikatet er ikke klart ennå. Sjekk at caddy-containeren kjører og at CARBONARA_HOST er satt i stacken.',
+  '1. Download the certificate on the device': '1. Last ned sertifikatet på enheten',
+  '2. Install it': '2. Installer det',
+  '3. Open the https address': '3. Åpne https-adressen',
+  'Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate → choose the file.':
+    'Android: Innstillinger → Sikkerhet → Kryptering og legitimasjon → Installer et sertifikat → CA-sertifikat → velg filen.',
+  'iPhone / iPad: open the file in Safari → Settings → Profile Downloaded → Install. Then Settings → General → About → Certificate Trust Settings → turn on "Carbonara Local Root".':
+    'iPhone / iPad: åpne filen i Safari → Innstillinger → Profil lastet ned → Installer. Så Innstillinger → Generelt → Om → Innstillinger for sertifikatklarering → slå på «Carbonara Local Root».',
+  'Windows (Chrome / Edge / Opera): open the file → Install Certificate → Current User → "Place all certificates in the following store" → Trusted Root Certification Authorities → Finish. Restart the browser.':
+    'Windows (Chrome / Edge / Opera): åpne filen → Installer sertifikat → Gjeldende bruker → «Plasser alle sertifikater i følgende lager» → Klarerte rotsertifiseringsinstanser → Fullfør. Start nettleseren på nytt.',
+  'Firefox has its own list: Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import.':
+    'Firefox har sin egen liste: Innstillinger → Personvern og sikkerhet → Sertifikater → Vis sertifikater → Sertifiseringsinstanser → Importer.',
+  'Bookmark it, and add it to the home screen again if Carbonara is installed as an app. The kiosk tablet stays a kiosk.':
+    'Lagre den som bokmerke, og legg den til på startskjermen på nytt hvis Carbonara er installert som app. Kiosk-nettbrettet forblir en kiosk.',
+  'HTTPS is not set up on this server yet': 'HTTPS er ikke satt opp på denne serveren ennå',
   // ---- disk space (System page + Today for system admins, 0.36.1)
   'Disk space': 'Diskplass', 'Enough free space': 'Nok ledig plass', 'Free': 'Ledig', 'Disk size': 'Diskstørrelse',
   'Database': 'Database', 'The free disk space could not be read.': 'Den ledige diskplassen kunne ikke leses.',

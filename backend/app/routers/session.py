@@ -34,10 +34,10 @@ def _setup_needed(conn) -> bool:
     return not conn.execute("SELECT 1 FROM staff WHERE pin_hash IS NOT NULL AND active LIMIT 1").fetchone()
 
 
-def _set_cookie(response: Response, token: str) -> None:
-    # secure=False: the server runs plain HTTP on the local network for now.
+def _set_cookie(request: Request, response: Response, token: str) -> None:
+    # "secure" over HTTPS (caddy); plain HTTP on APP_PORT still works while devices move over.
     response.set_cookie(auth.COOKIE, token, max_age=auth.SESSION_DAYS * 86400,
-                        httponly=True, samesite="lax", secure=False, path="/")
+                        httponly=True, samesite="lax", secure=auth.cookie_secure(request), path="/")
 
 
 def _pin_rule() -> str:
@@ -85,7 +85,7 @@ def login(body: LoginIn, request: Request, response: Response, conn=Depends(get_
                                                 f". Locked for {auth.LOCK_MINUTES} min." if left <= 0 else ""))
     conn.execute("UPDATE staff SET pin_failures = 0, pin_locked_until = NULL, last_login_at = now() WHERE id = %s",
                  (row["id"],))
-    _set_cookie(response, auth.new_session(conn, row["id"], request.headers.get("user-agent")))
+    _set_cookie(request, response, auth.new_session(conn, row["id"], request.headers.get("user-agent")))
     return {"ok": True}
 
 
@@ -114,7 +114,7 @@ def setup(body: SetupIn, request: Request, response: Response, conn=Depends(get_
     conn.execute("UPDATE staff SET pin_hash = %s, is_admin = true, is_superadmin = true, last_login_at = now() "
                  "WHERE id = %s",
                  (auth.hash_pin(body.pin), staff_id))
-    _set_cookie(response, auth.new_session(conn, staff_id, request.headers.get("user-agent")))
+    _set_cookie(request, response, auth.new_session(conn, staff_id, request.headers.get("user-agent")))
     log.info("first-time setup: staff %s is administrator", staff_id)
     return {"ok": True}
 

@@ -165,7 +165,8 @@ def worker_status(conn=Depends(get_conn)):
 @router.get("/system/health")
 def health(conn=Depends(get_conn)):
     """Worker + disk space in one call (System page cards, warnings on Today for system admins)."""
-    return {"worker": workerstatus.status(conn), "disk": diskstatus.status(conn)}
+    return {"worker": workerstatus.status(conn), "disk": diskstatus.status(conn),
+            "https": {"port": settings.https_port, "ca_ready": settings.ca_root.is_file()}}
 
 
 # --------------------------------------------------------------------------- #

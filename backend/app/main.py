@@ -47,7 +47,20 @@ def health():
 
 @app.get("/api/version", tags=["meta"])
 def version():
-    return {"version": settings.version, "build_time": settings.build_time or None}
+    # https_port: set once HTTPS is ready, so a device opened over plain HTTP can try https:// (app.js).
+    return {"version": settings.version, "build_time": settings.build_time or None,
+            "https_port": settings.https_port if settings.ca_root.is_file() else None}
+
+
+# The root certificate of Caddy's local certificate authority (the caddy service, HTTPS). Public by
+# nature: each device installs it once so https:// opens without warnings. Open without login, also
+# over plain HTTP, since a device without it can't use https:// yet. (Never the private key.)
+@app.get("/carbonara-ca.crt", include_in_schema=False)
+def ca_root():
+    if not settings.ca_root.is_file():
+        raise HTTPException(404, "HTTPS is not set up on this server yet")
+    return FileResponse(settings.ca_root, media_type="application/x-x509-ca-cert", filename="carbonara-ca.crt",
+                        headers={"Cache-Control": "no-cache"})
 
 
 # --------------------------------------------------------------------------- #

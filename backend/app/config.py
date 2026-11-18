@@ -139,6 +139,9 @@ class Settings:
     frontend_dir = Path(os.environ.get("FRONTEND_DIR", ROOT / "frontend"))
     migrations_dir = Path(__file__).resolve().parents[1] / "migrations"
     max_upload_bytes = int(os.environ.get("MAX_UPLOAD_MB", "30")) * 1024 * 1024
+    # HTTPS (the caddy service): its port, and its local root certificate (caddy_data, mounted read-only).
+    https_port = int(os.environ.get("HTTPS_PORT", "8443") or 8443)
+    ca_root = Path(os.environ.get("CA_ROOT", "/caddy-data/caddy/pki/authorities/local/root.crt"))
 
     def __init__(self):
         self._db: dict[str, str] = {}

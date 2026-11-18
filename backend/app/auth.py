@@ -129,6 +129,13 @@ def require_staff(request: Request, conn=Depends(get_conn)) -> dict:
 # cookie (token hash in kiosk_devices) that only opens the /kiosk routes.
 # --------------------------------------------------------------------------- #
 
+def cookie_secure(request: Request) -> bool:
+    """True when the browser came in over HTTPS (through the caddy service, which sets
+    X-Forwarded-Proto). Then the login cookies are "secure": never sent over plain HTTP.
+    Over plain HTTP (APP_PORT) they can't be, or logging in there would stop working."""
+    return request.headers.get("x-forwarded-proto", "").split(",")[0].strip().lower() == "https"
+
+
 KIOSK_COOKIE = "carbonara_kiosk"
 KIOSK_DAYS = 365  # renewed whenever the kiosk loads its form
 

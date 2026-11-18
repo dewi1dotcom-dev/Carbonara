@@ -1,0 +1,29 @@
+# HTTPS in front of Carbonara (the "caddy" service in docker-compose.yml).
+#
+# For now Caddy is its own small certificate authority ("tls internal"): each phone / PC installs
+# its root certificate once (Carbonara serves it at /carbonara-ca.crt, see the System page), and
+# after that https://<server>:<HTTPS_PORT> opens without warnings. The root and its private key are
+# kept in the caddy_data volume; keep that volume (and back it up), or every device must install a
+# new root. Later a real certificate for a host name can replace "tls internal" here.
+{
+	# Plain HTTP stays on the app's own port (APP_PORT) while devices move over; no redirect server.
+	auto_https disable_redirects
+	# Browsers send no server name (SNI) when the address is an IP; use this one then.
+	default_sni {$CARBONARA_HOST:localhost}
+	# Nothing to install inside the container.
+	skip_install_trust
+	pki {
+		ca local {
+			name "Carbonara"
+			root_cn "Carbonara Local Root"
+			intermediate_cn "Carbonara Local Intermediate"
+		}
+	}
+}
+
+# CARBONARA_HOST: the address staff type, e.g. the server's IP (set in .env / the Portainer stack).
+{$CARBONARA_HOST:localhost} {
+	tls internal
+	# Caddy sets X-Forwarded-Proto: https, so the app marks its login cookies "secure" on this address.
+	reverse_proxy app:8000
+}

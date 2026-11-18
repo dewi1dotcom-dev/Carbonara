@@ -18,6 +18,7 @@ x-app-env: &app-env
   SMTP_PASSWORD: ${SMTP_PASSWORD:-}
   SMTP_FROM: ${SMTP_FROM:-}
   SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
+  HTTPS_PORT: ${HTTPS_PORT:-8443}
   TZ: Europe/Oslo
 
 services:
@@ -46,8 +47,27 @@ services:
     environment: *app-env
     volumes:
       - ./data/photos:/data/photos
+      # Read-only: the local root certificate Caddy made, offered at /carbonara-ca.crt.
+      - caddy_data:/caddy-data:ro
     ports:
       - "${APP_PORT:-8080}:8000"
+
+  # HTTPS on HTTPS_PORT (default 8443), in front of the app. Plain HTTP on APP_PORT keeps working
+  # until every device has moved over. See caddy/Caddyfile.
+  caddy:
+    image: caddy:2.8.4-alpine
+    restart: unless-stopped
+    depends_on:
+      - app
+    environment:
+      CARBONARA_HOST: ${CARBONARA_HOST:-localhost}
+      TZ: Europe/Oslo
+    volumes:
+      - ./caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    ports:
+      - "${HTTPS_PORT:-8443}:443"
 
   # Keeps Statens vegvesen data fresh for vehicles marked as registered, and
   # once a day applies data retention (needs the photos to delete their files).
@@ -64,3 +84,5 @@ services:
 
 volumes:
   pgdata:
+  caddy_data:     # Caddy's local certificate authority (root + key): keep it, or devices must reinstall
+  caddy_config:

@@ -57,10 +57,10 @@ def _clean_reg(raw: Optional[str]) -> str:
     return "".join(ch for ch in (raw or "").upper() if ch.isalnum())
 
 
-def _set_kiosk_cookie(response: Response, token: str) -> None:
-    # secure=False: plain HTTP on the local network for now (as the staff session).
+def _set_kiosk_cookie(request: Request, response: Response, token: str) -> None:
+    # "secure" over HTTPS (caddy), as the staff session; plain HTTP on APP_PORT still works meanwhile.
     response.set_cookie(auth.KIOSK_COOKIE, token, max_age=auth.KIOSK_DAYS * 86400,
-                        httponly=True, samesite="lax", secure=False, path="/")
+                        httponly=True, samesite="lax", secure=auth.cookie_secure(request), path="/")
 
 
 # --------------------------------------------------------------------------- #
@@ -158,7 +158,7 @@ class DeliveryIn(BaseModel):
 def kiosk_config(request: Request, response: Response, who=Depends(require_kiosk_or_staff), conn=Depends(get_conn)):
     """Everything the form needs: maps, key places, tick boxes, privacy contact."""
     if who["kiosk"]:  # a tablet left on for months keeps its kiosk cookie
-        _set_kiosk_cookie(response, request.cookies[auth.KIOSK_COOKIE])
+        _set_kiosk_cookie(request, response, request.cookies[auth.KIOSK_COOKIE])
     options = conn.execute("SELECT id, kind, label, label_no FROM delivery_options WHERE active "
                            "ORDER BY sort, id").fetchall()
     return {
@@ -443,7 +443,7 @@ def make_kiosk(body: KioskIn, request: Request, response: Response, conn=Depends
     name = " ".join(body.name.split())
     if not name:
         raise bad_request("Give the kiosk a name")
-    _set_kiosk_cookie(response, auth.new_kiosk(conn, name, admin["id"], body.language))
+    _set_kiosk_cookie(request, response, auth.new_kiosk(conn, name, admin["id"], body.language))
     auth.end_session(conn, request.cookies.get(auth.COOKIE))
     response.delete_cookie(auth.COOKIE, path="/")
     log.info("staff %s made device '%s' a delivery kiosk", admin["id"], name)

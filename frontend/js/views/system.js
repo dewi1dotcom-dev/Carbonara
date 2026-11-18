@@ -34,6 +34,7 @@ export async function systemView(el, _params = [], host = el) {
       '“Reset” goes back to the environment or the default. Passwords and keys are never shown – only their last characters.'),
     workerCard(health.worker),
     diskCard(health.disk),
+    httpsCard(health.https),
     teamsCard(teams, rerender),
     moreCard(more),
     groups.map((g) => h('section', { class: 'card' },
@@ -115,6 +116,39 @@ export function diskNotice(d, { link = false } = {}) {
     d.level === 'unknown' ? null : h('div', { class: 'small' },
       'When the disk is full, new photos can’t be saved and the database can stop. Free up space on the server or give it a bigger disk.'),
     link ? h('a', { href: '#/system' }, 'Open the System page') : null);
+}
+
+// ---------------------------------------------------------------- HTTPS
+
+/** HTTPS through the caddy service: the https address and how each device installs the
+ *  local root certificate once (/carbonara-ca.crt). Device steps stay in the device's own words. */
+function httpsCard(s) {
+  const onHttps = location.protocol === 'https:';
+  const url = `https://${location.hostname}:${s.port}/`;
+  const step = (title, ...lines) => h('li', {}, h('strong', {}, title), lines.map((t) => h('div', { class: 'small' }, t)));
+  return h('section', { class: 'card' },
+    h('h2', {}, 'HTTPS'),
+    onHttps ? h('div', { class: 'notice good' }, '✓ This page is open over HTTPS (encrypted).')
+      : h('div', { class: 'notice warn' }, 'This page is open over plain HTTP (not encrypted).'),
+    h('p', { class: 'muted small' },
+      'Carbonara has its own certificate. Install it once on each phone, tablet and PC, then use the https address. '
+      + 'Plain HTTP keeps working until every device has moved over.'),
+    h('dl', { class: 'kv' },
+      h('dt', {}, 'HTTPS address'), h('dd', {}, h('a', { href: url, class: 'mono', translate: 'no' }, url))),
+    s.ca_ready ? null : h('div', { class: 'notice warn' },
+      'The certificate is not ready yet. Check that the caddy container is running and CARBONARA_HOST is set in the stack.'),
+    h('ol', { class: 'https-steps' },
+      step('1. Download the certificate on the device',
+        h('span', {}, s.ca_ready ? h('a', { href: '/carbonara-ca.crt', download: 'carbonara-ca.crt' }, '⬇ carbonara-ca.crt') : '–')),
+      step('2. Install it',
+        'Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate → choose the file.',
+        'iPhone / iPad: open the file in Safari → Settings → Profile Downloaded → Install. Then Settings → General → About → '
+        + 'Certificate Trust Settings → turn on "Carbonara Local Root".',
+        'Windows (Chrome / Edge / Opera): open the file → Install Certificate → Current User → "Place all certificates in the '
+        + 'following store" → Trusted Root Certification Authorities → Finish. Restart the browser.',
+        'Firefox has its own list: Settings → Privacy & Security → Certificates → View Certificates → Authorities → Import.'),
+      step('3. Open the https address',
+        'Bookmark it, and add it to the home screen again if Carbonara is installed as an app. The kiosk tablet stays a kiosk.')));
 }
 
 // ---------------------------------------------------------------- teams

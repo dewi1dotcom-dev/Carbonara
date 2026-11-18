@@ -291,8 +291,28 @@ function boot() {
 
 window.addEventListener('carbonara:logged-out', () => { if (session.me) { session.me = null; boot(); } });
 window.addEventListener('hashchange', () => { if (session.me) render(); });
+/* HTTPS (the caddy service): a device opened over plain HTTP that already trusts Carbonara's
+ * certificate moves to https:// by itself. The test request only succeeds when the certificate is
+ * trusted, so devices without it stay on http:// (and can still log in there). It also matters
+ * because after a login over HTTPS, the browser won't let http:// set the login cookie. */
+async function moveToHttps() {
+  if (location.protocol !== 'http:') return false;
+  try {
+    const v = await (await fetch('/api/version', { cache: 'no-store' })).json();
+    if (!v.https_port) return false;
+    const target = `https://${location.hostname}:${v.https_port}`;
+    const stop = new AbortController();
+    setTimeout(() => stop.abort(), 3000);
+    await fetch(`${target}/api/version`, { mode: 'no-cors', cache: 'no-store', signal: stop.signal });
+    location.replace(target + location.pathname + location.search + location.hash);
+    return true;
+  } catch {
+    return false; // no HTTPS yet, or the certificate isn't installed on this device
+  }
+}
+
 startTranslator();
-boot();
+moveToHttps().then((moved) => { if (!moved) boot(); });
 startClock(document.getElementById('clock'));
 
 // Show which version/build is running, so it is easy to check after an update.

@@ -72,14 +72,15 @@ like the one above. Never write staff PINs (e.g. the Claude test account's) into
 | Thing | Value |
 |---|---|
 | Server | `192.168.10.45`, Ubuntu + Docker, managed via Portainer |
-| App URL | `http://192.168.10.45:8080` (port **8080**; 8000 on the host is taken by Portainer). **No HTTPS yet.** |
+| App URL | `http://192.168.10.45:8080` (port **8080**; 8000 on the host is taken by Portainer). **HTTPS (0.37.0):** `https://192.168.10.45:8443` through the `caddy` container, once `CARBONARA_HOST=192.168.10.45` is set in the stack (see *HTTPS*). |
 | Repo | GitHub, branch `main` (git user `dewi1dotcom-dev`) |
-| Containers | `db` (postgres:16), `app` (uvicorn on container port 8000 → host `APP_PORT`), `worker` (`python -m app.sync_worker`) |
+| Containers | `db` (postgres:16), `app` (uvicorn on container port 8000 → host `APP_PORT`), `worker` (`python -m app.sync_worker`), `caddy` (caddy:2.8.4-alpine, HTTPS on host `HTTPS_PORT` → `app:8000`) |
 | Photos | `./data/photos` mounted at `/data/photos` in **both** `app` and `worker` (the worker deletes files during retention) |
 | Timezone | `TZ=Europe/Oslo` on all containers |
 
 **Environment variables** (`.env.example`, `docker-compose.yml`):
-- **Server:** `POSTGRES_PASSWORD`, `APP_PORT=8080`, `MAX_UPLOAD_MB=30`.
+- **Server:** `POSTGRES_PASSWORD`, `APP_PORT=8080`, `MAX_UPLOAD_MB=30`, `CARBONARA_HOST` (the address staff
+  type, e.g. `192.168.10.45`; caddy's certificate is made for it), `HTTPS_PORT=8443`.
 - **Fallbacks for System page settings** (a value saved on the System page wins):
   - `VEGVESEN_API_KEY/_URL/_AUTH_HEADER/_AUTH_SCHEME/_SYNC_DAYS`
   - `TRASH_DAYS=30`, `RETENTION_YEARS=5`
@@ -89,6 +90,20 @@ like the one above. Never write staff PINs (e.g. the Claude test account's) into
   - The dealer number is set on the System page only.
   - `SMTP_HOST/PORT/USER/PASSWORD/FROM/SECURITY` (empty host = staff send from their own
     e-mail app)
+
+**HTTPS (0.37.0)** (`caddy/Caddyfile`, the `caddy` service; the user's request, "local fix first"):
+- Caddy is its own small certificate authority (`tls internal`, root CN "Carbonara Local Root"). The root + its key
+  live in the `caddy_data` volume: **keep it and back it up**, or every device must install a new root.
+  `default_sni` = `CARBONARA_HOST`, because browsers send no SNI for an IP address.
+- Each device installs the root once: `GET /carbonara-ca.crt` (open, plain HTTP too; `main.py` reads it from
+  `caddy_data`, mounted read-only in `app` at `/caddy-data`). System page → **HTTPS** card: https address, download
+  link and the steps for Android, iPhone, Windows and Firefox.
+- **Plain HTTP on `APP_PORT` stays open** while devices move over (`auto_https disable_redirects`). `app.js`
+  `moveToHttps()` (before `boot()`): on `http:`, if `/api/version` has `https_port`, a `no-cors` test request to the
+  https address succeeds only when the device trusts the root, and then the page moves there by itself. Needed
+  because after a login over HTTPS (secure cookie) the browser won't let http:// set the same cookie.
+- The kiosk tablet keeps its cookie on the https address (cookies don't depend on the port).
+- **Step 2 (later):** a real certificate for a host name replaces `tls internal`; then close plain HTTP.
 
 **Cache-busting (0.10.2):** `main.py` serves `index.html` itself (no-cache) and rewrites
 `/js/app.js` and `/css/app.css` to `/v/<BUILD_TAG>/…` (immutable), so every deploy gets new
@@ -613,8 +628,9 @@ the server is LAN-only, so no customer phones / public internet).
 - **PIN hashes never leave the server:** use `STAFF_PUBLIC`; never `SELECT * FROM staff` in a
   response.
 - Staff pickers default to the logged-in user (`setInspectorId(me.id)`).
-- **HTTPS is NOT set up** (the user chose to skip it for now), so the cookie has
-  `secure=False`.
+- **Cookies and HTTPS (0.37.0):** the session and kiosk cookies are `secure` when the request came through
+  caddy (`auth.cookie_secure`: `X-Forwarded-Proto: https`), not over plain HTTP on `APP_PORT` (still open while
+  devices move over).
 - **Full licence photo is kept on purpose (user's decision, 2026-11-09).** It includes field
   4d, the national identity number (fødselsnummer), for secure identification to the police,
   SVV, toll companies and insurers (personopplysningsloven § 12). The notice says so. Do
@@ -735,8 +751,8 @@ the server is LAN-only, so no customer phones / public internet).
   - **Notification:** a 🔔 bar under the top bar on **every page** (`#notify`, `refreshNotify()`
     in `app.js`, `GET /pdi/prepare-due`) for booked PDIs up to the **next working day** (a
     Friday includes Monday) that aren't prepared. Refreshed on every navigation, every 15 min
-    and on the `carbonara:pdi-changed` event. The browser Notification API isn't usable
-    (no HTTPS).
+    and on the `carbonara:pdi-changed` event. The browser Notification API wasn't usable
+    without HTTPS (possible now over the https address, not built).
   - **The form:** trade plates (from Settings → Trade plates; it warns if the set is out on a
     test drive, but doesn't block); where the car is (storage spot dropdown, and **choosing
     another spot moves the car**, logged as `moved`) plus a short message; and where the
@@ -1246,10 +1262,12 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.35.3 | "Delivered" opens a dialog: confirm delivery and/or registration (marks the car as registered unless it already is) |
 | 0.36.0 | **Background worker warning:** the worker reports in every round; the System page and Today (system admins) warn when it has stopped, a step failed or the daily cleanup is late (migration 037) |
 | 0.36.1 | **Disk space warning:** System page card (free space, usage bar, database size); amber / red warning on Today for system admins |
+| 0.37.0 | **HTTPS (local):** `caddy` container on 8443 with Carbonara's own certificate (installed once per device, System page → HTTPS); secure cookies over HTTPS; devices that trust it move from http:// by themselves |
 
 **Next / ideas (not started):**
-- **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the
-  cookie.
+- **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
+  for one host name) instead of `tls internal`, with local DNS pointing the name to the server; then close plain
+  HTTP on `APP_PORT` (or redirect it). The user will look for a domain later.
 - **Encrypted, expiring backups** of the DB and `data/photos`.
 - **PDI replies:** read RBV's replies automatically (IMAP), or a booking link if the networks
   are connected.
