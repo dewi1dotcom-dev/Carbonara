@@ -4,7 +4,7 @@ import { lang } from '../i18n.js';
 import { api, append, boardBlock as block, boardRow as row, canOpen, canSee, carText, fmtDate, h, pdiCarHref, session, tyreText, vehicleTitle } from '../ui.js';
 import { optText } from './deliveries.js';
 import { messageBoard } from './messages.js';
-import { workerStatusNotice } from './system.js';
+import { diskNotice, workerStatusNotice } from './system.js';
 
 // Summer / winter wheels against the studded tyre season: cars here, plus rental cars for users
 // who see Rental cars. The meta is separate nodes so each part translates.
@@ -30,9 +30,12 @@ const pdiRow = (o, withPrep = false) => row(pdiCarHref(o.vehicle_id), carText(o)
   withPrep && !o.prepared_at ? 'bad' : '');
 
 export async function todayView(el) {
-  // System admins: is the background worker alive? (It does the promised GDPR deletions.)
-  const [d, worker] = await Promise.all([api.get('/dashboard'),
-    session.me?.is_superadmin ? api.get('/system/worker').catch(() => null) : null]);
+  // System admins: is the background worker alive (it does the promised GDPR deletions), and is there
+  // enough disk space?
+  const [d, health] = await Promise.all([api.get('/dashboard'),
+    session.me?.is_superadmin ? api.get('/system/health').catch(() => null) : null]);
+  const worker = health?.worker;
+  const disk = health?.disk;
   const n = d.numbers;
   const day = new Date(`${d.today}T12:00:00`);
 
@@ -43,6 +46,7 @@ export async function todayView(el) {
       h('a', { class: 'btn primary big', href: '#/intake' }, '+ New arrival')),
 
     worker && !worker.ok ? workerStatusNotice(worker, { link: true }) : null,
+    disk && disk.level !== 'ok' ? diskNotice(disk, { link: true }) : null,
 
     // ---- message board: notes to everyone, 24 hours each (loads itself)
     messageBoard(),

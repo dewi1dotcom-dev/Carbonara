@@ -630,6 +630,13 @@ const NO = {
   'The daily cleanup has not run yet.': 'Den daglige oppryddingen har ikke kjørt ennå.',
   'Automatic deletions of personal data may be late. Restart the stack in Portainer and check the worker container’s log.':
     'Automatisk sletting av personopplysninger kan bli forsinket. Start stacken på nytt i Portainer og se i loggen til worker-containeren.',
+  // ---- disk space (System page + Today for system admins, 0.36.1)
+  'Disk space': 'Diskplass', 'Enough free space': 'Nok ledig plass', 'Free': 'Ledig', 'Disk size': 'Diskstørrelse',
+  'Database': 'Database', 'The free disk space could not be read.': 'Den ledige diskplassen kunne ikke leses.',
+  'Free space on the server disk that holds photos, licence photos, PDI sheets, documents and message files. Amber below 15 % or 10 GB free, red below 5 % or 3 GB.':
+    'Ledig plass på serverdisken som har bilder, førerkortbilder, PDI-skjemaer, dokumenter og filer fra meldinger. Gul under 15 % eller 10 GB ledig, rød under 5 % eller 3 GB.',
+  'When the disk is full, new photos can’t be saved and the database can stop. Free up space on the server or give it a bigger disk.':
+    'Når disken er full, kan nye bilder ikke lagres, og databasen kan stoppe. Frigjør plass på serveren eller gi den en større disk.',
   // ---- PDI orders page: delivered (0.35.2)
   'Delivered': 'Levert', 'Delivered – the car is off site': 'Levert – bilen er ikke på lager',
   'Delivered and marked as registered': 'Levert og merket som registrert',
@@ -906,6 +913,9 @@ const NO_PATTERNS = [
   ['Delete the team {}?', 'Slette teamet {1}?'],
   ['Stop {} from showing the delivery form?', 'Stoppe {1} fra å vise leveringsskjemaet?'], ['Set up {}', 'Satt opp {1}'], ['last used {}', 'sist brukt {1}'],
   // kiosk tablets: folded list, cleanup, delete (0.34.2)
+  ['The server disk is almost full: {} free.', 'Serverdisken er nesten full: {1} ledig.'],
+  ['The server disk is getting full: {} free.', 'Serverdisken begynner å bli full: {1} ledig.'],
+  ['{n} % used', '{1} % brukt'],
   ['The background worker has stopped. Last seen {}.', 'Bakgrunnsjobben har stoppet. Sist sett {1}.'],
   ['The daily cleanup has not run since {}.', 'Den daglige oppryddingen har ikke kjørt siden {1}.'],
   ['The daily cleanup failed {}.', 'Den daglige oppryddingen feilet {1}.'],

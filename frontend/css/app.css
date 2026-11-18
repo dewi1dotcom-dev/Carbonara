@@ -397,6 +397,11 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .sync-error, .sync-not_found { background: var(--warn-bg); color: var(--warn); }
 .notice.bad { border-left-color: var(--bad); background: var(--bad-bg); }
 .notice.good { border-left-color: var(--good); }
+/* System page → Disk space: how much of the disk is used. */
+.disk-bar { height: 12px; border-radius: 6px; background: var(--border); overflow: hidden; margin: .75rem 0 .25rem; }
+.disk-bar span { display: block; height: 100%; background: var(--good); }
+.disk-bar.warn span { background: var(--warn); }
+.disk-bar.bad span { background: var(--bad); }
 
 /* Status badges: green = OK, amber = needs attention soon, red = act now. */
 .badge {

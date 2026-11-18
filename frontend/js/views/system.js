@@ -16,8 +16,8 @@ export async function systemView(el, _params = [], host = el) {
     el.append(h('h1', {}, 'System'), h('div', { class: 'card notice warn' }, 'Only a system admin can open this page.'));
     return;
   }
-  const [rows, teams, more, worker] = await Promise.all([
-    api.get('/system/settings'), api.get('/system/teams'), api.get('/system/menu-more'), api.get('/system/worker')]);
+  const [rows, teams, more, health] = await Promise.all([
+    api.get('/system/settings'), api.get('/system/teams'), api.get('/system/menu-more'), api.get('/system/health')]);
   const groups = [...new Set(rows.map((r) => r.group))];
   const rerender = async () => {
     try {
@@ -32,7 +32,8 @@ export async function systemView(el, _params = [], host = el) {
     h('p', { class: 'muted' },
       'Server settings. A value saved here takes effect within half a minute and overrides the server environment (.env / Portainer). ',
       '“Reset” goes back to the environment or the default. Passwords and keys are never shown – only their last characters.'),
-    workerCard(worker),
+    workerCard(health.worker),
+    diskCard(health.disk),
     teamsCard(teams, rerender),
     moreCard(more),
     groups.map((g) => h('section', { class: 'card' },
@@ -79,6 +80,40 @@ export function workerStatusNotice(w, { link = false } = {}) {
     h('strong', {}, '⚠ Background worker'),
     lines.map((t) => h('div', {}, t)),
     h('div', { class: 'small' }, 'Automatic deletions of personal data may be late. Restart the stack in Portainer and check the worker container’s log.'),
+    link ? h('a', { href: '#/system' }, 'Open the System page') : null);
+}
+
+// ---------------------------------------------------------------- disk space
+
+const gb = (n) => `${String(n).replace('.', ',')} GB`; // Norwegian decimal comma
+
+/** Free space on the server disk that holds the photos and files (diskstatus.py). */
+function diskCard(d) {
+  const pct = d.free_percent;
+  return h('section', { class: 'card' },
+    h('h2', {}, 'Disk space'),
+    h('p', { class: 'muted small' },
+      'Free space on the server disk that holds photos, licence photos, PDI sheets, documents and message files. '
+      + 'Amber below 15 % or 10 GB free, red below 5 % or 3 GB.'),
+    d.level === 'ok' ? h('div', { class: 'notice good' }, '✓ Enough free space') : diskNotice(d),
+    pct != null ? h('div', { class: `disk-bar ${d.level}`, role: 'img', 'aria-label': `${Math.round(100 - pct)} % used` },
+      h('span', { style: `width: ${Math.min(100, Math.max(0, 100 - pct))}%` })) : null,
+    h('dl', { class: 'kv' },
+      h('dt', {}, 'Free'), h('dd', {}, d.free_gb != null ? `${gb(d.free_gb)} (${String(pct).replace('.', ',')} %)` : '–'),
+      h('dt', {}, 'Disk size'), h('dd', {}, d.total_gb != null ? gb(d.total_gb) : '–'),
+      h('dt', {}, 'Database'), h('dd', {}, d.db_gb != null ? gb(d.db_gb) : '–')));
+}
+
+/** Amber / red notice about the disk (also on Today for system admins). */
+export function diskNotice(d, { link = false } = {}) {
+  const text = d.level === 'unknown' ? 'The free disk space could not be read.'
+    : d.level === 'bad' ? `The server disk is almost full: ${gb(d.free_gb)} free.`
+      : `The server disk is getting full: ${gb(d.free_gb)} free.`;
+  return h('div', { class: `card notice ${d.level === 'bad' ? 'bad' : 'warn'}` },
+    h('strong', {}, '💾 Disk space'),
+    h('div', {}, text),
+    d.level === 'unknown' ? null : h('div', { class: 'small' },
+      'When the disk is full, new photos can’t be saved and the database can stop. Free up space on the server or give it a bigger disk.'),
     link ? h('a', { href: '#/system' }, 'Open the System page') : null);
 }
 

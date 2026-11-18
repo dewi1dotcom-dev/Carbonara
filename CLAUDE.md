@@ -195,6 +195,7 @@ backend/
                         OCR field suggestions, stamp / signature pictures
   app/photostore.py     original + 1600px + 400px JPEG
   app/workerstatus.py   the worker reports in (`worker_status`); status() = warnings for system admins
+  app/diskstatus.py     free space on the disk holding PHOTO_DIR + database size (System page, Today)
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
                         test drive + rental customer purge, rental car SVV refresh, received customer deliveries,
                         stopped kiosk tablets,
@@ -691,6 +692,11 @@ the server is LAN-only, so no customer phones / public internet).
   (stopped), the last round had errors, **no daily cleanup for 26 h**, or the cleanup failed. Shown on the System page
   ("✓ Running normally" or the red notice) and as a red notice at the top of **Today for system admins**
   (`workerStatusNotice` from `system.js`). Why: the worker does the GDPR deletions the privacy notices promise.
+- **Disk space card (0.36.1)** (`diskstatus.py`; `GET /system/health` = `{worker, disk}`, used by the System page and
+  Today): free space on the disk that holds `PHOTO_DIR` (`shutil.disk_usage`; the bind mount = the server's own disk),
+  a usage bar, disk size and the database size (`pg_database_size`; the DB volume may be on another disk). **Amber below
+  15 % or 10 GB free, red below 5 % or 3 GB** (constants in `diskstatus.py`). Not ok → `diskNotice` on the System page
+  and at the top of Today for system admins.
 
 **PDI = nybilklargjøring (0.12.0)** (`routers/pdi.py`, `views/pdi.js`, `mailer.py`):
 - **Who and what:** new cars get a PDI at **RBV – Rygge Bilverksted**, a separate firm in the
@@ -1239,6 +1245,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.35.2 | PDI orders page: "✓ Delivered" on PDI-done cars takes the car off site with the note "Delivered" |
 | 0.35.3 | "Delivered" opens a dialog: confirm delivery and/or registration (marks the car as registered unless it already is) |
 | 0.36.0 | **Background worker warning:** the worker reports in every round; the System page and Today (system admins) warn when it has stopped, a step failed or the daily cleanup is late (migration 037) |
+| 0.36.1 | **Disk space warning:** System page card (free space, usage bar, database size); amber / red warning on Today for system admins |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

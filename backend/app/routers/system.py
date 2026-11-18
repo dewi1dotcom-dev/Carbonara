@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from .. import workerstatus
+from .. import diskstatus, workerstatus
 from ..auth import MENU_ITEMS, MORE_ITEMS, MORE_KEY, menu_more, require_superadmin
 from ..common import bad_request, conflict, not_found
 from ..config import BY_NAME, SETTINGS, convert, settings
@@ -160,6 +160,12 @@ def delete_team(team_id: int, request: Request, conn=Depends(get_conn)):
 def worker_status(conn=Depends(get_conn)):
     """Is the background worker alive? (System page card, and a warning on Today for system admins.)"""
     return workerstatus.status(conn)
+
+
+@router.get("/system/health")
+def health(conn=Depends(get_conn)):
+    """Worker + disk space in one call (System page cards, warnings on Today for system admins)."""
+    return {"worker": workerstatus.status(conn), "disk": diskstatus.status(conn)}
 
 
 # --------------------------------------------------------------------------- #
