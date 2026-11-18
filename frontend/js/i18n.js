@@ -618,6 +618,18 @@ const NO = {
   'Statens vegvesen lookup failed': 'Oppslaget hos Statens vegvesen feilet', 'Statens vegvesen is not set up (System page)': 'Statens vegvesen er ikke satt opp (System-siden)',
   'Not looked up at Statens vegvesen yet': 'Ikke slått opp hos Statens vegvesen ennå', 'Lookup failed': 'Oppslaget feilet',
   'no deadline from Statens vegvesen': 'ingen frist fra Statens vegvesen',
+  // ---- background worker status (System page + Today for system admins, 0.36.0)
+  'Background worker': 'Bakgrunnsjobben', 'Running normally': 'Går som normalt', 'Last round': 'Siste runde',
+  'Last daily cleanup': 'Siste daglige opprydding', 'failed': 'feilet', 'Open the System page': 'Åpne System-siden',
+  'The worker does the automatic deletions the privacy notices promise (test drive and rental customers, customer deliveries, private messages), the data retention and the Statens vegvesen sync. If it stops, restart the stack in Portainer and check the worker container’s log.':
+    'Bakgrunnsjobben gjør de automatiske slettingene personvernerklæringene lover (kunder fra prøvekjøring og leiebil, kundeleveringer, private meldinger), datalagringen og synkroniseringen med Statens vegvesen. Hvis den stopper, start stacken på nytt i Portainer og se i loggen til worker-containeren.',
+  'The background worker has not reported in yet. Is the worker container running?':
+    'Bakgrunnsjobben har ikke meldt seg ennå. Kjører worker-containeren?',
+  'The background worker’s last round had errors:': 'Bakgrunnsjobbens siste runde hadde feil:',
+  'Deleting expired private messages': 'Sletting av utløpte private meldinger', 'Statens vegvesen sync': 'Synkronisering med Statens vegvesen',
+  'The daily cleanup has not run yet.': 'Den daglige oppryddingen har ikke kjørt ennå.',
+  'Automatic deletions of personal data may be late. Restart the stack in Portainer and check the worker container’s log.':
+    'Automatisk sletting av personopplysninger kan bli forsinket. Start stacken på nytt i Portainer og se i loggen til worker-containeren.',
   // ---- PDI orders page: delivered (0.35.2)
   'Delivered': 'Levert', 'Delivered – the car is off site': 'Levert – bilen er ikke på lager',
   'Delivered and marked as registered': 'Levert og merket som registrert',
@@ -894,6 +906,9 @@ const NO_PATTERNS = [
   ['Delete the team {}?', 'Slette teamet {1}?'],
   ['Stop {} from showing the delivery form?', 'Stoppe {1} fra å vise leveringsskjemaet?'], ['Set up {}', 'Satt opp {1}'], ['last used {}', 'sist brukt {1}'],
   // kiosk tablets: folded list, cleanup, delete (0.34.2)
+  ['The background worker has stopped. Last seen {}.', 'Bakgrunnsjobben har stoppet. Sist sett {1}.'],
+  ['The daily cleanup has not run since {}.', 'Den daglige oppryddingen har ikke kjørt siden {1}.'],
+  ['The daily cleanup failed {}.', 'Den daglige oppryddingen feilet {1}.'],
   ['stopped {}', 'stoppet {1}'], ['More tablets ({n})', 'Flere nettbrett ({1})'],
   ['Stopped tablets are deleted automatically {n} days after they were stopped.', 'Stoppede nettbrett slettes automatisk {1} dager etter at de ble stoppet.'],
   ['Delete {} from the list for good?', 'Slette {1} fra listen for godt?'],

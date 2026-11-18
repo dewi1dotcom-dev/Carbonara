@@ -396,6 +396,7 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .sync-ok { background: var(--good-bg); color: var(--good); }
 .sync-error, .sync-not_found { background: var(--warn-bg); color: var(--warn); }
 .notice.bad { border-left-color: var(--bad); background: var(--bad-bg); }
+.notice.good { border-left-color: var(--good); }
 
 /* Status badges: green = OK, amber = needs attention soon, red = act now. */
 .badge {

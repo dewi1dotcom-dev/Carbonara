@@ -1,9 +1,10 @@
 // The start page ("Today board"): what needs doing today and tomorrow first,
 // then what needs attention, then a few numbers.
 import { lang } from '../i18n.js';
-import { api, append, boardBlock as block, boardRow as row, canOpen, canSee, carText, fmtDate, h, pdiCarHref, tyreText, vehicleTitle } from '../ui.js';
+import { api, append, boardBlock as block, boardRow as row, canOpen, canSee, carText, fmtDate, h, pdiCarHref, session, tyreText, vehicleTitle } from '../ui.js';
 import { optText } from './deliveries.js';
 import { messageBoard } from './messages.js';
+import { workerStatusNotice } from './system.js';
 
 // Summer / winter wheels against the studded tyre season: cars here, plus rental cars for users
 // who see Rental cars. The meta is separate nodes so each part translates.
@@ -29,7 +30,9 @@ const pdiRow = (o, withPrep = false) => row(pdiCarHref(o.vehicle_id), carText(o)
   withPrep && !o.prepared_at ? 'bad' : '');
 
 export async function todayView(el) {
-  const d = await api.get('/dashboard');
+  // System admins: is the background worker alive? (It does the promised GDPR deletions.)
+  const [d, worker] = await Promise.all([api.get('/dashboard'),
+    session.me?.is_superadmin ? api.get('/system/worker').catch(() => null) : null]);
   const n = d.numbers;
   const day = new Date(`${d.today}T12:00:00`);
 
@@ -38,6 +41,8 @@ export async function todayView(el) {
       h('div', {}, h('h1', {}, 'Today'),
         h('div', { class: 'muted' }, `${weekday.format(day)} ${fmtDate(d.today, false)}`)),
       h('a', { class: 'btn primary big', href: '#/intake' }, '+ New arrival')),
+
+    worker && !worker.ok ? workerStatusNotice(worker, { link: true }) : null,
 
     // ---- message board: notes to everyone, 24 hours each (loads itself)
     messageBoard(),

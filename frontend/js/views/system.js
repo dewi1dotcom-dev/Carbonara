@@ -16,8 +16,8 @@ export async function systemView(el, _params = [], host = el) {
     el.append(h('h1', {}, 'System'), h('div', { class: 'card notice warn' }, 'Only a system admin can open this page.'));
     return;
   }
-  const [rows, teams, more] = await Promise.all([
-    api.get('/system/settings'), api.get('/system/teams'), api.get('/system/menu-more')]);
+  const [rows, teams, more, worker] = await Promise.all([
+    api.get('/system/settings'), api.get('/system/teams'), api.get('/system/menu-more'), api.get('/system/worker')]);
   const groups = [...new Set(rows.map((r) => r.group))];
   const rerender = async () => {
     try {
@@ -32,11 +32,54 @@ export async function systemView(el, _params = [], host = el) {
     h('p', { class: 'muted' },
       'Server settings. A value saved here takes effect within half a minute and overrides the server environment (.env / Portainer). ',
       '“Reset” goes back to the environment or the default. Passwords and keys are never shown – only their last characters.'),
+    workerCard(worker),
     teamsCard(teams, rerender),
     moreCard(more),
     groups.map((g) => h('section', { class: 'card' },
       h('h2', {}, g),
       h('div', { class: 'sys-rows' }, rows.filter((r) => r.group === g).map((r) => settingRow(r, rerender))))));
+}
+
+// ---------------------------------------------------------------- background worker
+
+/** The worker's state: when it last reported in, and any problems (workerStatusNotice). */
+function workerCard(w) {
+  return h('section', { class: 'card' },
+    h('h2', {}, 'Background worker'),
+    h('p', { class: 'muted small' },
+      'The worker does the automatic deletions the privacy notices promise (test drive and rental customers, '
+      + 'customer deliveries, private messages), the data retention and the Statens vegvesen sync. '
+      + 'If it stops, restart the stack in Portainer and check the worker container’s log.'),
+    w.ok ? h('div', { class: 'notice good' }, '✓ Running normally') : workerStatusNotice(w),
+    h('dl', { class: 'kv' },
+      h('dt', {}, 'Last round'), h('dd', {}, w.loop_at ? fmtDate(w.loop_at) : '–'),
+      h('dt', {}, 'Last daily cleanup'), h('dd', {}, w.housekeeping_at
+        ? [fmtDate(w.housekeeping_at), w.housekeeping_ok ? '' : h('span', { class: 'badge bad' }, 'failed')] : '–')));
+}
+
+const WORKER_STEP = { private_messages: 'Deleting expired private messages', registry_sync: 'Statens vegvesen sync' };
+
+/** Red notice listing the worker's problems (also on Today for system admins). Error types (e.g.
+ *  OperationalError) are technical names for the log, not translated. */
+export function workerStatusNotice(w, { link = false } = {}) {
+  const lines = w.problems.map((p) => {
+    switch (p.kind) {
+      case 'never': return 'The background worker has not reported in yet. Is the worker container running?';
+      case 'stopped': return `The background worker has stopped. Last seen ${fmtDate(p.since)}.`;
+      case 'step_failed': return [h('span', {}, 'The background worker’s last round had errors:'),
+        p.steps.map((s) => h('div', {}, '• ', h('span', {}, WORKER_STEP[s.step] ?? s.step),
+          s.error ? h('span', { class: 'mono small', translate: 'no' }, ` (${s.error})`) : null))];
+      case 'cleanup_late': return p.since ? `The daily cleanup has not run since ${fmtDate(p.since)}.` : 'The daily cleanup has not run yet.';
+      case 'cleanup_failed': return [h('span', {}, `The daily cleanup failed ${fmtDate(p.at)}.`),
+        p.error ? h('span', { class: 'mono small', translate: 'no' }, ` (${p.error})`) : null];
+      default: return p.kind;
+    }
+  });
+  return h('div', { class: 'card notice bad' },
+    h('strong', {}, '⚠ Background worker'),
+    lines.map((t) => h('div', {}, t)),
+    h('div', { class: 'small' }, 'Automatic deletions of personal data may be late. Restart the stack in Portainer and check the worker container’s log.'),
+    link ? h('a', { href: '#/system' }, 'Open the System page') : null);
 }
 
 // ---------------------------------------------------------------- teams

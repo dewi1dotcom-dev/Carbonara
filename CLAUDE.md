@@ -194,6 +194,7 @@ backend/
   app/pdisheet.py       PDI sheets: fill a model's PDF form (reportlab overlay + pypdf), page pictures (pypdfium2),
                         OCR field suggestions, stamp / signature pictures
   app/photostore.py     original + 1600px + 400px JPEG
+  app/workerstatus.py   the worker reports in (`worker_status`); status() = warnings for system admins
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
                         test drive + rental customer purge, rental car SVV refresh, received customer deliveries,
                         stopped kiosk tablets,
@@ -202,7 +203,7 @@ backend/
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet), messages (Today message board), dm (private messages)
-  migrations/           001…036
+  migrations/           001…037
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -260,6 +261,7 @@ frontend/               no build step; plain ES modules
 | 034 | `pdi_battery_checks` | `pdi_orders.done_battery_v` (12V reading), `sheet_checks` ("tick all boxes") |
 | 035 | `kiosk_language` | `kiosk_devices.language` ('en' / 'no', default 'no'), set on the Customer deliveries page |
 | 036 | `messages` | Today page message board (`body` ≤ 300, `team_id` (NULL = everyone), `created_by`, `created_at`; shown 24 h, then deleted); `private_messages` (sender, recipient, text and/or file / picture, `expires_at` = 72 working hours, `read_at`) |
+| 037 | `worker_status` | the background worker's check-ins (`name` 'loop' / 'housekeeping', `at`, `ok`, `detail` = step names + error types only) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -683,6 +685,12 @@ the server is LAN-only, so no customer phones / public internet).
   Norwegian label/help to `i18n.js`.
 - **Secrets** are write-only (the API returns the last 4 characters). The log records who
   changed which key, never the value.
+- **Background worker card (0.36.0)** (`workerstatus.py`, migration 037; `GET /system/worker`): the worker writes
+  `worker_status` 'loop' after every round (ok = false + `step:ErrorType` when deleting private messages or the SVV
+  sync failed) and 'housekeeping' after the daily cleanup. Problems: no check-in yet, **no round for 15 min**
+  (stopped), the last round had errors, **no daily cleanup for 26 h**, or the cleanup failed. Shown on the System page
+  ("✓ Running normally" or the red notice) and as a red notice at the top of **Today for system admins**
+  (`workerStatusNotice` from `system.js`). Why: the worker does the GDPR deletions the privacy notices promise.
 
 **PDI = nybilklargjøring (0.12.0)** (`routers/pdi.py`, `views/pdi.js`, `mailer.py`):
 - **Who and what:** new cars get a PDI at **RBV – Rygge Bilverksted**, a separate firm in the
@@ -1230,6 +1238,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.35.1 | Vehicles page: "+ New arrival" button (as on Today / Arrivals) |
 | 0.35.2 | PDI orders page: "✓ Delivered" on PDI-done cars takes the car off site with the note "Delivered" |
 | 0.35.3 | "Delivered" opens a dialog: confirm delivery and/or registration (marks the car as registered unless it already is) |
+| 0.36.0 | **Background worker warning:** the worker reports in every round; the System page and Today (system admins) warn when it has stopped, a step failed or the daily cleanup is late (migration 037) |
 
 **Next / ideas (not started):**
 - **HTTPS** (e.g. a Caddy container with a self-signed cert on 8443), then `secure=True` on the

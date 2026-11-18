@@ -24,7 +24,7 @@ import time
 import psycopg
 from psycopg.rows import dict_row
 
-from . import photostore, vegvesen
+from . import photostore, vegvesen, workerstatus
 from .common import (RETENTION_DUE_SQL, TEST_DRIVE_PURGE_DUE_SQL, purge_test_drive_customer, purge_vehicle,
                      soft_delete_vehicle)
 from .config import settings
@@ -145,22 +145,37 @@ def main() -> None:
              f"{settings.retention_years} years" if settings.retention_years > 0 else "off", settings.trash_days)
     last_housekeeping = 0.0
     while True:
+        failed = []  # "step:ErrorType" for this round, shown to system admins (no personal data)
         try:
             expire_private_messages()
-        except Exception:
+        except Exception as exc:
             log.exception("deleting expired private messages failed")
+            failed.append(f"private_messages:{type(exc).__name__}")
         if time.monotonic() - last_housekeeping >= HOUSEKEEPING_EVERY_S or not last_housekeeping:
             try:
                 housekeeping()
-            except Exception:
+                _report("housekeeping")
+            except Exception as exc:
                 log.exception("housekeeping failed")
+                _report("housekeeping", ok=False, detail=type(exc).__name__)
             last_housekeeping = time.monotonic()
         if vegvesen.is_configured():
             try:
                 run_once()
-            except Exception:
+            except Exception as exc:
                 log.exception("sync run failed")
+                failed.append(f"registry_sync:{type(exc).__name__}")
+        _report("loop", ok=not failed, detail=",".join(failed))
         time.sleep(IDLE_SECONDS)
+
+
+def _report(name: str, ok: bool = True, detail: str | None = None) -> None:
+    """Tell the System page / Today that the worker is alive (workerstatus.status)."""
+    try:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+            workerstatus.report(conn, name, ok, detail)
+    except Exception:
+        log.exception("could not write the worker status")
 
 
 if __name__ == "__main__":

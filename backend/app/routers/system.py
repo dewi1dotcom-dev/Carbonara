@@ -7,6 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
+from .. import workerstatus
 from ..auth import MENU_ITEMS, MORE_ITEMS, MORE_KEY, menu_more, require_superadmin
 from ..common import bad_request, conflict, not_found
 from ..config import BY_NAME, SETTINGS, convert, settings
@@ -153,6 +154,12 @@ def delete_team(team_id: int, request: Request, conn=Depends(get_conn)):
     if not conn.execute("DELETE FROM teams WHERE id = %s RETURNING id", (team_id,)).fetchone():
         raise not_found("Team")
     log.info("team %s deleted by staff %s", team_id, request.state.staff["id"])
+
+
+@router.get("/system/worker")
+def worker_status(conn=Depends(get_conn)):
+    """Is the background worker alive? (System page card, and a warning on Today for system admins.)"""
+    return workerstatus.status(conn)
 
 
 # --------------------------------------------------------------------------- #
