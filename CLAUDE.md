@@ -1308,6 +1308,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.37.1 | Fix: caddy container never started under Portainer (Caddyfile now built into a small image instead of mounted) |
 | 0.37.2 | System → HTTPS: Android steps say not to tap the downloaded file (install through Settings) and that "Network may be monitored" is normal |
 | 0.38.0 | **Phone / PC notifications** (Web Push over HTTPS): private messages, Today board, PDI date confirmed / done, PDI car not prepared, storage checks + 12V due, test drive / rental not back, worker / disk problems for system admins; turned on per device and chosen per person in the 👤 menu (migration 038) |
+| 0.38.1 | Private message conversation opened from a notification scrolls to the newest message (scrolls again as the page settles and pictures load) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

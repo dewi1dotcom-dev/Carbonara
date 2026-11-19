@@ -30,6 +30,21 @@ export async function dmChatView(el, [staffId]) {
   changed(); // opening it marked the messages as read
 
   const list = h('div', { class: 'dm-thread' });
+  // Scroll to the newest message. Once is not enough when the app was just opened (e.g. from a
+  // notification): the page is still being laid out and pictures load later and push it down. So it
+  // scrolls again shortly after and as pictures load, for a few seconds only (not while reading later).
+  let stickUntil = 0;
+  const toEnd = () => { if (list.isConnected && Date.now() < stickUntil) list.lastElementChild?.scrollIntoView({ block: 'end' }); };
+  const scrollToEnd = () => {
+    stickUntil = Date.now() + 3000;
+    requestAnimationFrame(toEnd);
+    setTimeout(toEnd, 300);
+    setTimeout(toEnd, 1000);
+    list.querySelectorAll('img').forEach((img) => { if (!img.complete) img.addEventListener('load', toEnd, { once: true }); });
+  };
+  // The person scrolls themselves: stop pulling the page down.
+  const unstick = () => { stickUntil = 0; };
+  ['touchstart', 'wheel'].forEach((ev) => window.addEventListener(ev, unstick, { passive: true }));
   let signature = '';
   const draw = (scroll) => {
     // Redraw only when something changed, so a picture being looked at doesn't jump.
@@ -39,7 +54,7 @@ export async function dmChatView(el, [staffId]) {
     signature = sig;
     list.replaceChildren(...(data.messages.length ? data.messages.map((m) => bubble(m, refresh))
       : [h('p', { class: 'empty' }, 'No messages yet. Write the first one below.')]));
-    if (scroll || grew) requestAnimationFrame(() => list.lastElementChild?.scrollIntoView({ block: 'end' }));
+    if (scroll || grew) scrollToEnd();
   };
   const refresh = async () => {
     data = await api.get(`/dm/with/${staffId}`);
@@ -59,7 +74,11 @@ export async function dmChatView(el, [staffId]) {
   draw(true);
 
   const timer = setInterval(() => {
-    if (!list.isConnected) { clearInterval(timer); return; } // left the page
+    if (!list.isConnected) { // left the page
+      clearInterval(timer);
+      ['touchstart', 'wheel'].forEach((ev) => window.removeEventListener(ev, unstick));
+      return;
+    }
     refresh().catch(() => { /* try again next time */ });
   }, POLL_MS);
 }
