@@ -142,6 +142,13 @@ function httpsCard(s) {
         h('span', {}, s.ca_ready ? h('a', { href: '/carbonara-ca.crt', download: 'carbonara-ca.crt' }, '⬇ carbonara-ca.crt') : '–')),
       step('2. Install it',
         'Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate → choose the file.',
+        // Android 11+ refuses a CA certificate opened from the browser or the file app ("must be installed in
+        // Settings"; "from <app>" names the app that opened the file, "null" when it reports no name). Afterwards Android always shows
+        // "Network may be monitored" while a user-installed certificate is on the device; that's expected.
+        'Android: don\'t tap the downloaded file (Android refuses it there). Go through Settings as above; on Samsung: '
+        + 'Settings → Security and privacy → More security settings → Install from device storage → CA certificate. '
+        + 'Or search for "CA certificate" in Settings.',
+        'Android then shows "Network may be monitored". That is normal for an installed certificate and can be ignored.',
         'iPhone / iPad: open the file in Safari → Settings → Profile Downloaded → Install. Then Settings → General → About → '
         + 'Certificate Trust Settings → turn on "Carbonara Local Root".',
         'Windows (Chrome / Edge / Opera): open the file → Install Certificate → Current User → "Place all certificates in the '

@@ -1268,6 +1268,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.36.1 | **Disk space warning:** System page card (free space, usage bar, database size); amber / red warning on Today for system admins |
 | 0.37.0 | **HTTPS (local):** `caddy` container on 8443 with Carbonara's own certificate (installed once per device, System page → HTTPS); secure cookies over HTTPS; devices that trust it move from http:// by themselves |
 | 0.37.1 | Fix: caddy container never started under Portainer (Caddyfile now built into a small image instead of mounted) |
+| 0.37.2 | System → HTTPS: Android steps say not to tap the downloaded file (install through Settings) and that "Network may be monitored" is normal |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

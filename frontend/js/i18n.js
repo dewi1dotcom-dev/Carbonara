@@ -643,6 +643,10 @@ const NO = {
   '3. Open the https address': '3. Åpne https-adressen',
   'Android: Settings → Security → Encryption & credentials → Install a certificate → CA certificate → choose the file.':
     'Android: Innstillinger → Sikkerhet → Kryptering og legitimasjon → Installer et sertifikat → CA-sertifikat → velg filen.',
+  'Android: don\'t tap the downloaded file (Android refuses it there). Go through Settings as above; on Samsung: Settings → Security and privacy → More security settings → Install from device storage → CA certificate. Or search for "CA certificate" in Settings.':
+    'Android: ikke trykk på den nedlastede filen (Android avviser den der). Gå via Innstillinger som over; på Samsung: Innstillinger → Sikkerhet og personvern → Flere sikkerhetsinnstillinger → Installer fra enhetslagring → CA-sertifikat. Eller søk etter «CA-sertifikat» i Innstillinger.',
+  'Android then shows "Network may be monitored". That is normal for an installed certificate and can be ignored.':
+    'Android viser deretter «Nettverket kan bli overvåket». Det er normalt for et installert sertifikat og kan ignoreres.',
   'iPhone / iPad: open the file in Safari → Settings → Profile Downloaded → Install. Then Settings → General → About → Certificate Trust Settings → turn on "Carbonara Local Root".':
     'iPhone / iPad: åpne filen i Safari → Innstillinger → Profil lastet ned → Installer. Så Innstillinger → Generelt → Om → Innstillinger for sertifikatklarering → slå på «Carbonara Local Root».',
   'Windows (Chrome / Edge / Opera): open the file → Install Certificate → Current User → "Place all certificates in the following store" → Trusted Root Certification Authorities → Finish. Restart the browser.':
