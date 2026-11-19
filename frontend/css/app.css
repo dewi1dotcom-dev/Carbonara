@@ -400,6 +400,11 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 /* System page → HTTPS: the three steps per device. */
 .https-steps { list-style: none; padding: 0; margin: .75rem 0 0; display: flex; flex-direction: column; gap: .75rem; }
 .https-steps li div { margin-top: .2rem; }
+/* Notifications dialog (views/notifications.js): kinds a person wants */
+.push-prefs { margin-top: 1.25rem; }
+.push-prefs h3 { margin: 0; }
+.push-prefs label.check { margin-top: .6rem; align-items: flex-start; }
+.push-prefs label.check input { flex: none; }
 /* System page → Disk space: how much of the disk is used. */
 .disk-bar { height: 12px; border-radius: 6px; background: var(--border); overflow: hidden; margin: .75rem 0 .25rem; }
 .disk-bar span { display: block; height: 100%; background: var(--good); }

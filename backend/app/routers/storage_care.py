@@ -251,6 +251,25 @@ def charge_due(row: dict, today) -> Optional[dict]:
     return {"due": due, "days": (due - today).days}
 
 
+def storage_check_due_list(conn, within_days: int = 3) -> list[dict]:
+    """For the Today board and the morning notification: new cars in storage (until the PDI is done)
+    whose next storage check is due within a few days or overdue."""
+    out = []
+    for row in conn.execute(
+            """SELECT v.id FROM vehicles v
+                WHERE v.deleted_at IS NULL AND v.condition = 'new' AND v.status = 'in_storage'
+                  AND NOT EXISTS (SELECT 1 FROM pdi_orders o WHERE o.vehicle_id = v.id AND o.status = 'done')""").fetchall():
+        p = programme(conn, row["id"])
+        n = p["next"]
+        if n and n["days"] <= within_days:
+            v = p["vehicle"]
+            out.append({"id": v["id"], "vin": v["vin"], "make": v["make"], "model": v["model"],
+                        "model_year": v["model_year"], "registration_number": v["registration_number"],
+                        "title": n["title_en"], "due": n["due"], "in_days": n["days"], "kind": n["kind"]})
+    out.sort(key=lambda r: r["in_days"])
+    return out
+
+
 def charging_due_list(conn, today, within_days: int = 3) -> list[dict]:
     """For the Today board: used cars whose 12V charge is due within a few days or overdue."""
     out = []

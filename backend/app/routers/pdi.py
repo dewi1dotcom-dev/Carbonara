@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field, field_validator
 
-from .. import mailer, pdisheet
+from .. import mailer, pdisheet, push
 from ..auth import require_admin
 from ..common import (RIGHT_PHOTO_SQL, bad_request, conflict, log_event, not_found, place_in_location, tyre_season,
                       tyre_warning)
@@ -127,6 +127,14 @@ def _order(conn, order_id: int) -> dict:
     if not row:
         raise not_found("PDI order")
     return row
+
+
+def _notify_status(conn, o: dict, actor: Optional[int], *, en: tuple[str, str], no: tuple[str, str]) -> None:
+    """PDI date confirmed / PDI done: a notification to whoever made the order (not when they did it)."""
+    vid = o["vehicle_id"]
+    push.notify(conn, [o["created_by"] or o["sent_by"]], "pdi_status", en=en, no=no, tag=f"pdi-{o['id']}",
+                url=lambda s: f"#/pdi-orders?car={vid}" if push.has_menu(s, "pdi_orders") else f"#/vehicles/{vid}",
+                exclude=actor)
 
 
 def _open_order(conn, order_id: int) -> dict:
@@ -363,7 +371,11 @@ def confirm_date(order_id: int, body: WorkOrderIn, request: Request, conn=Depend
     if row["work_order"] and row["work_order"] != work_order:  # confirmed again with another number
         log_event(conn, row["vehicle_id"], "pdi_work_order_changed", staff_id=_me(request),
                   data={"from": row["work_order"], "to": work_order})
-    return _order(conn, order_id)
+    o = _order(conn, order_id)
+    when = o["pdi_local"].strftime("%d.%m.%Y %H:%M")
+    _notify_status(conn, o, _me(request), en=("PDI date confirmed", f"{push.car_text(o)} · {when}"),
+                   no=("Dato for nybilklargjøring bekreftet", f"{push.car_text(o)} · {when}"))
+    return o
 
 
 @router.put("/pdi/{order_id}/work-order")
@@ -457,6 +469,8 @@ def mark_done(order_id: int, request: Request, body: Optional[DoneIn] = None, co
     log_event(conn, row["vehicle_id"], "pdi_done", staff_id=_me(request),
               data={"km": body.km, "battery": body.battery, "sheet": body.template_id is not None})
     result = _order(conn, order_id)
+    _notify_status(conn, result, _me(request), en=("PDI done", push.car_text(result)),
+                   no=("Nybilklargjøring utført", push.car_text(result)))
     if old:
         conn.commit()  # remove the old file only once the change is final
         pdisheet.remove(old, "pdf")

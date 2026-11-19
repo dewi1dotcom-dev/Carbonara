@@ -137,6 +137,8 @@ Dockerfile notes. These were learned the hard way, so don't undo them:
 - **numpy must stay at 1.26.4 (< 2).** Use `opencv-python-headless`, never `opencv-python`.
 - System packages: `tesseract-ocr libzbar0 libdmtx0b`.
 - PDI sheets need `pypdf`, `reportlab`, `pypdfium2` (pip wheels, no system packages).
+- Notifications need `pywebpush==2.0.3` (pulls cryptography, aiohttp, py-vapid, http-ece); the import check covers it
+  and that numpy stayed below 2.
 - `BUILD_TIME` is stamped in ISO UTC at build time; `VERSION` is copied in. Both are served at
   `/api/version`.
 
@@ -214,6 +216,7 @@ backend/
                         OCR field suggestions, stamp / signature pictures
   app/photostore.py     original + 1600px + 400px JPEG
   app/workerstatus.py   the worker reports in (`worker_status`); status() = warnings for system admins
+  app/push.py           phone / PC notifications (Web Push): notify() queues, the app thread sends + scheduled ones
   app/diskstatus.py     free space on the disk holding PHOTO_DIR + database size (System page, Today)
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
                         test drive + rental customer purge, rental car SVV refresh, received customer deliveries,
@@ -222,12 +225,13 @@ backend/
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, rentals, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
-                        the order's sheet), messages (Today message board), dm (private messages)
-  migrations/           001…037
+                        the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test)
+  migrations/           001…038
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
                         apple-touch-icon (drawn from the SVG; `.gitignore` allows only frontend/img/*.png)
+  sw.js                 service worker for notifications only (no caching); served at /sw.js
   manifest.json         installed app (Chrome "Install"): name + PNG icons; without them Chrome shows a "C"
   fonts/                Space Grotesk (logo font, bundled; SIL OFL)
   js/app.js             hash router (ignores "?…" in the hash), login boot, user menu, translator start
@@ -238,7 +242,7 @@ frontend/               no build step; plain ES modules
                         vehicles, documents, pdi (card + banner + PDI page), pdiorders (PDI orders page), pdisheet (PDI sheets,
                         stamps, signature, PDI done dialog), storagecare (card + check form
                         + report), messages (Today message board), dm (private messages), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
-                        login, settings, system
+                        login, settings, system, notifications (👤 menu → Notifications)
 ```
 
 **Migrations:**
@@ -282,6 +286,7 @@ frontend/               no build step; plain ES modules
 | 035 | `kiosk_language` | `kiosk_devices.language` ('en' / 'no', default 'no'), set on the Customer deliveries page |
 | 036 | `messages` | Today page message board (`body` ≤ 300, `team_id` (NULL = everyone), `created_by`, `created_at`; shown 24 h, then deleted); `private_messages` (sender, recipient, text and/or file / picture, `expires_at` = 72 working hours, `read_at`) |
 | 037 | `worker_status` | the background worker's check-ins (`name` 'loop' / 'housekeeping', `at`, `ok`, `detail` = step names + error types only) |
+| 038 | `push` | `push_subscriptions` (per browser, tied to the login session), `staff.push_prefs`, `push_outbox` (queued notifications), `push_sent` (scheduled ones already sent) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -755,8 +760,8 @@ the server is LAN-only, so no customer phones / public internet).
   - **Notification:** a 🔔 bar under the top bar on **every page** (`#notify`, `refreshNotify()`
     in `app.js`, `GET /pdi/prepare-due`) for booked PDIs up to the **next working day** (a
     Friday includes Monday) that aren't prepared. Refreshed on every navigation, every 15 min
-    and on the `carbonara:pdi-changed` event. The browser Notification API wasn't usable
-    without HTTPS (possible now over the https address, not built).
+    and on the `carbonara:pdi-changed` event. Also sent to phones from 0.38.0 (`pdi_prep`, see *Phone / PC
+    notifications*).
   - **The form:** trade plates (from Settings → Trade plates; it warns if the set is out on a
     test drive, but doesn't block); where the car is (storage spot dropdown, and **choosing
     another spot moves the car**, logged as `moved`) plus a short message; and where the
@@ -979,6 +984,39 @@ storage, periodic checklist, 12V battery form).
   - Several messages: one at a time, newest first, **changing every 8 s**, with "n / m" and dots to switch.
     The board reloads every minute so new messages show up.
   - The writer or an admin can delete a message (✕). Message texts are never logged.
+
+**Phone / PC notifications (0.38.0)** (Web Push; migration 038; `app/push.py`, `routers/notifications.py`,
+`views/notifications.js`, `frontend/sw.js`; the user's request):
+- **Needs HTTPS** (browsers only allow it on a secure address, so the certificate must be installed). Each person turns it
+  on per device: 👤 menu → **Notifications** ("Turn on notifications", "Send a test", "Turn off on this device") and
+  ticks which kinds they want (`staff.push_prefs`, all their devices; a missing key = on). iPhone / iPad only from
+  the Home Screen app; Opera Touch probably not (use Chrome). The kiosk tablet gets none.
+- **How it's sent:** the browser's push address (Google / Apple / Mozilla / Microsoft; `PUSH_HOSTS` allowlist, never a
+  local address) + keys in `push_subscriptions`, **tied to the login session** (`session_hash` FK ON DELETE CASCADE):
+  log out, PIN reset or expired session = no more notifications on that device. The device remembers who turned it on
+  (`localStorage carbonara.pushOwner`); `syncPush()` at boot re-binds it to the current session, or drops it if
+  someone else is logged in now. Logout calls `pushLogout()` first.
+- `push.notify(conn, staff_ids|None, kind, en=(title, body), no=(title, body), url=…)` only writes `push_outbox` rows
+  in the request's transaction (savepoint, never raises; a failed request sends nothing). A **thread in the app
+  process** (`push.start()` in `main.py`'s lifespan) sends them every 3 s with `pywebpush` (encrypted for the browser,
+  signed with our VAPID key: one `app_settings` row `push_vapid` = "private public", made at startup, never shown;
+  changing it stops every device until turned on again). 404/410 from the push service deletes the subscription.
+  Signature contact = `mailto:` the company e-mail (System → Company), else a placeholder.
+- **Texts are short, in the recipient's language (both languages in `push.py` / the hooks, since the server writes
+  them), and never hold customer data** (no customer names, phones, message texts): they show on locked phones.
+- **Kinds** (`KIND_MENU`: kinds tied to a page only go to people whose team sees it):
+  - `dm` new private message ("From {name}", opens the conversation) — `routers/dm.py`
+  - `board` new Today board message for your team / everyone (writer's name only) — `routers/messages.py`
+  - `pdi_status` PDI date confirmed / PDI done, to whoever made the order (not when they did it themselves) — `pdi._notify_status`
+  - scheduled, once a minute by the same thread (`scheduled()`, `push_sent` keys make each go out once; kept 30 days):
+    - `pdi_prep` booked PDIs up to the next working day not prepared (the 🔔 bar), Mon–Fri 07:30–21:00, once per order a day
+    - `daily_due` storage checks + 12V charging due (same lists as Today: `storage_check_due_list`,
+      `charging_due_list`), one per working day from 07:30
+    - `late_return` test drive out > 3 h / rental past its expected return, to whoever handed it out, 07:00–21:00
+    - `system` (system admins) worker problems and disk warn / bad, each at most once a day, not in the first
+      10 min after a start. In the app, not the worker, so it can warn when the worker has stopped.
+- `/sw.js` (site root, scope `/`) caches nothing; a tap opens the page (`carbonara-open` message to an open window,
+  else a new one); a `dm` push updates the 💬 count (`carbonara-push` → `carbonara:dm-changed`).
 
 **Private messages (0.34.0)** (`private_messages`, migration 036; `routers/dm.py`, `views/dm.js`; the user's request):
 - **Between two users**, any team (no menu item; 💬 in the top bar with a red unread count, `GET /dm/unread`, polled every
@@ -1269,6 +1307,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.37.0 | **HTTPS (local):** `caddy` container on 8443 with Carbonara's own certificate (installed once per device, System page → HTTPS); secure cookies over HTTPS; devices that trust it move from http:// by themselves |
 | 0.37.1 | Fix: caddy container never started under Portainer (Caddyfile now built into a small image instead of mounted) |
 | 0.37.2 | System → HTTPS: Android steps say not to tap the downloaded file (install through Settings) and that "Network may be monitored" is normal |
+| 0.38.0 | **Phone / PC notifications** (Web Push over HTTPS): private messages, Today board, PDI date confirmed / done, PDI car not prepared, storage checks + 12V due, test drive / rental not back, worker / disk problems for system admins; turned on per device and chosen per person in the 👤 menu (migration 038) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

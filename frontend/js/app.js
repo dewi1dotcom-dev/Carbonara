@@ -10,6 +10,7 @@ import { dmChatView, dmListView } from './views/dm.js';
 import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
+import { notificationsDialog, pushLogout, syncPush } from './views/notifications.js';
 import { pdiListView, prepDialog } from './views/pdi.js';
 import { pdiOrdersView } from './views/pdiorders.js';
 import { signatureDialog } from './views/pdisheet.js';
@@ -236,10 +237,13 @@ function renderUser() {
           }, 'Change PIN'),
           // Put on the PDI sheets this person marks as done (also under Settings).
           h('button', { class: 'btn', type: 'button', onClick: () => { close(); signatureDialog(); } }, 'My signature'),
+          // Phone / PC notifications for this device + which kinds (views/notifications.js).
+          h('button', { class: 'btn', type: 'button', onClick: () => { close(); notificationsDialog(); } }, 'Notifications'),
           h('button', {
             class: 'btn danger', type: 'button',
             onClick: async () => {
               close();
+              await pushLogout(); // this device stops getting the person's notifications
               try { await api.post('/auth/logout'); } catch { /* already logged out */ }
               await boot();
             },
@@ -277,6 +281,7 @@ function boot() {
         return;
       }
       setInspectorId(state.me.id); // staff pickers default to whoever is logged in
+      syncPush(); // not awaited: keeps this device's notifications with whoever is logged in
       await render();
     } catch (e) {
       showError(e);
@@ -291,6 +296,12 @@ function boot() {
 
 window.addEventListener('carbonara:logged-out', () => { if (session.me) { session.me = null; boot(); } });
 window.addEventListener('hashchange', () => { if (session.me) render(); });
+// From /sw.js: a tapped notification opens its page in this window; a new private message updates the 💬 count.
+navigator.serviceWorker?.addEventListener('message', (e) => {
+  const msg = e.data || {};
+  if (msg.type === 'carbonara-open' && typeof msg.url === 'string' && msg.url.startsWith('#/')) location.hash = msg.url;
+  if (msg.type === 'carbonara-push' && String(msg.tag).startsWith('dm')) window.dispatchEvent(new Event('carbonara:dm-changed'));
+});
 /* HTTPS (the caddy service): a device opened over plain HTTP that already trusts Carbonara's
  * certificate moves to https:// by itself. The test request only succeeds when the certificate is
  * trusted, so devices without it stay on http:// (and can still log in there). It also matters

@@ -737,6 +737,32 @@ const NO = {
   'Nordland, Troms and Finnmark': 'Nordland, Troms og Finnmark',
   'The studded tyre season for the summer / winter wheels warnings. South and Central Norway: 1 November to the first Sunday after Easter Monday. Nordland, Troms and Finnmark: 16 October to 30 April.':
     'Piggdekksesongen som varslene om sommer- og vinterhjul bygger på. Sør- og Midt-Norge: 1. november til og med første søndag etter andre påskedag. Nordland, Troms og Finnmark: 16. oktober til og med 30. april.',
+  // Phone / PC notifications (0.38.0)
+  'Notifications': 'Varsler', 'Notify me about': 'Varsle meg om', 'Applies to all your devices.': 'Gjelder alle enhetene dine.',
+  'New private messages': 'Nye private meldinger', 'New messages on the Today page': 'Nye meldinger på I dag-siden',
+  'PDI soon and the car is not prepared': 'Nybilklargjøring snart og bilen er ikke gjort klar',
+  'PDI date confirmed or PDI done (orders you made)': 'Dato for nybilklargjøring bekreftet eller nybilklargjøring utført (bestillinger du har laget)',
+  'Test drive or rental car not back (cars you handed out)': 'Prøvekjøring eller leiebil ikke tilbake (biler du har levert ut)',
+  'Storage checks and 12V charging due (in the morning)': 'Lagerkontroller og 12V-lading som forfaller (om morgenen)',
+  'Background worker or disk space problems': 'Problemer med bakgrunnsjobben eller diskplassen',
+  'Carbonara can notify you on this phone or PC, also when Carbonara is closed. Notifications never show customer details.':
+    'Carbonara kan varsle deg på denne telefonen eller PC-en, også når Carbonara er lukket. Varslene viser aldri kundeopplysninger.',
+  'Notifications only work when Carbonara is opened on its https address, with Carbonara\'s certificate installed on this device. Ask your system administrator.':
+    'Varsler virker bare når Carbonara åpnes på https-adressen, med Carbonaras sertifikat installert på denne enheten. Spør systemadministratoren.',
+  'iPhone / iPad: add Carbonara to the Home Screen (Share → Add to Home Screen), open it from there, and turn notifications on there.':
+    'iPhone / iPad: legg Carbonara til på Hjem-skjermen (Del → Legg til på Hjem-skjerm), åpne den derfra og slå på varsler der.',
+  'This browser can\'t show notifications. Use Chrome.': 'Denne nettleseren kan ikke vise varsler. Bruk Chrome.',
+  'Notifications are blocked for Carbonara in this browser. Allow them in the browser\'s site settings (the lock or settings icon next to the address), then open this again.':
+    'Varsler er blokkert for Carbonara i denne nettleseren. Tillat dem i nettleserens nettstedsinnstillinger (låsen eller innstillingsikonet ved adressen), og åpne dette på nytt.',
+  'Notifications are blocked for Carbonara in this browser': 'Varsler er blokkert for Carbonara i denne nettleseren',
+  'Notifications were not allowed': 'Varsler ble ikke tillatt',
+  'Notifications are on for this device.': 'Varsler er på for denne enheten.',
+  'Notifications are off on this device.': 'Varsler er av på denne enheten.',
+  'Send a test': 'Send en test', 'Turn off on this device': 'Slå av på denne enheten',
+  'Turn on notifications': 'Slå på varsler', 'Notifications turned on': 'Varsler slått på',
+  'Test sent. It should arrive within a few seconds.': 'Test sendt. Den skal komme innen noen sekunder.',
+  'This browser\'s notification service is not supported': 'Varseltjenesten til denne nettleseren støttes ikke',
+  'Notifications are not turned on on any of your devices': 'Varsler er ikke slått på på noen av enhetene dine',
 };
 
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.

@@ -11,6 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from .. import push
 from ..auth import require_admin
 from ..common import bad_request, not_found
 from ..db import get_conn
@@ -90,6 +91,11 @@ def add_message(body: MessageIn, request: Request, conn=Depends(get_conn)):
         team_id = int(body.to)
     row = conn.execute("INSERT INTO messages (body, team_id, created_by) VALUES (%s, %s, %s) RETURNING id",
                        (text, team_id, me["id"])).fetchone()
+    # The text itself isn't sent: it shows on locked phones and may name a customer.
+    to = None if team_id is None else [r["id"] for r in conn.execute(
+        "SELECT id FROM staff WHERE team_id = %s", (team_id,)).fetchall()]
+    push.notify(conn, to, "board", en=("New message on the Today page", f"From {me['name']}"),
+                no=("Ny melding på I dag-siden", f"Fra {me['name']}"), url="#/", tag="board", exclude=me["id"])
     return {"id": row["id"]}
 
 

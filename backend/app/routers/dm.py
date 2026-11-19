@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse
 
-from .. import photostore
+from .. import photostore, push
 from ..common import bad_request, not_found
 from ..config import settings
 from ..db import get_conn
@@ -190,6 +190,9 @@ def send(
         if meta:
             photostore.remove(meta)
         raise
+    sender = request.state.staff["name"]
+    push.notify(conn, [staff_id], "dm", en=("New private message", f"From {sender}"),
+                no=("Ny privat melding", f"Fra {sender}"), url=f"#/messages/{me}", tag=f"dm-{me}", urgency="high")
     return {"id": row["id"]}
 
 

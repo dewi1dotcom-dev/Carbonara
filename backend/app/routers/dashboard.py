@@ -7,7 +7,7 @@ from .. import vegvesen
 from ..common import READY_SQL, service_due, tyre_season, tyre_warning
 from ..db import get_conn
 from .pdi import ORDER_SELECT, THIS_WEEK_SQL
-from .storage_care import charging_due_list, programme
+from .storage_care import charging_due_list, storage_check_due_list
 
 router = APIRouter(tags=["dashboard"])
 
@@ -73,19 +73,7 @@ def dashboard(conn=Depends(get_conn)):
     service.sort(key=lambda r: r["in_days"])
 
     # Storage maintenance (new cars in storage until PDI): due within 3 days or overdue.
-    storage_due = []
-    for row in conn.execute(
-            """SELECT v.id FROM vehicles v
-                WHERE v.deleted_at IS NULL AND v.condition = 'new' AND v.status = 'in_storage'
-                  AND NOT EXISTS (SELECT 1 FROM pdi_orders o WHERE o.vehicle_id = v.id AND o.status = 'done')""").fetchall():
-        p = programme(conn, row["id"])
-        n = p["next"]
-        if n and n["days"] <= 3:
-            v = p["vehicle"]
-            storage_due.append({"id": v["id"], "vin": v["vin"], "make": v["make"], "model": v["model"],
-                                "model_year": v["model_year"], "registration_number": v["registration_number"],
-                                "title": n["title_en"], "due": n["due"], "in_days": n["days"], "kind": n["kind"]})
-    storage_due.sort(key=lambda r: r["in_days"])
+    storage_due = storage_check_due_list(conn)
     battery_due = charging_due_list(conn, today)  # used cars: 12V charged every month
 
     # Rental cars (their own fleet, not in vehicles): EU-kontroll within 60 days, and
