@@ -1023,6 +1023,9 @@ storage, periodic checklist, 12V battery form).
   minute and on `carbonara:dm-changed`). `#/messages` lists every active user (latest conversation first, "n new");
   `#/messages/:id` is the conversation (polls every 10 s; opening it marks the messages to you as read; the sender sees
   "✓ Read" / "Not read yet").
+- **Layout (0.38.2):** the conversation scrolls in its own box (`.dm-thread`, sized by `fit()` to fill the screen down to
+  the writing field, which sits under it, not sticky). Opening scrolls the box to the newest message, again as the page
+  settles and pictures load (3 s, stops when the person scrolls).
 - **Text and/or one file per message** (`POST /dm/with/{id}`, multipart). Text max 2 000 characters. Files: the same
   whitelist as car documents (`documents.FILE_TYPES`), max `MAX_UPLOAD_MB`. Pictures go through `photostore.store`
   (original + 1600 / 400 px JPEG, so HEIC shows too) and show as a thumbnail; other files are stored as uploaded under
@@ -1309,6 +1312,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.37.2 | System → HTTPS: Android steps say not to tap the downloaded file (install through Settings) and that "Network may be monitored" is normal |
 | 0.38.0 | **Phone / PC notifications** (Web Push over HTTPS): private messages, Today board, PDI date confirmed / done, PDI car not prepared, storage checks + 12V due, test drive / rental not back, worker / disk problems for system admins; turned on per device and chosen per person in the 👤 menu (migration 038) |
 | 0.38.1 | Private message conversation opened from a notification scrolls to the newest message (scrolls again as the page settles and pictures load) |
+| 0.38.2 | Private messages: the conversation scrolls in its own box with the writing field under it (the field no longer covers the newest messages), opened at the newest message |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

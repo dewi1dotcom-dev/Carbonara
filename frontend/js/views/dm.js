@@ -30,11 +30,25 @@ export async function dmChatView(el, [staffId]) {
   changed(); // opening it marked the messages as read
 
   const list = h('div', { class: 'dm-thread' });
-  // Scroll to the newest message. Once is not enough when the app was just opened (e.g. from a
-  // notification): the page is still being laid out and pictures load later and push it down. So it
-  // scrolls again shortly after and as pictures load, for a few seconds only (not while reading later).
+  // The messages scroll in their own box, with the writing field under it (0.38.2): before, the field
+  // stuck to the bottom of the screen and covered the newest messages. The box fills the screen down
+  // to the writing field (CSS gives a fallback height).
+  let compose = null;
+  const fit = () => {
+    if (!list.isConnected) return;
+    const top = list.getBoundingClientRect().top + window.scrollY;
+    const below = (compose?.offsetHeight || 0) + 28; // the field + margins
+    list.style.height = `${Math.max(240, Math.round(window.innerHeight - top - below))}px`;
+  };
+  // Scroll the box to the newest message. Once is not enough when the app was just opened (e.g. from a
+  // notification): the page is still being laid out and pictures load later. So it scrolls again shortly
+  // after and as pictures load, for a few seconds only, and stops when the person scrolls themselves.
   let stickUntil = 0;
-  const toEnd = () => { if (list.isConnected && Date.now() < stickUntil) list.lastElementChild?.scrollIntoView({ block: 'end' }); };
+  const toEnd = () => {
+    if (!list.isConnected) return;
+    fit();
+    if (Date.now() < stickUntil) list.scrollTop = list.scrollHeight;
+  };
   const scrollToEnd = () => {
     stickUntil = Date.now() + 3000;
     requestAnimationFrame(toEnd);
@@ -42,9 +56,10 @@ export async function dmChatView(el, [staffId]) {
     setTimeout(toEnd, 1000);
     list.querySelectorAll('img').forEach((img) => { if (!img.complete) img.addEventListener('load', toEnd, { once: true }); });
   };
-  // The person scrolls themselves: stop pulling the page down.
   const unstick = () => { stickUntil = 0; };
-  ['touchstart', 'wheel'].forEach((ev) => window.addEventListener(ev, unstick, { passive: true }));
+  ['touchstart', 'wheel'].forEach((ev) => list.addEventListener(ev, unstick, { passive: true }));
+  const onResize = () => { const atEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 40; fit(); if (atEnd) list.scrollTop = list.scrollHeight; };
+  window.addEventListener('resize', onResize);
   let signature = '';
   const draw = (scroll) => {
     // Redraw only when something changed, so a picture being looked at doesn't jump.
@@ -70,13 +85,14 @@ export async function dmChatView(el, [staffId]) {
         h('h1', { class: 'dm-title' }, h('span', { class: 'msg-initials', translate: 'no' }, p.initials), h('span', { translate: 'no' }, p.name)),
         h('div', { class: 'muted small' }, RULE))),
     list,
-    p.active ? composer(staffId, refresh) : h('div', { class: 'notice warn' }, 'This person is deactivated and can’t receive messages.'));
+    (compose = p.active ? composer(staffId, refresh)
+      : h('div', { class: 'notice warn' }, 'This person is deactivated and can’t receive messages.')));
   draw(true);
 
   const timer = setInterval(() => {
     if (!list.isConnected) { // left the page
       clearInterval(timer);
-      ['touchstart', 'wheel'].forEach((ev) => window.removeEventListener(ev, unstick));
+      window.removeEventListener('resize', onResize);
       return;
     }
     refresh().catch(() => { /* try again next time */ });
