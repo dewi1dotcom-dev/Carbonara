@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 
-from .. import diskstatus, workerstatus
+from .. import caddyhost, diskstatus, workerstatus
 from ..auth import MENU_ITEMS, MORE_ITEMS, MORE_KEY, menu_more, require_superadmin
 from ..common import bad_request, conflict, not_found
 from ..config import BY_NAME, SETTINGS, convert, settings
@@ -68,6 +68,8 @@ def save_setting(name: str, body: SettingIn, request: Request, conn=Depends(get_
     conn.commit()
     settings.reload()
     log.info("setting %s changed by staff %s", s.env, request.state.staff["id"])  # never the value
+    if name == "carbonara_host":
+        caddyhost.write()  # caddy picks it up within ~10 s
     return {"ok": True}
 
 
@@ -79,6 +81,8 @@ def reset_setting(name: str, request: Request, conn=Depends(get_conn)):
     conn.commit()
     settings.reload()
     log.info("setting %s reset by staff %s", BY_NAME[name].env, request.state.staff["id"])
+    if name == "carbonara_host":
+        caddyhost.write()  # back to the stack's CARBONARA_HOST (or localhost)
 
 
 # --------------------------------------------------------------------------- #

@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .db import pool
 from .migrate import run_migrations
-from . import push
+from . import caddyhost, push
 from .auth import require_staff
 from .routers import (admin, dashboard, deliveries, dm, documents, inspections, messages, notifications, pdi,
                       pdi_sheets, rentals, session, storage_care, system, testdrives, vehicles, vin)
@@ -23,6 +23,7 @@ async def lifespan(app: FastAPI):
     run_migrations()
     settings.photo_dir.mkdir(parents=True, exist_ok=True)
     pool.open(wait=True, timeout=30)
+    caddyhost.write()  # the HTTPS server address from the System page, for the caddy container
     push.start()  # sends queued phone notifications and makes the scheduled ones (app/push.py)
     yield
     push.stop()

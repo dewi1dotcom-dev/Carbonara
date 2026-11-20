@@ -636,8 +636,15 @@ const NO = {
   'Carbonara has its own certificate. Install it once on each phone, tablet and PC, then use the https address. Plain HTTP keeps working until every device has moved over.':
     'Carbonara har sitt eget sertifikat. Installer det én gang på hver telefon, nettbrett og PC, og bruk så https-adressen. Vanlig HTTP virker fortsatt til alle enhetene har gått over.',
   'HTTPS address': 'HTTPS-adresse',
-  'The certificate is not ready yet. Check that the caddy container is running and CARBONARA_HOST is set in the stack.':
-    'Sertifikatet er ikke klart ennå. Sjekk at caddy-containeren kjører og at CARBONARA_HOST er satt i stacken.',
+  'The certificate is not ready yet. Check that the caddy container is running.':
+    'Sertifikatet er ikke klart ennå. Sjekk at caddy-containeren kjører.',
+  // ---- Server address (System → HTTPS, 0.39.0)
+  'Server address': 'Serveradresse', 'Server address saved': 'Serveradresse lagret',
+  'The address staff type to open Carbonara here, e.g. the server\'s IP address. The HTTPS certificate is made for it. A change takes effect within half a minute; installed certificates keep working.':
+    'Adressen de ansatte skriver for å åpne Carbonara her, f.eks. serverens IP-adresse. HTTPS-sertifikatet lages for den. En endring virker innen et halvt minutt; installerte sertifikater fortsetter å virke.',
+  'No server address is saved yet. This page is open at ': 'Ingen serveradresse er lagret ennå. Denne siden er åpnet på ',
+  'Server address: type an IP address (e.g. 192.168.1.20) or a host name, without http:// or a port':
+    'Serveradresse: skriv en IP-adresse (f.eks. 192.168.1.20) eller et vertsnavn, uten http:// og port',
   '1. Download the certificate on the device': '1. Last ned sertifikatet på enheten',
   '2. Install it': '2. Installer det',
   '3. Open the https address': '3. Åpne https-adressen',
@@ -918,7 +925,7 @@ const NO_PATTERNS = [
   ['{n} car moved to {}; {} deleted', '{1} bil flyttet til {2}; {3} slettet'], ['{n} cars moved to {}; {} deleted', '{1} biler flyttet til {2}; {3} slettet'],
   ['The {n} car already in {} stay there ', 'Den {1} bilen som allerede står på {2}, blir stående '], ['The {n} cars already in {} stay there ', 'De {1} bilene som allerede står på {2}, blir stående '],
   ['as "not in a sub-zone" until moved into one. New cars must go into a sub-zone.', 'som «ikke i en undersone» til de flyttes inn i en. Nye biler må plasseres i en undersone.'],
-  ['Name', 'Navn'], ['E-mail address', 'E-postadresse'], ['Choices, separated by commas (empty = none)', 'Valg, skilt med komma (tom = ingen)'],
+  ['Use {}', 'Bruk {1}'], ['Name', 'Navn'], ['E-mail address', 'E-postadresse'], ['Choices, separated by commas (empty = none)', 'Valg, skilt med komma (tom = ingen)'],
   ['API key configured (ending in …{}). ', 'API-nøkkel satt (slutter på …{1}). '], ['API key configured. ', 'API-nøkkel satt. '],
   ['Registered vehicles are re-synced every {n} days.', 'Registrerte biler synkroniseres hver {1}. dag.'], ['Latest error ({}): {}', 'Siste feil ({1}): {2}'],
   [' for {n} days and can be restored. After that they are removed for good, with all photos.', ' i {1} dager og kan gjenopprettes. Deretter slettes de for godt, med alle bilder.'],

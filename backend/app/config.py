@@ -1,5 +1,6 @@
 import logging
 import os
+import re
 import threading
 import time
 from dataclasses import dataclass
@@ -37,11 +38,16 @@ class Setting:
     choices: tuple = ()
     min: float | None = None
     max: float | None = None
+    pattern: str = ""        # str settings: the whole value must match (re.fullmatch)
+    pattern_error: str = ""
 
     @property
     def env(self) -> str:
         return self.name.upper()
 
+
+# An IPv4 address or a host name (letters, digits, hyphens, dots); no scheme, port or path.
+HOST_PATTERN = r"(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*"
 
 SETTINGS: tuple[Setting, ...] = (
     # Statens vegvesen – "Enkeltoppslag kjøretøydata"
@@ -99,6 +105,13 @@ SETTINGS: tuple[Setting, ...] = (
             help="The studded tyre season for the summer / winter wheels warnings. South and Central Norway: "
                  "1 November to the first Sunday after Easter Monday. Nordland, Troms and Finnmark: "
                  "16 October to 30 April."),
+    # HTTPS: the address staff type at this location; the caddy container makes its certificate for it
+    # (caddyhost.py → caddy/start.sh). Saved here, it survives redeploys; the env var is the stack fallback.
+    Setting("carbonara_host", "Server address", "HTTPS", pattern=HOST_PATTERN,
+            pattern_error="type an IP address (e.g. 192.168.1.20) or a host name, without http:// or a port",
+            help="The address staff type to open Carbonara here, e.g. the server's IP address. The HTTPS "
+                 "certificate is made for it. A change takes effect within half a minute; installed "
+                 "certificates keep working."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),
@@ -115,6 +128,8 @@ def convert(s: Setting, raw):
         value = str(raw).strip()
         if s.choices and value not in s.choices:
             raise ValueError(f"{s.label}: choose one of {', '.join(s.choices)}")
+        if s.pattern and value and not re.fullmatch(s.pattern, value):
+            raise ValueError(f"{s.label}: {s.pattern_error or 'not valid'}")
         return value
     try:
         value = s.type(str(raw).strip().replace(",", "."))

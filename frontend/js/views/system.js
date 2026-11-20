@@ -18,7 +18,8 @@ export async function systemView(el, _params = [], host = el) {
   }
   const [rows, teams, more, health] = await Promise.all([
     api.get('/system/settings'), api.get('/system/teams'), api.get('/system/menu-more'), api.get('/system/health')]);
-  const groups = [...new Set(rows.map((r) => r.group))];
+  // The HTTPS group (server address) is drawn inside the HTTPS card instead of its own card.
+  const groups = [...new Set(rows.map((r) => r.group))].filter((g) => g !== 'HTTPS');
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -34,7 +35,7 @@ export async function systemView(el, _params = [], host = el) {
       '“Reset” goes back to the environment or the default. Passwords and keys are never shown – only their last characters.'),
     workerCard(health.worker),
     diskCard(health.disk),
-    httpsCard(health.https),
+    httpsCard(health.https, rows.filter((r) => r.group === 'HTTPS'), rerender),
     teamsCard(teams, rerender),
     moreCard(more),
     groups.map((g) => h('section', { class: 'card' },
@@ -122,9 +123,21 @@ export function diskNotice(d, { link = false } = {}) {
 
 /** HTTPS through the caddy service: the https address and how each device installs the
  *  local root certificate once (/carbonara-ca.crt). Device steps stay in the device's own words. */
-function httpsCard(s) {
+function httpsCard(s, rows, done) {
   const onHttps = location.protocol === 'https:';
-  const url = `https://${location.hostname}:${s.port}/`;
+  // The server address (setting carbonara_host, 0.39.0): saved in the database so it survives redeploys and
+  // each location has its own; the app hands it to the caddy container, which makes the certificate for it.
+  const addr = rows.find((r) => r.name === 'carbonara_host');
+  const here = location.hostname;
+  const saved = addr?.value || '';
+  const url = `https://${saved || here}:${s.port}/`;
+  const useHere = async () => {
+    try {
+      await api.put('/system/settings/carbonara_host', { value: here });
+      toast('Server address saved', 'success');
+      await done();
+    } catch (e) { showError(e); }
+  };
   const step = (title, ...lines) => h('li', {}, h('strong', {}, title), lines.map((t) => h('div', { class: 'small' }, t)));
   return h('section', { class: 'card' },
     h('h2', {}, 'HTTPS'),
@@ -133,10 +146,14 @@ function httpsCard(s) {
     h('p', { class: 'muted small' },
       'Carbonara has its own certificate. Install it once on each phone, tablet and PC, then use the https address. '
       + 'Plain HTTP keeps working until every device has moved over.'),
+    addr ? h('div', { class: 'sys-rows' }, settingRow(addr, done)) : null,
+    addr && !saved && here !== 'localhost' ? h('div', { class: 'notice warn' },
+      h('span', {}, 'No server address is saved yet. This page is open at ', h('strong', { class: 'mono', translate: 'no' }, here), '. '),
+      h('button', { class: 'btn primary small', type: 'button', onClick: useHere }, `Use ${here}`)) : null,
     h('dl', { class: 'kv' },
       h('dt', {}, 'HTTPS address'), h('dd', {}, h('a', { href: url, class: 'mono', translate: 'no' }, url))),
     s.ca_ready ? null : h('div', { class: 'notice warn' },
-      'The certificate is not ready yet. Check that the caddy container is running and CARBONARA_HOST is set in the stack.'),
+      'The certificate is not ready yet. Check that the caddy container is running.'),
     h('ol', { class: 'https-steps' },
       step('1. Download the certificate on the device',
         h('span', {}, s.ca_ready ? h('a', { href: '/carbonara-ca.crt', download: 'carbonara-ca.crt' }, '⬇ carbonara-ca.crt') : '–')),

@@ -19,6 +19,8 @@ x-app-env: &app-env
   SMTP_FROM: ${SMTP_FROM:-}
   SMTP_SECURITY: ${SMTP_SECURITY:-starttls}
   HTTPS_PORT: ${HTTPS_PORT:-8443}
+  # Fallback only: the server address is set on the System page → HTTPS (kept in the database).
+  CARBONARA_HOST: ${CARBONARA_HOST:-}
   TZ: Europe/Oslo
 
 services:
@@ -49,6 +51,8 @@ services:
       - ./data/photos:/data/photos
       # Read-only: the local root certificate Caddy made, offered at /carbonara-ca.crt.
       - caddy_data:/caddy-data:ro
+      # The app writes the server address from the System page here; caddy reads it (caddy/start.sh).
+      - caddy_host:/caddy-host
     ports:
       - "${APP_PORT:-8080}:8000"
 
@@ -60,11 +64,13 @@ services:
     depends_on:
       - app
     environment:
+      # Used only until a server address is saved on the System page → HTTPS.
       CARBONARA_HOST: ${CARBONARA_HOST:-localhost}
       TZ: Europe/Oslo
     volumes:
       - caddy_data:/data
       - caddy_config:/config
+      - caddy_host:/carbonara:ro
     ports:
       - "${HTTPS_PORT:-8443}:443"
 
@@ -85,3 +91,4 @@ volumes:
   pgdata:
   caddy_data:     # Caddy's local certificate authority (root + key): keep it, or devices must reinstall
   caddy_config:
+  caddy_host:     # the server address from the System page, written by the app, read by caddy

@@ -21,7 +21,8 @@
 	}
 }
 
-# CARBONARA_HOST: the address staff type, e.g. the server's IP (set in .env / the Portainer stack).
+# CARBONARA_HOST: the address staff type, e.g. the server's IP. Set on the System page → HTTPS (kept in the
+# database; caddy/start.sh passes it in and reloads when it changes), else the stack's CARBONARA_HOST.
 {$CARBONARA_HOST:localhost} {
 	tls internal
 	# Caddy sets X-Forwarded-Proto: https, so the app marks its login cookies "secure" on this address.

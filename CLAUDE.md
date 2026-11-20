@@ -72,15 +72,15 @@ like the one above. Never write staff PINs (e.g. the Claude test account's) into
 | Thing | Value |
 |---|---|
 | Server | `192.168.10.45`, Ubuntu + Docker, managed via Portainer |
-| App URL | `http://192.168.10.45:8080` (port **8080**; 8000 on the host is taken by Portainer). **HTTPS (0.37.0):** `https://192.168.10.45:8443` through the `caddy` container, once `CARBONARA_HOST=192.168.10.45` is set in the stack (see *HTTPS*). |
+| App URL | `http://192.168.10.45:8080` (port **8080**; 8000 on the host is taken by Portainer). **HTTPS (0.37.0):** `https://192.168.10.45:8443` through the `caddy` container, once the server address `192.168.10.45` is saved on System → HTTPS (see *HTTPS*). |
 | Repo | GitHub, branch `main` (git user `dewi1dotcom-dev`) |
 | Containers | `db` (postgres:16), `app` (uvicorn on container port 8000 → host `APP_PORT`), `worker` (`python -m app.sync_worker`), `caddy` (built from `caddy/Dockerfile` = caddy:2.8.4-alpine + Caddyfile, HTTPS on host `HTTPS_PORT` → `app:8000`) |
 | Photos | `./data/photos` mounted at `/data/photos` in **both** `app` and `worker` (the worker deletes files during retention) |
 | Timezone | `TZ=Europe/Oslo` on all containers |
 
 **Environment variables** (`.env.example`, `docker-compose.yml`):
-- **Server:** `POSTGRES_PASSWORD`, `APP_PORT=8080`, `MAX_UPLOAD_MB=30`, `CARBONARA_HOST` (the address staff
-  type, e.g. `192.168.10.45`; caddy's certificate is made for it), `HTTPS_PORT=8443`.
+- **Server:** `POSTGRES_PASSWORD`, `APP_PORT=8080`, `MAX_UPLOAD_MB=30`, `HTTPS_PORT=8443`.
+- `CARBONARA_HOST` is now only the fallback for System → HTTPS → **Server address** (0.39.0, see *HTTPS*).
 - **Fallbacks for System page settings** (a value saved on the System page wins):
   - `VEGVESEN_API_KEY/_URL/_AUTH_HEADER/_AUTH_SCHEME/_SYNC_DAYS`
   - `TRASH_DAYS=30`, `RETENTION_YEARS=5`
@@ -99,6 +99,14 @@ like the one above. Never write staff PINs (e.g. the Claude test account's) into
 - Caddy is its own small certificate authority (`tls internal`, root CN "Carbonara Local Root"). The root + its key
   live in the `caddy_data` volume: **keep it and back it up**, or every device must install a new root.
   `default_sni` = `CARBONARA_HOST`, because browsers send no SNI for an IP address.
+- **Server address on the System page (0.39.0, the user's request):** the stack's `CARBONARA_HOST` kept falling back to
+  `localhost` on redeploys, and each location has its own IP. Setting `carbonara_host` (group "HTTPS", drawn inside the
+  HTTPS card, with a "Use <address this page is open at>" button while unsaved; validated by `HOST_PATTERN` = IPv4 or
+  host name) is kept in the DB. `caddyhost.write()` (at app start and on save / reset) writes it to `/caddy-host/host`
+  in the shared `caddy_host` volume (rw in `app`, ro in `caddy` at `/carbonara`). Caddy's `CMD` is `caddy/start.sh`:
+  it starts `caddy run` with `CARBONARA_HOST` = the file's value (only `A-Za-z0-9.-` kept), else the env, else
+  `localhost`, checks the file every 10 s and runs `caddy reload` with the new value (a failed value isn't retried).
+  The Dockerfile strips CRLF from the script.
 - Each device installs the root once: `GET /carbonara-ca.crt` (open, plain HTTP too; `main.py` reads it from
   `caddy_data`, mounted read-only in `app` at `/caddy-data`). System page → **HTTPS** card: https address, download
   link and the steps for Android, iPhone, Windows and Firefox.
@@ -218,6 +226,7 @@ backend/
   app/workerstatus.py   the worker reports in (`worker_status`); status() = warnings for system admins
   app/push.py           phone / PC notifications (Web Push): notify() queues, the app thread sends + scheduled ones
   app/diskstatus.py     free space on the disk holding PHOTO_DIR + database size (System page, Today)
+  app/caddyhost.py      hands the server address (System → HTTPS) to the caddy container via the caddy_host volume
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
                         test drive + rental customer purge, rental car SVV refresh, received customer deliveries,
                         stopped kiosk tablets,
@@ -702,6 +711,7 @@ the server is LAN-only, so no customer phones / public internet).
   - **Customer deliveries (kiosk):** company name, phone, e-mail, postal address for the kiosk
     privacy notice (empty company name = Company is used)
   - **Rental cars (0.28.1):** the same four fields for the rental privacy notice
+  - **HTTPS (0.39.0):** server address (`carbonara_host`), shown inside the HTTPS card, not as its own card
   - **Wheels (0.29.0):** studded tyre region (`tyre_region` south / north; readable names via `CHOICE_LABEL` in `system.js`)
   - **Data retention**
 - **Where a value comes from:** `settings.<name>` = DB `app_settings`, else env `NAME`, else
@@ -1313,6 +1323,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.38.0 | **Phone / PC notifications** (Web Push over HTTPS): private messages, Today board, PDI date confirmed / done, PDI car not prepared, storage checks + 12V due, test drive / rental not back, worker / disk problems for system admins; turned on per device and chosen per person in the 👤 menu (migration 038) |
 | 0.38.1 | Private message conversation opened from a notification scrolls to the newest message (scrolls again as the page settles and pictures load) |
 | 0.38.2 | Private messages: the conversation scrolls in its own box with the writing field under it (the field no longer covers the newest messages), opened at the newest message |
+| 0.39.0 | **Server address on the System page** (HTTPS card): kept in the database, so it survives redeploys and each location sets its own; caddy follows a change within ~10 s without a restart (`caddy_host` volume, `caddy/start.sh`) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
