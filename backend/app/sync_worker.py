@@ -32,6 +32,7 @@ from .migrate import run_migrations
 from .routers.deliveries import purge_stopped_kiosks
 from .routers.dm import purge_expired as purge_expired_private_messages
 from .routers.messages import DELETE_EXPIRED_SQL as MESSAGES_EXPIRED_SQL
+from .routers.notes import DONE_PURGE_SQL as NOTES_DONE_PURGE_SQL
 from .routers.rentals import RENTAL_PURGE_DUE_SQL, purge_rental_customer, refresh_due_rental_cars
 
 log = logging.getLogger("carbonara.sync_worker")
@@ -108,6 +109,10 @@ def housekeeping() -> None:
     # Today page messages older than 24 hours (also deleted whenever someone opens Today).
     with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
         conn.execute(MESSAGES_EXPIRED_SQL)
+
+    # My notes ticked off as done more than TRASH_DAYS ago.
+    with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+        conn.execute(NOTES_DONE_PURGE_SQL, (settings.trash_days,))
 
 
 def expire_private_messages() -> None:

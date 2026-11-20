@@ -8,6 +8,7 @@ const OWNER_KEY = 'carbonara.pushOwner'; // who turned notifications on on this 
 const KIND_LABEL = {
   dm: 'New private messages',
   board: 'New messages on the Today page',
+  notes: 'Reminders on my notes',
   pdi_prep: 'PDI soon and the car is not prepared',
   pdi_status: 'PDI date confirmed or PDI done (orders you made)',
   late_return: 'Test drive or rental car not back (cars you handed out)',

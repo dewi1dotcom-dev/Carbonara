@@ -41,6 +41,7 @@ log = logging.getLogger(__name__)
 KIND_MENU: dict[str, Optional[tuple[str, ...]]] = {
     "dm": None,                                  # new private message
     "board": None,                               # new message on the Today board (own team / everyone)
+    "notes": None,                               # a reminder on one of my notes is due (0.40.0)
     "pdi_prep": ("vehicles", "pdi_orders"),      # PDI soon, car not prepared yet
     "pdi_status": ("vehicles", "pdi_orders"),    # PDI date confirmed / PDI done (to whoever made the order)
     "late_return": ("testdrive", "rental"),      # test drive / rental car not back (to whoever handed it out)
@@ -246,6 +247,7 @@ def scheduled(conn, *, system_checks: bool = True) -> None:
     if morning:
         _pdi_prep(conn, today)
         _daily_due(conn, today)
+    _note_reminders(conn)  # any time of day: the person chose the time
     if daytime:
         _late_returns(conn)
     if system_checks:
@@ -286,6 +288,25 @@ def _daily_due(conn, today: dt.date) -> None:
     no = [f"Lagerkontroller: {checks}" if checks else None, f"12V-lading: {charges}" if charges else None]
     notify(conn, None, "daily_due", en=("Due today or soon", " · ".join(x for x in en if x)),
            no=("Forfaller i dag eller snart", " · ".join(x for x in no if x)), url="#/", tag=f"daily_due-{today}")
+
+
+def _note_reminders(conn) -> None:
+    """My notes: a reminder that is due, to the note's owner, once. The note's own text is never sent
+    (it shows on a locked phone and may name a customer): only the pinned car or page."""
+    rows = conn.execute(
+        """UPDATE notes n SET reminded_at = now()
+             FROM notes x LEFT JOIN vehicles v ON v.id = x.vehicle_id
+            WHERE n.id = x.id AND x.remind_at <= now() AND x.reminded_at IS NULL AND x.done_at IS NULL
+              AND x.remind_at > now() - interval '1 day'
+        RETURNING n.id, n.staff_id, n.link_title, v.make, v.model, v.registration_number""").fetchall()
+    # Older ones (e.g. the app was down) are only marked: the panel still shows them as due.
+    conn.execute("""UPDATE notes SET reminded_at = now() WHERE reminded_at IS NULL AND done_at IS NULL
+                     AND remind_at <= now() - interval '1 day'""")
+    for r in rows:
+        what = car_text(r) if r["registration_number"] or r["make"] else r["link_title"]
+        notify(conn, [r["staff_id"]], "notes",
+               en=("Reminder", what or "A note in Carbonara"), no=("Påminnelse", what or "Et notat i Carbonara"),
+               url="#/notes", tag=f"note-{r['id']}", urgency="high")
 
 
 def _late_returns(conn) -> None:

@@ -10,6 +10,7 @@ import { dmChatView, dmListView } from './views/dm.js';
 import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
+import { notesView, toggleNotesPanel } from './views/notes.js';
 import { notificationsDialog, pushLogout, syncPush } from './views/notifications.js';
 import { pdiListView, prepDialog } from './views/pdi.js';
 import { pdiOrdersView } from './views/pdiorders.js';
@@ -41,6 +42,7 @@ const routes = [
   [/^#\/kiosk$/, kioskView, 'deliveries'], // staff preview of the delivery kiosk form
   [/^#\/messages$/, dmListView, 'messages'], // private messages: every user, whatever the team
   [/^#\/messages\/(\d+)$/, dmChatView, 'messages'],
+  [/^#\/notes$/, notesView, 'notes'], // my notes as a page (a reminder notification opens it); usually the 📝 panel
   [/^#\/settings$/, settingsView, 'settings'],
   [/^#\/system$/, systemView, 'system'],
 ];
@@ -56,6 +58,7 @@ const root = document.getElementById('app');
 async function render() {
   refreshNotify(); // not awaited: the page doesn't wait for the notification bar
   refreshDm();
+  refreshNotes();
   const hash = (location.hash || '#/').split('?')[0]; // "?…" holds page filters, not part of the route
   const match = routes.map(([re, view, nav]) => [hash.match(re), view, nav]).find(([m]) => m);
 
@@ -142,6 +145,23 @@ async function refreshDm() {
 setInterval(refreshDm, 60 * 1000); // new messages show up without navigating
 window.addEventListener('carbonara:dm-changed', refreshDm); // read / sent in a conversation
 
+// 📝 My notes (0.40.0): opens the notes panel on any page; the count = reminders that are due.
+const notesCount = h('span', { class: 'dm-count', hidden: true });
+const notesButton = h('button', {
+  class: 'user-btn dm-btn', type: 'button', 'data-nav': 'notes', title: 'My notes', 'aria-label': 'My notes',
+  onClick: toggleNotesPanel,
+}, '📝', notesCount);
+
+async function refreshNotes() {
+  if (!session.me) return;
+  let n;
+  try { ({ count: n } = await api.get('/notes/due')); } catch { return; }
+  notesCount.textContent = n > 99 ? '99+' : String(n);
+  notesCount.hidden = !n;
+}
+setInterval(refreshNotes, 60 * 1000); // a reminder becomes due without navigating
+window.addEventListener('carbonara:notes-changed', refreshNotes);
+
 // "More" at the end of the top menu: the items a system admin chose (System page → Top menu) are moved
 // into its dropdown. Hidden when nothing is chosen, or when none of the chosen items is open to this user.
 // The panel is position: fixed, because the menu line scrolls sideways (overflow) and would clip it.
@@ -192,7 +212,7 @@ function renderUser() {
   });
   layoutNav();
   if (!me) { userMenu.replaceChildren(); return; }
-  userMenu.replaceChildren(dmButton, h('button', {
+  userMenu.replaceChildren(notesButton, dmButton, h('button', {
     // Silhouette only (user's request); the name shows on hover and as the dialog title.
     class: 'user-btn', type: 'button', title: me.name, 'aria-label': me.name, translate: 'no',
     onClick: () => {
@@ -301,6 +321,7 @@ navigator.serviceWorker?.addEventListener('message', (e) => {
   const msg = e.data || {};
   if (msg.type === 'carbonara-open' && typeof msg.url === 'string' && msg.url.startsWith('#/')) location.hash = msg.url;
   if (msg.type === 'carbonara-push' && String(msg.tag).startsWith('dm')) window.dispatchEvent(new Event('carbonara:dm-changed'));
+  if (msg.type === 'carbonara-push' && String(msg.tag).startsWith('note')) window.dispatchEvent(new Event('carbonara:notes-changed'));
 });
 /* HTTPS (the caddy service): a device opened over plain HTTP that already trusts Carbonara's
  * certificate moves to https:// by itself. The test request only succeeds when the certificate is

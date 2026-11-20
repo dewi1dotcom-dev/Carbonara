@@ -645,6 +645,16 @@ const NO = {
   'No server address is saved yet. This page is open at ': 'Ingen serveradresse er lagret ennå. Denne siden er åpnet på ',
   'Server address: type an IP address (e.g. 192.168.1.20) or a host name, without http:// or a port':
     'Serveradresse: skriv en IP-adresse (f.eks. 192.168.1.20) eller et vertsnavn, uten http:// og port',
+  // ---- My notes (0.40.0)
+  'My notes': 'Mine notater', 'Only you can see your notes.': 'Bare du kan se notatene dine.', 'No notes yet.': 'Ingen notater ennå.',
+  'Write a note…': 'Skriv et notat …', 'Add note': 'Legg til notat', 'Note added': 'Notat lagt til', 'Pinned': 'Festet',
+  'Pin this car': 'Fest denne bilen', 'Pin this page': 'Fest denne siden',
+  'Pin it, with the text above if you wrote one': 'Fest den, med teksten over hvis du skrev en',
+  'Remind me': 'Minn meg på', 'In 1 hour': 'Om 1 time', 'Tomorrow 08:00': 'I morgen 08:00', 'Monday 08:00': 'Mandag 08:00',
+  'No reminder': 'Ingen påminnelse', 'Car deleted': 'Bil slettet', 'Delete this note?': 'Slette dette notatet?',
+  'Edit note': 'Rediger notat', 'Note saved': 'Notat lagret', 'Reminders on my notes': 'Påminnelser på notatene mine',
+  'Reminder: not a valid date and time': 'Påminnelse: ikke en gyldig dato og tid',
+  'Only pages in Carbonara can be pinned': 'Bare sider i Carbonara kan festes', 'Write something first': 'Skriv noe først',
   '1. Download the certificate on the device': '1. Last ned sertifikatet på enheten',
   '2. Install it': '2. Installer det',
   '3. Open the https address': '3. Åpne https-adressen',
@@ -776,6 +786,8 @@ const NO = {
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
   ['{} not found', '{1t} ble ikke funnet'],
+  ['Done ({n})', 'Ferdig ({1})'], ['Done notes are deleted after {n} days.', 'Ferdige notater slettes etter {1} dager.'],
+  ['Done {}', 'Ferdig {1}'],
   ['Known damage ({n})', 'Kjente skader ({1})'], ['Repaired damage ({n})', 'Reparerte skader ({1})'],
   ['Check data: Statens vegvesen differs ({n})', 'Sjekk data: Statens vegvesen avviker ({1})'],
   ['In progress ({n})', 'Pågår ({1})'], ['Out on test drive now ({n})', 'Ute på prøvekjøring nå ({1})'],

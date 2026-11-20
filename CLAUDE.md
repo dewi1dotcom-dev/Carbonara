@@ -234,8 +234,9 @@ backend/
   app/routers/          vehicles, inspections, vin, admin (staff, storage spots), testdrives, rentals, documents,
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
-                        the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test)
-  migrations/           001…038
+                        the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
+                        notes (my notes)
+  migrations/           001…039
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -251,7 +252,7 @@ frontend/               no build step; plain ES modules
                         vehicles, documents, pdi (card + banner + PDI page), pdiorders (PDI orders page), pdisheet (PDI sheets,
                         stamps, signature, PDI done dialog), storagecare (card + check form
                         + report), messages (Today message board), dm (private messages), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
-                        login, settings, system, notifications (👤 menu → Notifications)
+                        login, settings, system, notifications (👤 menu → Notifications), notes (📝 panel + #/notes)
 ```
 
 **Migrations:**
@@ -296,6 +297,7 @@ frontend/               no build step; plain ES modules
 | 036 | `messages` | Today page message board (`body` ≤ 300, `team_id` (NULL = everyone), `created_by`, `created_at`; shown 24 h, then deleted); `private_messages` (sender, recipient, text and/or file / picture, `expires_at` = 72 working hours, `read_at`) |
 | 037 | `worker_status` | the background worker's check-ins (`name` 'loop' / 'housekeeping', `at`, `ok`, `detail` = step names + error types only) |
 | 038 | `push` | `push_subscriptions` (per browser, tied to the login session), `staff.push_prefs`, `push_outbox` (queued notifications), `push_sent` (scheduled ones already sent) |
+| 039 | `notes` | `notes` (my notes: `staff_id`, `body` ≤ 1000, pinned `vehicle_id` or `link` + `link_title`, `remind_at`, `reminded_at`, `done_at`) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -320,6 +322,8 @@ frontend/               no build step; plain ES modules
   Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
 - **Private messages:** `#/messages` (people) · `#/messages/:staffId` (conversation); the 💬 button in the top bar, every
   user whatever the team (`canSee` always allows `messages`).
+- **My notes:** the 📝 panel (any page) · `#/notes` (the same as a page; reminder notifications open it); `canSee` always
+  allows `notes`.
 - **Admin:** `#/settings` · `#/system` (system admins only).
 
 ---
@@ -1016,6 +1020,8 @@ storage, periodic checklist, 12V battery form).
   them), and never hold customer data** (no customer names, phones, message texts): they show on locked phones.
 - **Kinds** (`KIND_MENU`: kinds tied to a page only go to people whose team sees it):
   - `dm` new private message ("From {name}", opens the conversation) — `routers/dm.py`
+  - `notes` a reminder on my note is due (0.40.0; any time of day, once per reminder; only the pinned car / page title
+    is sent, never the note's text) — `push._note_reminders`, opens `#/notes`
   - `board` new Today board message for your team / everyone (writer's name only) — `routers/messages.py`
   - `pdi_status` PDI date confirmed / PDI done, to whoever made the order (not when they did it themselves) — `pdi._notify_status`
   - scheduled, once a minute by the same thread (`scheduled()`, `push_sent` keys make each go out once; kept 30 days):
@@ -1027,6 +1033,22 @@ storage, periodic checklist, 12V battery form).
       10 min after a start. In the app, not the worker, so it can warn when the worker has stopped.
 - `/sw.js` (site root, scope `/`) caches nothing; a tap opens the page (`carbonara-open` message to an open window,
   else a new one); a `dm` push updates the 💬 count (`carbonara-push` → `carbonara:dm-changed`).
+
+**My notes (0.40.0)** (`notes`, migration 039; `routers/notes.py`, `views/notes.js`; the user's request: "every user needs
+to take notes, pin cars and other things to remember, quick and easy"):
+- **📝 in the top bar** (before 💬) opens a panel from the right on every page (`toggleNotesPanel`; closes on ✕, Esc,
+  the backdrop, a link or any navigation). The red count = reminders due now (`GET /notes/due`, polled every minute
+  and on `carbonara:notes-changed`). `#/notes` shows the same as a page.
+- **Private (the user's choice of "every user"):** only the writer can see or change a note, admins included; someone
+  else's note answers 404. Texts are never logged or put in vehicle history.
+- **A note** = text (≤ 1000) and/or a pin: "📌 Pin this car" on a car page (`vehicle_id`; shown as make / model / reg.
+  no linking to the car, "Car deleted" when soft-deleted; removed with the car by `purge_vehicle` via ON DELETE CASCADE)
+  or "📌 Pin this page" elsewhere (`link` = the hash, must start with `#/`; `link_title` = the page's h1). Links follow
+  `canOpen`.
+- **Reminder** ("⏰ Remind me": date + time in Oslo time, quick choices In 1 hour / Tomorrow 08:00 / Monday 08:00): due
+  reminders sort first with a red edge; the push thread sends one notification (`notes` kind). A new time can remind
+  again. Reminders more than a day late (app down) are only marked, not sent.
+- **✓ Done** moves it under "Done (n)" (Undo possible); the worker's `housekeeping()` deletes done notes after `trash_days`.
 
 **Private messages (0.34.0)** (`private_messages`, migration 036; `routers/dm.py`, `views/dm.js`; the user's request):
 - **Between two users**, any team (no menu item; 💬 in the top bar with a red unread count, `GET /dm/unread`, polled every
@@ -1324,6 +1346,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.38.1 | Private message conversation opened from a notification scrolls to the newest message (scrolls again as the page settles and pictures load) |
 | 0.38.2 | Private messages: the conversation scrolls in its own box with the writing field under it (the field no longer covers the newest messages), opened at the newest message |
 | 0.39.0 | **Server address on the System page** (HTTPS card): kept in the database, so it survives redeploys and each location sets its own; caddy follows a change within ~10 s without a restart (`caddy_host` volume, `caddy/start.sh`) |
+| 0.40.0 | **My notes:** 📝 panel on every page with private notes, pinned cars / pages, reminders (with phone notification) and done list (migration 039) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
