@@ -30,7 +30,12 @@ async function carbonara(base, path, body) {
     throw new Problem('Could not reach Carbonara. Check the address and that you are on the dealership network.');
   }
   if (r.status === 401) throw new Problem('Log in to Carbonara in this Chrome first, then try again.');
-  if (!r.ok) throw new Problem('Carbonara answered {0}.', r.status);
+  if (!r.ok) {
+    let detail = '';
+    try { detail = (await r.json()).detail; } catch { /* no text */ }
+    if (typeof detail === 'string' && detail) throw new Problem(detail); // Carbonara's reason; the popup translates it
+    throw new Problem('Carbonara answered {0}.', r.status);
+  }
   return r.json();
 }
 
@@ -161,9 +166,68 @@ async function run(tabId, origin, all) {
 }
 
 chrome.runtime.onMessage.addListener((msg, _sender, reply) => {
+  if (msg?.type === 'addFromAd') {
+    if (adJob?.running) { reply({ started: false }); return false; }
+    addFromAd(msg.car, msg.pics || []);
+    reply({ started: true });
+    return false;
+  }
+  if (msg?.type === 'photosDenied') {
+    if (adJob) adJob.photosDenied = true;
+    return false;
+  }
   if (msg?.type !== 'run') return false;
   if (job?.running) { reply({ started: false }); return false; } // one check at a time
   run(msg.tabId, msg.origin, !!msg.all);
   reply({ started: true });
   return false;
 });
+
+// ---------------------------------------------------------------- a new car from its finn.no ad (1.5.1)
+// Runs here, not in the popup: Chrome's "allow access to the photos?" question closes the popup, and in 1.5.0 that
+// stopped everything before the car reached Carbonara. Progress in chrome.storage.local "adJob" (the popup shows it).
+
+let adJob = null;
+const saveAd = () => chrome.storage.local.set({ adJob });
+
+/** Waits (up to a minute) for the person to answer Chrome's question about the photos' site. */
+async function photosAllowed(origins) {
+  for (let i = 0; i < 60; i += 1) {
+    if (await chrome.permissions.contains({ origins })) return true;
+    if (adJob.photosDenied) return false;
+    await sleep(1000);
+  }
+  return false;
+}
+
+async function addFromAd(car, pics) {
+  adJob = { code: car.finn_code, running: true, startedAt: Date.now(), status: { cls: '', key: 'Adding the car…', args: [] } };
+  const { base = '' } = await chrome.storage.local.get('base');
+  await saveAd();
+  try {
+    const created = await carbonara(base, '/api/vehicles/from-ad', car);
+    adJob.id = created.id;
+    let copied = 0;
+    const origins = [...new Set(pics.map((u) => { try { return `${new URL(u).origin}/*`; } catch { return null; } }))].filter(Boolean);
+    if (pics.length && await photosAllowed(origins)) {
+      for (const [i, src] of pics.entries()) {
+        adJob.status = { cls: '', key: 'Copying photo {0} of {1}…', args: [i + 1, pics.length] };
+        await saveAd();
+        try {
+          const blob = await (await fetch(src)).blob();
+          const fd = new FormData();
+          fd.append('file', blob, `photo-${i + 1}.jpg`);
+          fd.append('source', 'finn');
+          const r = await fetch(`${base}/api/vehicles/${created.id}/photos`, { method: 'POST', credentials: 'include', body: fd });
+          if (r.ok) copied += 1;
+        } catch { /* skip this one */ }
+      }
+    }
+    adJob.status = { cls: 'good', key: 'Added to Carbonara with {0} photo(s). ', args: [copied] };
+  } catch (e) {
+    adJob.status = { cls: 'bad', key: e instanceof Problem ? e.key : String(e.message || e), args: e.args || [] };
+  } finally {
+    adJob.running = false;
+    await saveAd();
+  }
+}

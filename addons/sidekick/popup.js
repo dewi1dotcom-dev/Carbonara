@@ -58,6 +58,8 @@ const NO = {
   'The VIN is needed. Statens vegvesen gives it from the reg. no, or type it in.':
     'VIN trengs. Statens vegvesen gir den fra reg.nr., eller skriv den inn.',
   'Copying photo {0} of {1}…': 'Kopierer bilde {0} av {1} …',
+  'Adding the car…': 'Legger til bilen …',
+  'Already adding a car – wait a moment.': 'Legger allerede til en bil – vent litt.',
   'Added to Carbonara with {0} photo(s). ': 'Lagt til i Carbonara med {0} bilde(r). ',
   'Open it in Carbonara': 'Åpne den i Carbonara',
   // Carbonara's own messages (from the server, in English)
@@ -299,46 +301,48 @@ async function finnPanel(tab, code) {
   $('finnCar').addEventListener('change', toggle);
   toggle();
 
-  async function addNew() {
-    // Asked first, while the click still counts: Chrome lets Sidekick fetch the ticked photos only with permission.
-    const pics = [...document.querySelectorAll('#nPhotos input:checked')].map((i) => i.value);
-    let photosAllowed = true;
-    if (pics.length) {
-      const origins = [...new Set(pics.map((u) => `${new URL(u).origin}/*`))];
-      photosAllowed = await chrome.permissions.request({ origins });
+  // The adding runs in worker.js (1.5.1): Chrome's question about the photos closes this window, which stopped
+  // 1.5.0 before the car reached Carbonara. Its progress comes back through chrome.storage ("adJob").
+  function showAdJob(job) {
+    if (!job || job.code !== code) return;
+    const st = job.status || {};
+    if (job.running || !job.id) {
+      status(t(st.key || '', ...(st.args || [])), st.cls || '');
+    } else {
+      const open = document.createElement('a');
+      open.href = `${base}/#/vehicles/${job.id}`;
+      open.target = '_blank';
+      open.textContent = t('Open it in Carbonara');
+      const done = document.createElement('span');
+      done.append(t(st.key || '', ...(st.args || [])), open);
+      $('finnStatus').replaceChildren(done);
+      $('finnStatus').className = st.cls || 'good';
     }
+    const busy = job.running || !!job.id;
+    $('finnCar').disabled = busy;
+    $('finnLink').disabled = busy;
+  }
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === 'local' && changes.adJob) showAdJob(changes.adJob.newValue);
+  });
+  const { adJob } = await chrome.storage.local.get('adJob');
+  if (adJob?.code === code && (adJob.running || adJob.id)) showAdJob(adJob);
+
+  async function addNew() {
+    const pics = [...document.querySelectorAll('#nPhotos input:checked')].map((i) => i.value);
     const vin = $('nVin').value.trim();
     if (!vin) { status(t('The VIN is needed. Statens vegvesen gives it from the reg. no, or type it in.'), 'bad'); return; }
-    const price = digitsOf($('finnPrice').value);
-    const created = await carbonaraJson('/api/vehicles/from-ad', {
+    const car = {
       vin, registration_number: $('nReg').value || null, make: $('nMake').value || null, model: $('nModel').value || null,
       model_year: digitsOf($('nYear').value), listed_km: digitsOf($('nKm').value), color: $('nColor').value || null,
-      fuel_type: $('nFuel').value || null, condition: $('nCond').value, finn_code: code, asking_price: price,
-    });
-    let copied = 0;
-    if (pics.length && photosAllowed) {
-      for (const [i, src] of pics.entries()) {
-        status(t('Copying photo {0} of {1}…', i + 1, pics.length));
-        try {
-          const blob = await (await fetch(src)).blob();
-          const fd = new FormData();
-          fd.append('file', blob, `photo-${i + 1}.jpg`);
-          fd.append('source', 'finn');
-          const r = await fetch(`${base}/api/vehicles/${created.id}/photos`, { method: 'POST', credentials: 'include', body: fd });
-          if (r.ok) copied += 1;
-        } catch { /* skip this one */ }
-      }
-    }
-    const open = document.createElement('a');
-    open.href = `${base}/#/vehicles/${created.id}`;
-    open.target = '_blank';
-    open.textContent = t('Open it in Carbonara');
-    const done = document.createElement('span');
-    done.append(t('Added to Carbonara with {0} photo(s). ', copied), open);
-    $('finnStatus').replaceChildren(done);
-    $('finnStatus').className = 'good';
-    $('finnCar').disabled = true;
-    $('finnLink').disabled = true;
+      fuel_type: $('nFuel').value || null, condition: $('nCond').value, finn_code: code, asking_price: digitsOf($('finnPrice').value),
+    };
+    // Both started in the click itself (no await before them): Chrome only asks about permissions during a click.
+    const started = chrome.runtime.sendMessage({ type: 'addFromAd', car, pics });
+    const origins = [...new Set(pics.map((u) => `${new URL(u).origin}/*`))];
+    const asked = origins.length ? chrome.permissions.request({ origins }) : Promise.resolve(true);
+    if (!(await started)?.started) { status(t('Already adding a car – wait a moment.'), 'warn'); return; }
+    if (!(await asked.catch(() => false))) chrome.runtime.sendMessage({ type: 'photosDenied' });
   }
 
   async function linkExisting(id) {

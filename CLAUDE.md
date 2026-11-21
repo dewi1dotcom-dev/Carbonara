@@ -1162,8 +1162,11 @@ to take notes, pin cars and other things to remember, quick and easy"):
     the car **off site** (the user's choice; arrival inspection or Move car places it later), with `finn_code`, asking
     price (source finn), `listed_km`, condition (Sidekick's New/used, default used), event `vehicle_created`
     `{source: 'finn'}`, then `sync_vehicle` (a registered car is marked as registered, like "Sync now").
-  - The ticked photos (first 8 ticked by default): Sidekick asks Chrome for permission to the photos' host (on the
-    click), fetches them and uploads each to `POST /vehicles/{id}/photos` (source finn). The server never contacts
+  - The ticked photos (first 8 ticked by default): **the adding runs in Sidekick's background (`worker.js`
+    `addFromAd`, progress in `chrome.storage.local` `adJob`; 1.5.1)**, because Chrome's permission question closes the
+    popup (1.5.0 then sent nothing). finn.no's photo host `images.finncdn.no` is in `host_permissions` (no question);
+    other photo hosts are still asked for in the click, and the worker waits up to a minute for the answer. It
+    fetches them and uploads each to `POST /vehicles/{id}/photos` (source finn). The server never contacts
     finn.no.
   - **The car's own photos** (`vehicle_photos`, photostore; max 60 per car): "Photos (n)" card on the car page (tap to
     enlarge, ★ Show first, Delete, 📷 Add photos from the device); the first one is the car's picture in lists until
@@ -1463,6 +1466,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.44.0 | **Asking prices:** price per car (typed in, or read by the helper from the car's finn.no ad), compared with the same make / model in stock on the car page and on the new Price overview page (migration 041) |
 | 0.44.1 | The Chrome helper is renamed **Carbonara Sidekick** (1.4.0; folder `addons/sidekick`, download `carbonara-sidekick.zip`) |
 | 0.45.0 | **Add a car from its finn.no ad** with Sidekick 1.5.0 (details from the ad + VIN from Statens vegvesen, starts off site, ticked photos copied); **Photos** card on the car page (migration 042) |
+| 0.45.1 | Fix: adding a car from its finn.no ad did nothing when Chrome asked about the photos (the question closed Sidekick); Sidekick 1.5.1 adds the car in its background and may read finn.no's photo server without asking |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
