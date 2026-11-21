@@ -31,6 +31,17 @@
     <div class="row"><button class="primary" id="save">Save</button></div>
   </section>
 
+  <section id="finn" hidden>
+    <p id="finnIntro">Link this finn.no ad to a car in Carbonara:</p>
+    <p class="muted" id="finnAd"></p>
+    <select id="finnCar" style="width:100%;padding:6px;font:inherit;border:1px solid #E0D6BA;border-radius:6px"></select>
+    <p><label for="finnPrice" id="finnPriceLabel">Asking price on the ad (kr)</label></p>
+    <input type="text" id="finnPrice" inputmode="numeric" autocomplete="off">
+    <p class="muted" id="finnPriceNote"></p>
+    <div class="row"><button class="primary" id="finnLink">Save</button></div>
+    <p id="finnStatus"></p>
+  </section>
+
   <section id="main" hidden>
     <p id="intro" class="muted">Open the dealer portal's campaign search and log in, then press "Check cars". You can close this window; the check continues.</p>
     <label class="row"><input type="checkbox" id="all"> <span id="allText">All cars here, not only those due</span></label>

@@ -434,6 +434,8 @@ export function startClock(el) {
 
 // Norwegian number format: 119 782 km (space as thousands separator).
 export const fmtKm = (n) => (n == null ? '–' : `${Number(n).toLocaleString('nb-NO')} km`);
+/** Kroner in Norwegian format: 289900 -> "289 900 kr". */
+export const fmtKr = (n) => (n == null ? '–' : `${Number(n).toLocaleString('nb-NO')} kr`);
 
 export const STATUS = {
   intake: 'Arrival inspection',

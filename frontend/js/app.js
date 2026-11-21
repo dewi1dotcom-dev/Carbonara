@@ -11,6 +11,7 @@ import { todayView } from './views/today.js';
 import { inspectionView } from './views/inspection.js';
 import { intakeView } from './views/intake.js';
 import { notesView, toggleNotesPanel } from './views/notes.js';
+import { pricesView } from './views/prices.js';
 import { notificationsDialog, pushLogout, syncPush } from './views/notifications.js';
 import { pdiListView, prepDialog } from './views/pdi.js';
 import { pdiOrdersView } from './views/pdiorders.js';
@@ -32,6 +33,7 @@ const routes = [
   [/^#\/inspections\/(\d+)$/, inspectionView, 'arrivals'],
   [/^#\/vehicles$/, vehiclesView, 'vehicles'],
   [/^#\/vehicles\/deleted$/, deletedView, 'vehicles'],
+  [/^#\/prices$/, pricesView, 'vehicles'], // asking prices of the cars in stock, compared within make + model
   [/^#\/vehicles\/(\d+)\/storage-report$/, storageReportView, 'vehicles'],
   [/^#\/vehicles\/(\d+)$/, vehicleView, 'vehicles'],
   [/^#\/storage$/, storageView, 'storage'],

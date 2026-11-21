@@ -2,6 +2,7 @@ import { PANEL_LABELS } from '../diagram.js';
 import { tr as trText } from '../i18n.js';
 import { documentDialog, documentsCard } from './documents.js';
 import { editDialog as pdiEditDialog, pdiBanner, pdiCard } from './pdi.js';
+import { priceCard, priceValue } from './prices.js';
 import { recallBadge, recallsCard } from './recalls.js';
 import { batteryCard, storageCard } from './storagecare.js';
 import {
@@ -47,7 +48,8 @@ export async function vehiclesView(el) {
   el.append(
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Vehicles'),
-        h('a', { href: '#/vehicles/deleted', class: 'small' }, '🗑 Recently deleted')),
+        h('a', { href: '#/vehicles/deleted', class: 'small' }, '🗑 Recently deleted'), ' · ',
+        h('a', { href: '#/prices', class: 'small' }, '💰 Price overview')),
       // Same as on Today / Arrivals (a smoother workflow); only for teams that can open the arrival inspection.
       canOpen('#/intake') ? h('a', { class: 'btn primary big', href: '#/intake' }, '+ New arrival') : null),
     h('div', { class: 'toolbar' }, search, statusSel, conditionSel),
@@ -142,7 +144,7 @@ const FIELD_LABELS = {
   eu_control_last_approved: 'EU-kontroll approved', color: 'Colour', make: 'Make', model: 'Model', fuel_type: 'Fuel',
   variant: 'Variant', model_year: 'Model year',
   condition: 'New/used', last_service_date: 'Last service', last_service_km: 'Km at last service',
-  finn_code: 'finn.no code', wheels: 'Wheels',
+  finn_code: 'finn.no code', wheels: 'Wheels', asking_price: 'Asking price',
 };
 const changeText = (obj) => Object.entries(obj || {})
   .map(([k, [a, b]]) => [k, k === 'wheels' ? [WHEELS[a] ?? a, WHEELS[b] ?? b] : [a, b]])
@@ -399,6 +401,9 @@ function finnDialog(v, done) {
   });
   const form = h('form', { class: 'form' },
     h('p', { class: 'muted small' }, 'Open the car’s ad on finn.no, copy the address from the browser and paste it here (the FINN code alone works too).'),
+    // The dealer's ads for this make / model, in the person's own browser (System → Company → FINN organisation id).
+    v.finn_search_url ? h('p', {},
+      h('a', { class: 'btn', href: v.finn_search_url, target: '_blank', rel: 'noopener noreferrer' }, '🔎 Find on finn.no ↗')) : null,
     h('label', { for: 'finn-input' }, 'finn.no link or FINN code'), input,
     h('div', { class: 'actions spread' },
       v.finn_code ? h('button', { class: 'link danger', type: 'button', onClick: () => save(null) }, 'Remove link') : h('span'),
@@ -635,7 +640,10 @@ function overviewCard(v, rerender) {
         ? h('span', { class: 'inline' }, finnLink(v.finn_code),
           h('button', { class: 'link small', type: 'button', onClick: () => finnDialog(v, rerender) }, 'change'))
         : h('span', { class: 'inline' }, h('span', { class: 'muted' }, 'Not on finn.no'),
-          h('button', { class: 'link', type: 'button', onClick: () => finnDialog(v, rerender) }, '+ Add finn.no link'))],
+          h('button', { class: 'link', type: 'button', onClick: () => finnDialog(v, rerender) }, '+ Add finn.no link'),
+          v.finn_search_url ? h('a', { class: 'small', href: v.finn_search_url, target: '_blank', rel: 'noopener noreferrer' },
+            '🔎 Find on finn.no ↗') : null)],
+      ['Asking price', priceValue(v, rerender)], // views/prices.js; compared in priceCard()
       ['Service', serviceRow(v)],
       ['Mileage', mileageRow(v.mileage)],
       ['Condition', v.condition ? CONDITION[v.condition] : null],
@@ -841,6 +849,7 @@ export async function vehicleView(el, [id], host = el) {
     pdiBanner(pdiData.current),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
+    priceCard(v), // null when neither this car nor a similar one in stock has a price
     arrivalPhotosCard(v),
     documentsCard(v, docs, rerender),
     recallsCard(v, recallData, rerender), // before the PDI: open recalls go with the PDI order

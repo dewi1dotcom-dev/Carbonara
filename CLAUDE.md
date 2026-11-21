@@ -236,7 +236,7 @@ backend/
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
                         notes (my notes), recalls (recall sources, checks, recalls per car)
-  migrations/           001…040
+  migrations/           001…041
 addons/recall-helper/   Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/recall-helper.zip
@@ -303,6 +303,7 @@ frontend/               no build step; plain ES modules
 | 038 | `push` | `push_subscriptions` (per browser, tied to the login session), `staff.push_prefs`, `push_outbox` (queued notifications), `push_sent` (scheduled ones already sent) |
 | 039 | `notes` | `notes` (my notes: `staff_id`, `body` ≤ 1000, pinned `vehicle_id` or `link` + `link_title`, `remind_at`, `reminded_at`, `done_at`) |
 | 040 | `recalls` | `recall_sources` (name, `makes[]`, `url` with {vin}/{reg}, note), `vehicle_recalls` (code, title, details, certainty, status open/done/not_applicable), `recall_checks` (result, reason), `vehicles.recall_check_requested_at / _reason` |
+| 041 | `asking_price` | `vehicles.asking_price` (kr), `asking_price_at`, `asking_price_source` ('manual' / 'finn') |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1131,8 +1132,34 @@ to take notes, pin cars and other things to remember, quick and easy"):
 **finn.no:**
 - Crawling is prohibited (robots.txt and terms). Staff paste the ad link or FINN code; the
   validator extracts 6–12 digits.
-- Link: `https://www.finn.no/mobility/item/{code}`. Dealer FINN org id: `1324692627`.
-- A future "Fetch from FINN" needs the official FINN API or an ad-system feed.
+- Link: `https://www.finn.no/mobility/item/{code}`. Dealer FINN org id: `1324692627` (enter it on System → Company →
+  "FINN organisation id", setting `finn_org_id`; never in code).
+- **The server never searches finn.no, not even one search per car or on a button (0.43.0, explained to the user):**
+  robots.txt forbids crawling without written permission. Allowed instead:
+  - **"🔎 Find on finn.no"** (car page, finn.no row and dialog): `GET /vehicles/{id}` sends `finn_search_url` =
+    `https://www.finn.no/mobility/search/car?orgId=<finn_org_id>&q=<make model>` (None until the setting is set); it
+    opens in the person's own browser.
+  - **The helper (recall helper 1.2.0) on one of your ads:** reads only the tab's address (FINN code) and title (to
+    guess the car: most make / model / year words in the title; cars without a link first), the person picks / confirms
+    the car, and it saves `finn_code` with `PATCH /vehicles/{id}` (taking it off another car first: one ad, one car).
+- **Automatic linking + price comparison need agreements (the user is asking FINN):** FINN's API for the dealer's own
+  ads (agreement + key, api@finn.no / account manager) would let the server link cars by reg. no / VIN on its own.
+  Market prices: FINN Dealer Hub "Prissjekk" (API unknown), or licensed data (OFV Kjøretøydata API, Bilpriser API);
+  never scraped listings. Planned as a pluggable "Market price" card on used cars once a provider is chosen.
+- **Asking prices, compared within our own stock (0.44.0, the user's request)** (`views/prices.js`, migration 041):
+  - **Where the price comes from:** typed in (car page → overview "Asking price" → `priceDialog`), or the helper
+    (1.3.0) on the car's finn.no ad reads it from **that page only, on the person's click** (`readAdPrice`: schema.org
+    `offers.price` in JSON-LD, then price meta tags, then the visible "Totalpris" / "Pris"; 1 000–99 999 999), shows it
+    for checking and saves it with the link (`asking_price_source` 'finn'). Never more than the open ad: going through
+    all ads would be crawling (only with FINN's API).
+  - `PATCH /vehicles/{id}` with `asking_price`: always stamps `asking_price_at` (saving the same price again = "checked
+    today"); a changed price goes into the history (`vehicle_details_updated`).
+  - **Compared:** "Price compared with similar cars in stock" card on the car page (`price_peers` from `GET
+    /vehicles/{id}`: same make + model ignoring case / spaces / punctuation, not off site; low / median / high and this
+    car vs. the median; year = model year, else first registration; km = latest mileage, `LATEST_KM_SQL`). **Price
+    overview** page `#/prices` (link on Vehicles; `GET /vehicles/prices`, declared before `/vehicles/{vehicle_id}`):
+    every car in stock grouped by make + model, sorted by price, "vs. median" badge (above +5 % amber, below −5 % green),
+    New/used filter.
 
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
@@ -1408,6 +1435,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.41.1 | Fix: a dealer portal opened from the recall check sent you back to Carbonara after login (Carbonara no longer tells other sites where a link came from) |
 | 0.42.0 | **Recall helper:** a Chrome extension (download in Settings → Recall sources) that checks the due cars in a dealer portal you are logged in to, adds open campaigns and closes the ones done |
 | 0.42.1 | Recall helper 1.1.0: the check runs in the background and continues when its small window closes (it stopped after 4 of 8 cars) |
+| 0.43.0 | finn.no: "Find on finn.no" on the car page (your ads for that make / model, FINN organisation id on the System page); the helper (1.2.0) links the finn.no ad you are looking at to a car |
+| 0.44.0 | **Asking prices:** price per car (typed in, or read by the helper from the car's finn.no ad), compared with the same make / model in stock on the car page and on the new Price overview page (migration 041) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

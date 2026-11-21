@@ -837,3 +837,8 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .recall-helper { margin-top: 1rem; border-top: 1px solid var(--border); padding-top: .5rem; }
 .recall-helper summary { cursor: pointer; font-weight: 600; }
 .recall-helper ol { padding-left: 1.2rem; display: flex; flex-direction: column; gap: .35rem; }
+/* Asking prices (0.44.0): the comparison on the car page and the Price overview (views/prices.js). */
+.price-table { width: 100%; border-collapse: collapse; font-size: .92rem; }
+.price-table th, .price-table td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+.price-table th { font-weight: 600; color: var(--muted); font-size: .82rem; }
+.price-table tr.this-car td { background: rgba(245, 184, 0, .14); }

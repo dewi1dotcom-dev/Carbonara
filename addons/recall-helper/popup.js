@@ -38,12 +38,153 @@ const NO = {
   'could not read the portal\'s answer': 'kunne ikke lese svaret fra portalen',
   'portal error {0}': 'feil fra portalen {0}',
   'Stopped: log in to the portal and try again.': 'Stoppet: logg inn i portalen og prøv igjen.',
+  'Link this finn.no ad to a car in Carbonara:': 'Koble denne finn.no-annonsen til en bil i Carbonara:',
+  'Asking price on the ad (kr)': 'Prisantydning på annonsen (kr)',
+  'Read from the ad – check it before saving.': 'Lest fra annonsen – sjekk den før du lagrer.',
+  'Could not find the price on the ad. Type it in, or leave it empty.': 'Fant ikke prisen på annonsen. Skriv den inn, eller la feltet stå tomt.',
+  'Linked to {0}, price {1} kr.': 'Koblet til {0}, pris {1} kr.',
+  'FINN code {0}': 'FINN-kode {0}',
+  'Choose the car…': 'Velg bilen …',
+  'Already linked to {0}.': 'Allerede koblet til {0}.',
+  'Linked to {0}.': 'Koblet til {0}.',
+  'Choose the car first.': 'Velg bilen først.',
+  'Cars without a finn.no link': 'Biler uten finn.no-lenke',
+  'Cars with a finn.no link': 'Biler med finn.no-lenke',
 };
 let lang = (navigator.language || '').toLowerCase().startsWith('n') ? 'no' : 'en';
 const t = (text, ...args) => (lang === 'no' ? NO[text] ?? text : text).replace(/\{(\d)\}/g, (_, i) => args[i] ?? '');
 
 function translatePage() {
-  for (const id of ['title', 'setupText', 'save', 'intro', 'allText', 'run', 'change']) $(id).textContent = t($(id).textContent);
+  for (const id of ['title', 'setupText', 'save', 'intro', 'allText', 'run', 'change', 'finnIntro', 'finnLink', 'finnPriceLabel']) {
+    $(id).textContent = t($(id).textContent);
+  }
+}
+
+// ---------------------------------------------------------------- finn.no: link the ad you are looking at (0.43.0)
+// Uses only the open tab's address (the FINN code) and title (to guess the car); it never reads or searches
+// finn.no itself, which forbids crawling. The same as copying the ad's link into Carbonara, in one click.
+
+const finnCode = (url) => {
+  try {
+    const u = new URL(url);
+    if (!/(^|\.)finn\.no$/.test(u.hostname)) return null;
+    const m = u.href.match(/\/item\/(\d{6,12})/) || u.href.match(/[?&]finnkode=(\d{6,12})/);
+    return m ? m[1] : null;
+  } catch { return null; }
+};
+const carName = (c) => [c.registration_number || c.vin, [c.make, c.model, c.model_year].filter(Boolean).join(' ')]
+  .filter(Boolean).join(' · ');
+/** In the ad page (the one the person opened and clicked the helper on): its asking price, or null.
+ *  Structured data first (schema.org offers.price), then price meta tags, then the visible "Totalpris" / "Pris". */
+function readAdPrice() {
+  const num = (s) => {
+    const d = String(s ?? '').replace(/[^\d]/g, '');
+    const n = d ? Number(d) : null;
+    return n && n >= 1000 && n < 100000000 ? n : null;
+  };
+  const walk = (o) => {
+    if (!o || typeof o !== 'object') return null;
+    if (Array.isArray(o)) { for (const x of o) { const r = walk(x); if (r) return r; } return null; }
+    const offers = Array.isArray(o.offers) ? o.offers[0] : o.offers;
+    if (offers && num(offers.price)) return num(offers.price);
+    for (const v of Object.values(o)) { const r = walk(v); if (r) return r; }
+    return null;
+  };
+  for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
+    try { const p = walk(JSON.parse(s.textContent)); if (p) return p; } catch { /* next */ }
+  }
+  const meta = document.querySelector('meta[property="product:price:amount"], meta[itemprop="price"], [itemprop="price"][content]');
+  if (meta && num(meta.getAttribute('content'))) return num(meta.getAttribute('content'));
+  const text = document.body?.innerText || '';
+  const m = text.match(/Totalpris\s*:?\s*([\d\s .]{4,})\s*kr/i) || text.match(/\bPris\s*:?\s*([\d\s .]{4,})\s*kr/i);
+  return m ? num(m[1]) : null;
+}
+
+const words = (s) => (s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 1);
+
+async function finnPanel(tab, code) {
+  $('finn').hidden = false;
+  $('main').hidden = true;
+  $('finnAd').textContent = `${tab.title || ''} · ${t('FINN code {0}', code)}`;
+  const status = (text, cls = '') => { $('finnStatus').textContent = text; $('finnStatus').className = cls; };
+  let cars;
+  try {
+    const r = await fetch(`${base}/api/vehicles?limit=500`, { credentials: 'include', cache: 'no-store' });
+    if (r.status === 401) throw new Error(t('Log in to Carbonara in this Chrome first, then try again.'));
+    if (!r.ok) throw new Error(t('Carbonara answered {0}.', r.status));
+    cars = await r.json();
+  } catch (e) {
+    status(e.message.startsWith('Failed') ? t('Could not reach Carbonara. Check the address and that you are on the dealership network.')
+      : e.message, 'bad');
+    $('finnLink').disabled = true;
+    return;
+  }
+  const linked = cars.find((c) => c.finn_code === code);
+  if (linked) status(t('Already linked to {0}.', carName(linked)), 'good');
+  // Best guess first: the most words of make / model / year found in the ad's title; cars without a link first.
+  const title = new Set(words(tab.title));
+  const score = (c) => words([c.make, c.model, c.variant, c.model_year].join(' ')).filter((w) => title.has(w)).length;
+  const here = cars.filter((c) => c.status !== 'off_site' || c.finn_code === code);
+  const group = (label, list) => {
+    const g = document.createElement('optgroup');
+    g.label = label;
+    list.sort((a, b) => score(b) - score(a) || carName(a).localeCompare(carName(b))).forEach((c) => {
+      const o = document.createElement('option');
+      o.value = c.id;
+      o.textContent = carName(c);
+      g.append(o);
+    });
+    return list.length ? g : null;
+  };
+  const first = document.createElement('option');
+  first.value = '';
+  first.textContent = t('Choose the car…');
+  $('finnCar').replaceChildren(first, ...[
+    group(t('Cars without a finn.no link'), here.filter((c) => !c.finn_code)),
+    group(t('Cars with a finn.no link'), here.filter((c) => c.finn_code)),
+  ].filter(Boolean));
+  const best = here.filter((c) => !c.finn_code).sort((a, b) => score(b) - score(a))[0];
+  $('finnCar').value = linked ? String(linked.id) : best && score(best) > 0 ? String(best.id) : '';
+  // The asking price on this ad (read from the page the person is looking at, once, on their click).
+  let price = null;
+  try {
+    const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readAdPrice });
+    price = res?.result ?? null;
+  } catch { /* not readable: typed in instead */ }
+  $('finnPrice').value = price ? Number(price).toLocaleString('nb-NO') : '';
+  $('finnPriceNote').textContent = price ? t('Read from the ad – check it before saving.')
+    : t('Could not find the price on the ad. Type it in, or leave it empty.');
+  $('finnLink').addEventListener('click', async () => {
+    const id = $('finnCar').value;
+    if (!id) { status(t('Choose the car first.'), 'bad'); return; }
+    $('finnLink').disabled = true;
+    const patch = async (carId, body) => {
+      const r = await fetch(`${base}/api/vehicles/${carId}`, {
+        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!r.ok) throw new Error(t('Carbonara answered {0}.', r.status));
+    };
+    const digits = $('finnPrice').value.replace(/[^\d]/g, '');
+    const priceNow = digits ? Number(digits) : null;
+    try {
+      // One ad, one car: moved from another car, the link is taken off that one first.
+      for (const other of cars.filter((c) => c.finn_code === code && String(c.id) !== id)) {
+        await patch(other.id, { finn_code: null });
+        other.finn_code = null;
+      }
+      // The price is saved only when there is one (an empty field leaves the car's price as it was).
+      await patch(id, priceNow ? { finn_code: code, asking_price: priceNow, asking_price_source: 'finn' } : { finn_code: code });
+      const car = cars.find((c) => String(c.id) === id);
+      car.finn_code = code;
+      status(priceNow ? t('Linked to {0}, price {1} kr.', carName(car), priceNow.toLocaleString('nb-NO'))
+        : t('Linked to {0}.', carName(car)), 'good');
+    } catch (e) {
+      status(e.message, 'bad');
+    } finally {
+      $('finnLink').disabled = false;
+    }
+  });
 }
 
 let base = '';
@@ -128,4 +269,10 @@ async function followLanguage() {
   $('run').addEventListener('click', run);
   $('change').addEventListener('click', () => show(true));
   if (base) await followLanguage();
+  // On a finn.no ad: offer to link it to a car instead of the recall check.
+  if (base) {
+    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+    const code = finnCode(tab?.url);
+    if (code) await finnPanel(tab, code);
+  }
 })();

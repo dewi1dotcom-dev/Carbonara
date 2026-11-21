@@ -1,4 +1,6 @@
+import datetime as dt
 import logging
+from urllib.parse import urlencode
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -139,6 +141,12 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
     return add_tyre_warnings(rows)
 
 
+# Before /vehicles/{vehicle_id}, so "prices" isn't read as a car id. (The query lives further down.)
+@router.get("/vehicles/prices")
+def stock_prices(conn=Depends(get_conn)):
+    return stock_prices_list(conn)
+
+
 @router.get("/vehicles/{vehicle_id}")
 def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
     vehicle = conn.execute(f"SELECT v.*, {READY_SQL} AS ready_for_delivery, {OPEN_COUNT_SQL} AS open_recalls "
@@ -236,7 +244,20 @@ def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
         "possible_duplicates": similar_vehicles(conn, vehicle["vin"], vehicle["registration_number"], vehicle_id),
         "tyre_warning": add_tyre_warnings([vehicle])[0]["tyre_warning"],  # summer / winter wheels vs. the season
         "mileage": conn.execute(LATEST_KM_SQL, {"v": vehicle_id}).fetchone(),  # {km, at, source} or None
+        "finn_search_url": finn_search_url(vehicle),  # "Find on finn.no" (None until the FINN org id is set)
+        "price_peers": price_peers(conn, vehicle),  # same make + model in stock, for the price comparison
     }
+
+
+def finn_search_url(vehicle: dict) -> Optional[str]:
+    """The dealer's own ads on finn.no for this make and model, opened in the person's own browser. Carbonara
+    never searches finn.no itself (crawling is forbidden there); with FINN's API agreement this can become an
+    automatic lookup on the server."""
+    org = settings.finn_org_id
+    if not org:
+        return None
+    query = " ".join(str(p) for p in (vehicle.get("make"), vehicle.get("model")) if p)
+    return f"https://www.finn.no/mobility/search/car?{urlencode({'orgId': org, **({'q': query} if query else {})})}"
 
 
 # --------------------------------------------------------------------------- #
@@ -509,10 +530,55 @@ def patch_vehicle(vehicle_id: int, body: VehicleDetails, conn=Depends(get_conn))
     before = conn.execute("SELECT * FROM vehicles WHERE id = %s FOR UPDATE", (vehicle_id,)).fetchone()
     if not before:
         raise not_found("Vehicle")
-    fields = {k: v for k, v in patch_fields(body).items() if before[k] != v}
+    sent = patch_fields(body)
+    fields = {k: v for k, v in sent.items() if before[k] != v and k != "asking_price_source"}
+    changes = {k: [before[k], v] for k, v in fields.items()}
+    # Asking price (0.44.0): saving it again, even unchanged, records when (and from where) it was last checked.
+    if "asking_price" in sent:
+        price = sent["asking_price"]
+        fields["asking_price"] = price
+        fields["asking_price_at"] = dt.datetime.now(dt.timezone.utc) if price is not None else None
+        fields["asking_price_source"] = (sent.get("asking_price_source") or "manual") if price is not None else None
     if not fields:
         return before
     row = update_row(conn, "vehicles", vehicle_id, fields)
-    log_event(conn, vehicle_id, "vehicle_details_updated",
-              data={"changes": {k: [before[k], v] for k, v in fields.items()}})
+    if changes:
+        log_event(conn, vehicle_id, "vehicle_details_updated", data={"changes": changes})
     return row
+
+
+# --------------------------------------------------------------------------- #
+# Asking prices compared within the stock (0.44.0)
+# --------------------------------------------------------------------------- #
+
+def _norm_sql(col: str) -> str:
+    return f"lower(regexp_replace(coalesce({col}, ''), '[^A-Za-z0-9]', '', 'g'))"
+
+
+PRICE_SELECT = f"""
+    SELECT v.id, v.vin, v.registration_number, v.make, v.model, v.variant, v.model_year, v.condition, v.status,
+           v.fuel_type, v.color, v.finn_code, v.asking_price, v.asking_price_at, v.asking_price_source,
+           extract(year FROM coalesce(r.first_registered, r.first_registered_norway))::int AS first_reg_year,
+           km.km, l.code AS location_code
+      FROM vehicles v
+      LEFT JOIN vehicle_registry r ON r.vehicle_id = v.id
+      LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
+      LEFT JOIN storage_spots l ON l.id = a.location_id
+      LEFT JOIN LATERAL ({LATEST_KM_SQL.replace('%(v)s', 'v.id')}) km ON true
+     WHERE v.deleted_at IS NULL AND v.status <> 'off_site'"""
+
+
+def stock_prices_list(conn) -> list[dict]:
+    """Every car in stock with its asking price, year and latest mileage (GET /vehicles/prices)."""
+    return conn.execute(PRICE_SELECT + " ORDER BY lower(v.make), lower(v.model), v.asking_price NULLS LAST").fetchall()
+
+
+def price_peers(conn, vehicle: dict) -> list[dict]:
+    """The other cars in stock of the same make and model (ignoring case, spaces and punctuation)."""
+    if not (vehicle.get("make") and vehicle.get("model")):
+        return []
+    return conn.execute(
+        PRICE_SELECT + f""" AND v.id <> %s AND {_norm_sql('v.make')} = {_norm_sql('%s')}
+                             AND {_norm_sql('v.model')} = {_norm_sql('%s')}
+                           ORDER BY v.asking_price NULLS LAST""",
+        (vehicle["id"], vehicle["make"], vehicle["model"])).fetchall()

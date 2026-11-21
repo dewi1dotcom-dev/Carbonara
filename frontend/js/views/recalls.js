@@ -253,6 +253,8 @@ function helperBox() {
         h('span', {}, '. Allow Chrome to reach it.')),
       step('Log in to Carbonara in the same Chrome. Open the portal’s campaign page, log in there too, click the helper '
         + 'and then "Check cars".')),
+    h('p', { class: 'muted small' },
+      'finn.no: open one of your ads on finn.no and click the helper to link the ad to the right car in Carbonara.'),
     h('p', { class: 'muted small' }, 'After an update of Carbonara, download it again and click ↻ on the helper in chrome://extensions.'));
 }
 

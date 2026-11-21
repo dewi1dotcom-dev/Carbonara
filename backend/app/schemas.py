@@ -81,6 +81,9 @@ class VehicleDetails(_Clean):
     wheels: Optional[Literal["summer", "winter"]] = None
     # The ad on finn.no: a pasted link or just the FINN code; stored as the code.
     finn_code: Optional[str] = Field(None, max_length=500)
+    # Asking price in kroner (0.44.0): typed in, or read from the finn.no ad by the helper.
+    asking_price: Optional[int] = Field(None, ge=0, le=99_999_999)
+    asking_price_source: Optional[Literal["manual", "finn"]] = None
 
     @field_validator("finn_code")
     @classmethod

@@ -692,6 +692,25 @@ const NO = {
   'Note for staff': 'Merknad til de ansatte', 'Edit recall source': 'Rediger kilde for tilbakekallinger',
   'Recall source saved': 'Kilde for tilbakekallinger lagret',
   'Recall helper for Chrome (PC)': 'Hjelper for tilbakekallinger i Chrome (PC)',
+  'finn.no: open one of your ads on finn.no and click the helper to link the ad to the right car in Carbonara.':
+    'finn.no: åpne en av annonsene deres på finn.no og klikk på hjelperen for å koble annonsen til riktig bil i Carbonara.',
+  'Find on finn.no': 'Finn på finn.no', 'FINN organisation id': 'FINN-organisasjons-ID',
+  // ---- Asking prices (0.44.0)
+  'Asking price': 'Prisantydning', 'No price': 'Ingen pris', 'Add price': 'Legg til pris', '+ Add price': '+ Legg til pris',
+  'Price saved': 'Pris lagret', 'Price removed': 'Pris fjernet', 'e.g. 289 900': 'f.eks. 289 900',
+  'The asking price in kroner, as on the ad. The helper can read it from the car’s finn.no ad.':
+    'Prisantydningen i kroner, som på annonsen. Hjelperen kan lese den fra bilens finn.no-annonse.',
+  'Asking price (kr)': 'Prisantydning (kr)', 'Remove price': 'Fjern pris',
+  'Price compared with similar cars in stock': 'Pris sammenlignet med lignende biler på lager',
+  'No other cars of this make and model in stock.': 'Ingen andre biler av dette merket og denne modellen på lager.',
+  'Lowest': 'Lavest', 'Median': 'Median', 'Highest': 'Høyest', 'This car': 'Denne bilen', 'Year': 'År', 'Price': 'Pris',
+  'Price overview': 'Prisoversikt', 'vs. median': 'mot median', 'No cars in stock.': 'Ingen biler på lager.',
+  'Asking prices of the cars in stock, compared within the same make and model.':
+    'Prisantydninger for bilene på lager, sammenlignet innenfor samme merke og modell.',
+  'Your dealership\'s number on finn.no (orgId= in the address when you look at your own ads). The car page\'s "Find on finn.no" then shows your ads for that make and model.':
+    'Forhandlerens nummer på finn.no (orgId= i adressen når du ser på deres egne annonser). «Finn på finn.no» på bilsiden viser da annonsene deres for det merket og den modellen.',
+  'FINN organisation id: digits only (the number after orgId= in the address of your ads on finn.no)':
+    'FINN-organisasjons-ID: bare sifre (tallet etter orgId= i adressen til annonsene deres på finn.no)',
   'Checks the cars that are due in a dealer portal you are logged in to, with the portal’s own search, and records the results here: new recalls are added and recalls the portal shows as done are closed. No password is stored.':
     'Sjekker bilene som forfaller i en forhandlerportal du er logget inn i, med portalens eget søk, og registrerer resultatet her: nye tilbakekallinger legges til, og de portalen viser som utført lukkes. Ingen passord lagres.',
   'Download the helper and unzip it, e.g. in Documents: ': 'Last ned hjelperen og pakk den ut, f.eks. i Dokumenter: ',
@@ -847,6 +866,7 @@ const NO = {
 const NO_PATTERNS = [
   ['{} not found', '{1t} ble ikke funnet'],
   ['Done ({n})', 'Ferdig ({1})'],
+  ['{n} car(s)', '{1} bil(er)'], [' · {} – {} · median {}', ' · {1} – {2} · median {3}'],
   ['Open recalls: {n}', 'Åpne tilbakekallinger: {1}'], ['Closed recalls ({n})', 'Lukkede tilbakekallinger ({1})'],
   ['Check history ({n})', 'Historikk for sjekker ({1})'], ['Recall {} is already open on this car', 'Tilbakekalling {1} er allerede åpen på denne bilen'],
   ['Last checked {}', 'Sist sjekket {1}'], ['last checked {}', 'sist sjekket {1}'], ['{} copied', '{1t} kopiert'], ['Open {}', 'Åpne {1}'], ['Done notes are deleted after {n} days.', 'Ferdige notater slettes etter {1} dager.'],

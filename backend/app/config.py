@@ -74,6 +74,12 @@ SETTINGS: tuple[Setting, ...] = (
             help="Shown on the privacy notice, PDI e-mails and storage reports."),
     Setting("dealer_number", "Dealer number (Forh. nr.)", "Company",
             help="Printed on the storage maintenance report."),
+    # finn.no: the dealer's ads, for the car page's "Find on finn.no" (opens finn.no in the person's own browser;
+    # Carbonara itself never searches finn.no, which forbids crawling).
+    Setting("finn_org_id", "FINN organisation id", "Company", pattern=r"\d{4,15}",
+            pattern_error="digits only (the number after orgId= in the address of your ads on finn.no)",
+            help="Your dealership's number on finn.no (orgId= in the address when you look at your own ads). "
+                 "The car page's \"Find on finn.no\" then shows your ads for that make and model."),
     # Contact details shown to test drive customers on the privacy notice (each on its own line).
     Setting("privacy_contact", "Phone for customers", "Company",
             help="Shown to test drive customers on the privacy notice."),
