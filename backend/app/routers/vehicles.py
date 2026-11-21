@@ -9,6 +9,7 @@ from ..common import (READY_SQL, RETENTION_DUE_SQL, RIGHT_PHOTO_SQL, add_tyre_wa
                       update_row)
 from ..config import settings
 from ..db import get_conn
+from .recalls import OPEN_COUNT_SQL
 from ..schemas import MarkRegisteredIn, MoveIn, RepairIn, ResolveMismatchIn, VehicleDetails
 
 log = logging.getLogger("carbonara.vehicles")
@@ -113,7 +114,7 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
                   coalesce(r.first_registered, r.first_registered_norway) AS first_registered,
                   r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code,
                   (SELECT t.id FROM test_drives t WHERE t.vehicle_id = v.id AND t.status = 'out') AS test_drive_id,
-                  po.status AS pdi_status, po.pdi_at, {RIGHT_PHOTO_SQL}
+                  po.status AS pdi_status, po.pdi_at, {RIGHT_PHOTO_SQL}, {OPEN_COUNT_SQL} AS open_recalls
              FROM vehicles v
              LEFT JOIN pdi_orders po ON po.vehicle_id = v.id AND po.status NOT IN ('done', 'cancelled')
              LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
@@ -140,8 +141,8 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
 
 @router.get("/vehicles/{vehicle_id}")
 def get_vehicle(vehicle_id: int, conn=Depends(get_conn)):
-    vehicle = conn.execute(f"SELECT v.*, {READY_SQL} AS ready_for_delivery FROM vehicles v WHERE v.id = %s AND v.deleted_at IS NULL",
-                           (vehicle_id,)).fetchone()
+    vehicle = conn.execute(f"SELECT v.*, {READY_SQL} AS ready_for_delivery, {OPEN_COUNT_SQL} AS open_recalls "
+                           "FROM vehicles v WHERE v.id = %s AND v.deleted_at IS NULL", (vehicle_id,)).fetchone()
     if not vehicle:
         raise not_found("Vehicle")
     location = conn.execute(

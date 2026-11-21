@@ -13,6 +13,7 @@ from ..common import (
 )
 from ..config import settings
 from ..db import get_conn
+from . import recalls
 from ..schemas import (
     ANGLES, PHOTO_KINDS, CompleteIn, DamageIn, DamagePatch, InspectionPatch, IntakeIn,
 )
@@ -278,6 +279,7 @@ def complete_inspection(inspection_id: int, body: CompleteIn, conn=Depends(get_c
               data={"odometer_km": insp["odometer_km"], "damage_count": len(detail["damages"])})
     log_event(conn, vehicle_id, "placed_in_storage", staff_id=staff_id, inspection_id=inspection_id,
               data={"location_id": location["id"], "location_code": location["code"]})
+    recalls.request_check(conn, vehicle_id, "arrival")  # a recall check right after arrival (routers/recalls.py)
     return load_inspection(conn, inspection_id)
 
 

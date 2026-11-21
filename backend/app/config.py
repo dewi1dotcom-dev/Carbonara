@@ -105,6 +105,10 @@ SETTINGS: tuple[Setting, ...] = (
             help="The studded tyre season for the summer / winter wheels warnings. South and Central Norway: "
                  "1 November to the first Sunday after Easter Monday. Nordland, Troms and Finnmark: "
                  "16 October to 30 April."),
+    # Recalls (routers/recalls.py): how often a car in storage is due for a new recall check.
+    Setting("recall_check_days", "Check cars in storage for recalls every (days)", "Recalls", int, 30, min=1, max=365,
+            help="Also checked after the arrival inspection and when a PDI is booked. Only cars whose make has a "
+                 "recall source (Settings → Recall sources) are checked."),
     # HTTPS: the address staff type at this location; the caddy container makes its certificate for it
     # (caddyhost.py → caddy/start.sh). Saved here, it survives redeploys; the env var is the stack fallback.
     Setting("carbonara_host", "Server address", "HTTPS", pattern=HOST_PATTERN,

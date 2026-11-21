@@ -821,3 +821,16 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .notes-done summary { cursor: pointer; font-weight: 600; margin: .4rem 0; }
 .notes-done .note { margin-top: .5rem; }
 @media print { .notes-layer { display: none; } }
+/* Recalls / campaigns (0.41.0): the card on the car page and the check dialog (views/recalls.js). */
+.recall-list { display: flex; flex-direction: column; gap: .5rem; margin: .5rem 0; }
+.recall {
+  border: 1px solid var(--border); border-left: 4px solid var(--bad); border-radius: 10px; padding: .5rem .75rem;
+  display: flex; flex-direction: column; gap: .25rem; background: var(--surface);
+}
+.recall.done, .recall.not_applicable { border-left-color: var(--border); opacity: .75; }
+.recall-title { display: flex; flex-wrap: wrap; gap: .4rem; align-items: baseline; }
+.recall-details { white-space: pre-wrap; overflow-wrap: anywhere; }
+.recall-actions { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.recall-closed summary { cursor: pointer; font-weight: 600; margin: .5rem 0 .25rem; }
+.recall-source { border: 1px solid var(--border); border-radius: 10px; padding: .5rem .75rem; margin: .5rem 0;
+  display: flex; flex-direction: column; gap: .35rem; }

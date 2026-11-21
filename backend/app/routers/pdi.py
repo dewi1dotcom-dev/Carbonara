@@ -15,7 +15,7 @@ from ..common import (RIGHT_PHOTO_SQL, bad_request, conflict, log_event, not_fou
                       tyre_warning)
 from ..config import settings
 from ..db import get_conn
-from . import pdi_sheets
+from . import pdi_sheets, recalls
 
 log = logging.getLogger("carbonara.pdi")
 router = APIRouter(tags=["pdi"])
@@ -98,7 +98,8 @@ ORDER_SELECT = """
            v.vin, v.make, v.model, v.model_year, v.color, v.registration_number, v.condition, v.status AS vehicle_status,
            v.fuel_type, v.wheels, v.registered_marked_at,
            loc.id AS location_id, loc.code AS location_code,
-           pp.name AS prep_plate_name, pb.name AS prepared_by_name
+           pp.name AS prep_plate_name, pb.name AS prepared_by_name,
+           """ + recalls.OPEN_RECALLS_JSON + """
       FROM pdi_orders o
       JOIN vehicles v ON v.id = o.vehicle_id
       LEFT JOIN LATERAL (SELECT l.id, l.code FROM storage_assignments a JOIN storage_spots l ON l.id = a.location_id
@@ -174,6 +175,11 @@ def compose(order: dict) -> tuple[str, str]:
     lines += [f"  - {i['label']}" + (f": {i['choice']}" if i.get("choice") else "") for i in items] or ["  (ingen tilbehør)"]
     if order["other"]:
         lines += ["", "ANNET", *[f"  {line}" for line in order["other"].splitlines()]]
+    # Open recalls / campaigns on the car (routers/recalls.py): done during the PDI.
+    if order.get("open_recalls"):
+        lines += ["", "TILBAKEKALLINGER / KAMPANJER (utføres under nybilklargjøringen)"]
+        lines += [f"  - {r['code'] + ': ' if r.get('code') else ''}{r['title']}"
+                  + (" (mulig – sjekk)" if r.get("certainty") == "possible" else "") for r in order["open_recalls"]]
     t = order["tyres"] or {}
     mode = t.get("mode", "none")
     if mode != "none":
@@ -340,6 +346,7 @@ def set_booking(order_id: int, body: BookingIn, request: Request, conn=Depends(g
     )
     log_event(conn, row["vehicle_id"], "pdi_booked", staff_id=_me(request),
               data={"pdi_at": local, "expected_done": expected})
+    recalls.request_check(conn, row["vehicle_id"], "pdi")  # a fresh recall check before the car goes to the workshop
     pdi_sheets.save_work_order(conn, order_id, _me(request), body.work_order)
     return _order(conn, order_id)
 

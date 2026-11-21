@@ -2,6 +2,7 @@ import { PANEL_LABELS } from '../diagram.js';
 import { tr as trText } from '../i18n.js';
 import { documentDialog, documentsCard } from './documents.js';
 import { editDialog as pdiEditDialog, pdiBanner, pdiCard } from './pdi.js';
+import { recallBadge, recallsCard } from './recalls.js';
 import { batteryCard, storageCard } from './storagecare.js';
 import {
   api, append, badge, busy, canOpen, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
@@ -77,6 +78,7 @@ export function vehicleCard(v, extra = null) {
         svc && svc.cls !== 'good' ? badge(svc) : null,
         v.finn_code ? h('span', { class: 'badge finn' }, 'finn.no') : null,
         v.test_drive_id ? h('span', { class: 'badge warn' }, 'On test drive') : null,
+        recallBadge(v.open_recalls),
         tyreBadge(v.tyre_warning),
         v.pdi_status ? h('span', { class: `badge ${v.pdi_status === 'booked' ? 'good' : 'warn'}` },
           v.pdi_status === 'booked' ? `PDI booked ${fmtDate(v.pdi_at)}` : v.pdi_status === 'sent' ? 'PDI ordered' : 'PDI not sent') : null),
@@ -126,7 +128,14 @@ export const EVENT_LABELS = {
   document_deleted: 'Document deleted',
   customer_delivery: 'Delivered by the customer (kiosk)',
   customer_delivery_received: 'Customer delivery received',
+  recall_check: 'Checked for recalls',
+  recall_added: 'Recall added',
+  recall_closed: 'Recall closed',
+  recall_reopened: 'Recall reopened',
+  recall_deleted: 'Recall deleted',
 };
+const RECALL_RESULT = { none: 'No open recalls', found: 'Recalls found', error: 'Could not check' };
+const RECALL_STATUS = { done: 'Done', not_applicable: 'Doesn’t apply' };
 
 const FIELD_LABELS = {
   registration_number: 'Reg. no', registration_status: 'Registration status', eu_control_due: 'EU-kontroll due',
@@ -180,6 +189,13 @@ export function eventDetail(e) {
         d.trade_plates && `Trade plates: ${d.trade_plates}`, d.odometer_out != null && fmtKm(d.odometer_out), d.note]
         .filter(Boolean).join(' · ');
     case 'trade_plates_moved': return d.trade_plates || '';
+    case 'recall_check': return [RECALL_RESULT[d.result], d.source].filter(Boolean).join(' · ');
+    case 'recall_added':
+    case 'recall_reopened':
+    case 'recall_deleted':
+      return [d.code, d.title].filter(Boolean).join(': ');
+    case 'recall_closed':
+      return [[d.code, d.title].filter(Boolean).join(': '), RECALL_STATUS[d.status], d.note].filter(Boolean).join(' · ');
     case 'pdi_prepared':
       return [d.trade_plates && `Trade plates: ${d.trade_plates}`, d.moved_to && `Moved to ${d.moved_to}`, d.note,
         d.wheels_location && `Winter wheels: ${d.wheels_location}`].filter(Boolean).join(' · ');
@@ -796,10 +812,10 @@ function arrivalPhotosCard(v) {
 // host: the page's real container. A redraw renders into a fresh div and moves the result
 // into host, so every redraw (not only the first) updates the visible page.
 export async function vehicleView(el, [id], host = el) {
-  const [v, pdiData, pdiOpts, care, charging, docs] = await Promise.all([
+  const [v, pdiData, pdiOpts, care, charging, docs, recallData] = await Promise.all([
     api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options'),
     api.get(`/vehicles/${id}/storage-care`), api.get(`/vehicles/${id}/battery-charging`),
-    api.get(`/vehicles/${id}/documents`)]);
+    api.get(`/vehicles/${id}/documents`), api.get(`/vehicles/${id}/recalls`)]);
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -816,7 +832,7 @@ export async function vehicleView(el, [id], host = el) {
           ? h('div', { class: 'reg-big mono' }, v.registration_number)
           : h('div', { class: 'reg-big none' }, 'No reg. no'),
         h('div', { class: 'vin mono big' }, v.vin)),
-      h('div', { class: 'head-side' }, pill(v.status), readyBadge(v), tyreBadge(v.tyre_warning),
+      h('div', { class: 'head-side' }, pill(v.status), readyBadge(v), tyreBadge(v.tyre_warning), recallBadge(v.open_recalls),
         // Visual hint: the car is advertised (on the website, via finn.no)
         v.finn_code ? finnLink(v.finn_code, 'finn.no ↗') : null)),
     duplicateNotice(v.possible_duplicates),
@@ -827,6 +843,7 @@ export async function vehicleView(el, [id], host = el) {
     overviewCard(v, rerender),
     arrivalPhotosCard(v),
     documentsCard(v, docs, rerender),
+    recallsCard(v, recallData, rerender), // before the PDI: open recalls go with the PDI order
     pdiCard(v, pdiData, pdiOpts, rerender),
     storageCard(v, care, rerender),
     batteryCard(v, charging, rerender),

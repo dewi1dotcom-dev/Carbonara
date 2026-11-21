@@ -235,8 +235,8 @@ backend/
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
-                        notes (my notes)
-  migrations/           001…039
+                        notes (my notes), recalls (recall sources, checks, recalls per car)
+  migrations/           001…040
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -252,7 +252,8 @@ frontend/               no build step; plain ES modules
                         vehicles, documents, pdi (card + banner + PDI page), pdiorders (PDI orders page), pdisheet (PDI sheets,
                         stamps, signature, PDI done dialog), storagecare (card + check form
                         + report), messages (Today message board), dm (private messages), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
-                        login, settings, system, notifications (👤 menu → Notifications), notes (📝 panel + #/notes)
+                        login, settings, system, notifications (👤 menu → Notifications), notes (📝 panel + #/notes),
+                        recalls (car page card, check dialog, Settings → Recall sources)
 ```
 
 **Migrations:**
@@ -298,6 +299,7 @@ frontend/               no build step; plain ES modules
 | 037 | `worker_status` | the background worker's check-ins (`name` 'loop' / 'housekeeping', `at`, `ok`, `detail` = step names + error types only) |
 | 038 | `push` | `push_subscriptions` (per browser, tied to the login session), `staff.push_prefs`, `push_outbox` (queued notifications), `push_sent` (scheduled ones already sent) |
 | 039 | `notes` | `notes` (my notes: `staff_id`, `body` ≤ 1000, pinned `vehicle_id` or `link` + `link_title`, `remind_at`, `reminded_at`, `done_at`) |
+| 040 | `recalls` | `recall_sources` (name, `makes[]`, `url` with {vin}/{reg}, note), `vehicle_recalls` (code, title, details, certainty, status open/done/not_applicable), `recall_checks` (result, reason), `vehicles.recall_check_requested_at / _reason` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -716,6 +718,7 @@ the server is LAN-only, so no customer phones / public internet).
     privacy notice (empty company name = Company is used)
   - **Rental cars (0.28.1):** the same four fields for the rental privacy notice
   - **HTTPS (0.39.0):** server address (`carbonara_host`), shown inside the HTTPS card, not as its own card
+  - **Recalls (0.41.0):** `recall_check_days` (default 30): how often a car in storage is due for a recall check
   - **Wheels (0.29.0):** studded tyre region (`tyre_region` south / north; readable names via `CHOICE_LABEL` in `system.js`)
   - **Data retention**
 - **Where a value comes from:** `settings.<name>` = DB `app_settings`, else env `NAME`, else
@@ -1026,13 +1029,37 @@ storage, periodic checklist, 12V battery form).
   - `pdi_status` PDI date confirmed / PDI done, to whoever made the order (not when they did it themselves) — `pdi._notify_status`
   - scheduled, once a minute by the same thread (`scheduled()`, `push_sent` keys make each go out once; kept 30 days):
     - `pdi_prep` booked PDIs up to the next working day not prepared (the 🔔 bar), Mon–Fri 07:30–21:00, once per order a day
-    - `daily_due` storage checks + 12V charging due (same lists as Today: `storage_check_due_list`,
-      `charging_due_list`), one per working day from 07:30
+    - `daily_due` storage checks + 12V charging + recall checks due (same lists as Today: `storage_check_due_list`,
+      `charging_due_list`, `recalls.due_list`), one per working day from 07:30
     - `late_return` test drive out > 3 h / rental past its expected return, to whoever handed it out, 07:00–21:00
     - `system` (system admins) worker problems and disk warn / bad, each at most once a day, not in the first
       10 min after a start. In the app, not the worker, so it can warn when the worker has stopped.
 - `/sw.js` (site root, scope `/`) caches nothing; a tap opens the page (`carbonara-open` message to an open window,
   else a new one); a `dm` push updates the 💬 count (`carbonara-push` → `carbonara:dm-changed`).
+
+**Recalls / campaigns (0.41.0, phase 1)** (migration 040; `routers/recalls.py`, `views/recalls.js`; the user's request:
+"every dealer might have different brands … keep it universal; check once when added, every now and then in storage, and
+when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phase 1 = the core + checks by hand; phase 2
+= file import + public data hints (KBA / EU Safety Gate, "possible"); phase 3 = manufacturer APIs, one source at a time.
+- **Recall sources** (Settings → Recall sources, admins; data, never brand names in code): name, the **makes** it covers
+  (car make ignoring case / spaces / punctuation, equal or starting with it; none = every car), the lookup page `url`
+  (`{vin}` / `{reg}` replaced) and a note. Removed = `active` false. A car whose make no active source covers is
+  **never due** (a dealer without sources sees nothing).
+- **When a check is due** (`DUE_WHERE`; cars not off site and past the arrival inspection): a request
+  (`request_check`: `arrival` from `complete_inspection`, `pdi` from `set_booking` with a date), or no check yet, or the
+  last check older than `recall_check_days`. Any recorded check clears the request.
+- **Checking (by hand, the user's choice for now):** "🔍 Check for recalls" on the car's Recalls card opens the
+  sources with "Open {source} ↗" (url filled) + Copy VIN / reg. no; then "✓ No open recalls" (`POST
+  /vehicles/{id}/recall-checks`) or "⚠ Found recalls" → add each one (`POST /vehicles/{id}/recalls`, the first with
+  `as_check`). Logging into a brand's dealer site from the server (scraping) was ruled out (terms, staff passwords).
+- **A recall:** code, title, details, `certainty` confirmed / possible (later sources), status open → ✓ Done / Doesn't
+  apply (reason) → Reopen; deleted only by whoever added it or an admin. Events `recall_check / _added / _closed /
+  _reopened / _deleted` (no personal data).
+- **Where they show:** "⚠ Open recall" badge (car header, Vehicles list and storage cards: `open_recalls` count); Today:
+  "Recall checks due" (Today/tomorrow) and "Open recalls" (Needs attention); the morning `daily_due` notification counts
+  them; **PDI orders** carry `open_recalls` (`OPEN_RECALLS_JSON` in `ORDER_SELECT`): in the e-mail ("TILBAKEKALLINGER /
+  KAMPANJER"), the printed sheet (with "Utført ☐") and the PDI orders page; the **"Delivered" dialog** warns about open
+  confirmed recalls (never blocks).
 
 **My notes (0.40.0)** (`notes`, migration 039; `routers/notes.py`, `views/notes.js`; the user's request: "every user needs
 to take notes, pin cars and other things to remember, quick and easy"):
@@ -1347,6 +1374,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.38.2 | Private messages: the conversation scrolls in its own box with the writing field under it (the field no longer covers the newest messages), opened at the newest message |
 | 0.39.0 | **Server address on the System page** (HTTPS card): kept in the database, so it survives redeploys and each location sets its own; caddy follows a change within ~10 s without a restart (`caddy_host` volume, `caddy/start.sh`) |
 | 0.40.0 | **My notes:** 📝 panel on every page with private notes, pinned cars / pages, reminders (with phone notification) and done list (migration 039) |
+| 0.41.0 | **Recalls, phase 1:** recall sources per brand (Settings), checks due after arrival / when a PDI is booked / every 30 days in storage, check dialog (open the brand's system, record the result), recalls per car (done / doesn't apply), on Today, PDI orders and the Delivered dialog (migration 040) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

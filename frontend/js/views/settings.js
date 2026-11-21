@@ -1,5 +1,6 @@
 import { api, busy, fmtDate, h, nameInput, openDialog, session, showError, spotLabel, toast } from '../ui.js';
 import { renderPdiSheetSettings, signatureCard } from './pdisheet.js';
+import { renderRecallSources } from './recalls.js';
 
 export async function settingsView(el) {
   const staffBox = h('div');
@@ -15,10 +16,11 @@ export async function settingsView(el) {
     h('p', { class: 'muted small' },
       'The kiosk form where customers register the car they drop off: maps, key places, tick boxes and kiosk tablets.'),
     h('a', { href: '#/deliveries' }, 'Open Customer deliveries →'));
+  const recallBox = h('div'); // Recall sources: where cars are checked for recalls (views/recalls.js)
   el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), signatureCard(), staffBox, locBox, plateBox, pdiBox, sheetBox,
-    deliveryBox, registryBox, retentionBox);
+    recallBox, deliveryBox, registryBox, retentionBox);
   await Promise.all([renderStaff(), renderLocations(), renderPlates(), renderPdiLists(), renderPdiSheetSettings(sheetBox),
-    renderRegistry(), renderRetention()]);
+    renderRecallSources(recallBox), renderRegistry(), renderRetention()]);
 
   // Trade plates (prøvekjennemerker) for test drives. Named freely, so a set can
   // be renamed when a plate is replaced. A set is on at most one car at a time.

@@ -21,6 +21,7 @@ const since = (iso) => {
   const min = Math.max(0, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`;
 };
+const RECALL_REASON = { arrival: 'new in storage', pdi: 'PDI booked', storage: 'regular check in storage' };
 const inDays = (n) => (n < 0 ? `${-n} d overdue` : n === 0 ? 'today' : n === 1 ? 'tomorrow' : `in ${n} d`);
 
 // withPrep: today/tomorrow also show whether the car is prepared (notification bar until it is).
@@ -64,6 +65,10 @@ export async function todayView(el) {
       row(`#/vehicles/${b.id}`, carText(b),
         `${b.last_charged ? `last charged ${fmtDate(b.last_charged, false)}` : 'not charged since it came into storage'} · ${inDays(b.in_days)}`,
         b.in_days < 0 ? 'bad' : '')), { cls: d.battery_due.some((b) => b.in_days < 0) ? 'bad' : '' }),
+    // Recall checks (views/recalls.js): after arrival, PDI booked, or regularly in storage.
+    block('📣', 'Recall checks due', d.recall_due.map((c) =>
+      row(`#/vehicles/${c.id}`, carText(c), [h('span', {}, RECALL_REASON[c.reason] ?? c.reason), ' · ',
+        h('span', {}, c.last_checked ? `last checked ${fmtDate(c.last_checked, false)}` : 'not checked yet')])), { cls: 'warn' }),
     block('🔑', 'Out on test drive', d.test_drives.map((t) => (t.plate_moved_at
       ? row(`#/test-drive?return=${t.id}`, carText(t), 'trade plates moved to another car – register the return', 'bad')
       : row('#/test-drive', carText(t), `${t.customer_name} · ${since(t.started_at)}`)))),
@@ -87,6 +92,10 @@ export async function todayView(el) {
         : `sent ${fmtDate(o.sent_at, false)} to ${o.sent_to} · enter the date when they reply`))),
     block('📝', 'PDI orders not sent yet', d.pdi_drafts.map((o) =>
       row(pdiCarHref(o.vehicle_id), carText(o), `started ${fmtDate(o.created_at, false)}${o.created_by_name ? ` by ${o.created_by_name}` : ''}`))),
+    block('⚠', 'Open recalls', d.recalls_open.map((r) =>
+      row(`#/vehicles/${r.id}`, carText(r), [h('span', { translate: 'no' }, [r.code, r.title].filter(Boolean).join(': ')),
+        r.certainty === 'possible' ? [' ', h('span', {}, '(possible)')] : null], r.certainty === 'confirmed' ? 'bad' : '')),
+    { cls: d.recalls_open.some((r) => r.certainty === 'confirmed') ? 'bad' : 'warn' }),
     block('🛂', 'EU-kontroll due', d.eu_control.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), `${fmtDate(c.due, false)} (${inDays(c.in_days)})`, c.in_days <= 1 ? 'bad' : ''))),
     canSee('rental') ? block('🛂', 'Rental cars – EU-kontroll due', d.rental_eu_control.map((c) =>
@@ -99,6 +108,7 @@ export async function todayView(el) {
     block('⚠', 'Statens vegvesen differences to check', d.registry_mismatches.map((c) =>
       row(`#/vehicles/${c.id}`, carText(c), 'open the car to confirm'))),
     !(d.pdi_waiting.length || d.pdi_drafts.length || d.eu_control.length || d.service.length || d.registry_mismatches.length
+      || d.recalls_open.length
       || (canSee('rental') && d.rental_eu_control.length)
       || tyreRows(d.tyres_summer).length || tyreRows(d.tyres_winter).length)
       ? h('p', { class: 'empty' }, 'Nothing needs attention. 👍') : null,

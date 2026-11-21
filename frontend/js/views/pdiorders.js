@@ -56,9 +56,14 @@ function deliveredDialog(o, rerender) {
   const deliver = o.vehicle_status !== 'off_site' ? box(true) : null;
   const register = o.registered_marked_at ? null : box(true);
   const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Confirm');
+  // A car shouldn't be handed over with an open recall (a warning, never a block).
+  const recalls = (o.open_recalls || []).filter((r) => r.certainty === 'confirmed');
   const form = h('form', {},
     h('p', {}, h('strong', { translate: 'no' }, vehicleTitle(o)), ' ',
       h('span', { class: 'mono', translate: 'no' }, o.registration_number || o.vin)),
+    deliver && recalls.length ? h('div', { class: 'notice bad' },
+      h('strong', {}, 'This car has an open recall. Fix it before it is delivered.'),
+      h('ul', {}, recalls.map((r) => h('li', { translate: 'no' }, [r.code, r.title].filter(Boolean).join(': '))))) : null,
     deliver ? h('label', { class: 'check' }, deliver, h('span', {}, 'Delivered to the customer – the car is taken off site'))
       : h('p', { class: 'muted' }, '✓ Already off site'),
     register ? h('label', { class: 'check' }, register, h('span', {}, 'Registered in Norway – mark the car as registered'))
@@ -133,6 +138,10 @@ function orderCard(o, opts, rerender) {
       [o.prep_plate_name && `Trade plates: ${o.prep_plate_name}`, o.prep_note,
         o.prep_wheels_location && `Winter wheels: ${o.prep_wheels_location}`].filter(Boolean).map((t) => h('div', {}, t))) : null,
     lines.length ? h('ul', {}, lines.map((l) => h('li', {}, l))) : h('p', { class: 'muted' }, 'Nothing ordered.'),
+    (o.open_recalls || []).length ? h('div', { class: 'notice warn small' },
+      h('strong', {}, 'Open recalls – to be done during the PDI'),
+      h('ul', {}, o.open_recalls.map((r) => h('li', { translate: 'no' },
+        [r.code, r.title].filter(Boolean).join(': '), r.certainty === 'possible' ? ' (?)' : '')))) : null,
     o.other ? h('p', {}, h('strong', {}, 'Other: '), o.other) : null,
     o.note ? h('p', { class: 'muted' }, `Note: ${o.note}`) : null,
 

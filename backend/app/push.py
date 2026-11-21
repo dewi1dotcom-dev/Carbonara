@@ -280,12 +280,16 @@ def _pdi_prep(conn, today: dt.date) -> None:
 
 def _daily_due(conn, today: dt.date) -> None:
     """One morning notification: storage checks and 12V charging due within 3 days or overdue."""
+    from .routers.recalls import due_list as recall_due_list
     from .routers.storage_care import charging_due_list, storage_check_due_list
     checks, charges = len(storage_check_due_list(conn)), len(charging_due_list(conn, today))
-    if not (checks or charges) or not _once(conn, f"daily_due:{today}"):
+    recall = len(recall_due_list(conn))
+    if not (checks or charges or recall) or not _once(conn, f"daily_due:{today}"):
         return
-    en = [f"Storage checks: {checks}" if checks else None, f"12V charging: {charges}" if charges else None]
-    no = [f"Lagerkontroller: {checks}" if checks else None, f"12V-lading: {charges}" if charges else None]
+    en = [f"Storage checks: {checks}" if checks else None, f"12V charging: {charges}" if charges else None,
+          f"Recall checks: {recall}" if recall else None]
+    no = [f"Lagerkontroller: {checks}" if checks else None, f"12V-lading: {charges}" if charges else None,
+          f"Sjekk av tilbakekallinger: {recall}" if recall else None]
     notify(conn, None, "daily_due", en=("Due today or soon", " · ".join(x for x in en if x)),
            no=("Forfaller i dag eller snart", " · ".join(x for x in no if x)), url="#/", tag=f"daily_due-{today}")
 

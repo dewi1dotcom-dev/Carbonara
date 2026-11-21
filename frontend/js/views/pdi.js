@@ -220,6 +220,12 @@ function pdiSheet(o, opts) {
           h('td', {}, `${i.label}${i.choice ? `: ${i.choice}` : ''}`), h('td', { class: 'pdi-tick' }, '☐')))))
       : h('p', {}, '(ingen tilbehør)'),
     textBlock('Annet', o.other),
+    // Open recalls / campaigns on the car: done during the PDI (views/recalls.js).
+    (o.open_recalls || []).length ? [h('h2', {}, 'Tilbakekallinger / kampanjer'),
+      h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Kampanje'), h('th', { class: 'pdi-tick' }, 'Utført'))),
+        h('tbody', {}, o.open_recalls.map((r) => h('tr', {},
+          h('td', {}, [r.code, r.title].filter(Boolean).join(': ') + (r.certainty === 'possible' ? ' (mulig – sjekk)' : '')),
+          h('td', { class: 'pdi-tick' }, '☐')))))] : null,
     t.mode && t.mode !== 'none' ? [h('h2', {}, 'Vinterdekk'),
       rows([['Vinterdekk', opts.tyre_modes[t.mode]], ['Dekkleverandør', t.company],
         ['Forventet levert', t.expected_date && fmtDate(t.expected_date, false)], ['Detaljer', t.note]])] : null,

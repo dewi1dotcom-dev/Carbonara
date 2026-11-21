@@ -12,7 +12,7 @@ const KIND_LABEL = {
   pdi_prep: 'PDI soon and the car is not prepared',
   pdi_status: 'PDI date confirmed or PDI done (orders you made)',
   late_return: 'Test drive or rental car not back (cars you handed out)',
-  daily_due: 'Storage checks and 12V charging due (in the morning)',
+  daily_due: 'Storage checks, 12V charging and recall checks due (in the morning)',
   system: 'Background worker or disk space problems',
 };
 
