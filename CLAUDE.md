@@ -1171,6 +1171,12 @@ to take notes, pin cars and other things to remember, quick and easy"):
   - **The car's own photos** (`vehicle_photos`, photostore; max 60 per car): "Photos (n)" card on the car page (tap to
     enlarge, ★ Show first, Delete, 📷 Add photos from the device); the first one is the car's picture in lists until
     the arrival inspection has a right-side photo (`AD_PHOTO_SQL` → `ad_photo_id`); `purge_vehicle` removes them.
+  - **No arrival inspection yet (0.45.3, the user's request):** the car page shows a warning banner under the top actions
+    ("No arrival inspection yet" + "🔍 Start arrival inspection", or "Arrival inspection in progress" + "Continue
+    inspection"), the same button in the empty Inspections card, and lists show a "No arrival inspection" badge
+    (`no_arrival` from `GET /vehicles`). The button posts `/intake` with the car's VIN; the server takes a car in stock
+    in again only when it never had a completed arrival inspection. `_first_arrival` is false when the car has events
+    older than the inspection, so cancelling it keeps the car (before, it would have gone to Recently deleted).
   - `listed_km` (the ad's mileage, `listed_km_at`) is a mileage source (`LATEST_KM_SQL` 'ad', "from the finn.no ad");
     linking an existing car also saves it.
 - **Asking prices, compared within our own stock (0.44.0, the user's request)** (`views/prices.js`, migration 041):
@@ -1467,6 +1473,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.44.1 | The Chrome helper is renamed **Carbonara Sidekick** (1.4.0; folder `addons/sidekick`, download `carbonara-sidekick.zip`) |
 | 0.45.0 | **Add a car from its finn.no ad** with Sidekick 1.5.0 (details from the ad + VIN from Statens vegvesen, starts off site, ticked photos copied); **Photos** card on the car page (migration 042) |
 | 0.45.1 | Fix: adding a car from its finn.no ad did nothing when Chrome asked about the photos (the question closed Sidekick); Sidekick 1.5.1 adds the car in its background and may read finn.no's photo server without asking |
+| 0.45.2 | Sidekick 1.5.2: each photo of a finn.no ad offered once (the same photo came at several sizes) |
+| 0.45.3 | Cars without an arrival inspection (e.g. added from their finn.no ad): warning banner with "Start arrival inspection" on the car page, the same button in the empty Inspections card, "No arrival inspection" badge in lists; cancelling that inspection keeps the car |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

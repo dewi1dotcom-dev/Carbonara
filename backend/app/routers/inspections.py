@@ -137,11 +137,16 @@ def load_inspection(conn, inspection_id: int) -> dict:
 
 def _first_arrival(conn, vehicle_id: int, inspection_id: int) -> bool:
     """True if this inspection is the car's first real arrival: no other completed
-    inspection and never placed in storage. A car coming back keeps its history."""
+    inspection and never placed in storage. A car coming back keeps its history.
+    A car that was in Carbonara before this inspection started (e.g. added from its finn.no ad) keeps its
+    record too: its first event is older than the inspection (the intake creates car and inspection together)."""
     return not conn.execute(
         """SELECT 1 FROM inspections WHERE vehicle_id = %(v)s AND id <> %(i)s AND status = 'completed'
            UNION ALL
            SELECT 1 FROM storage_assignments WHERE vehicle_id = %(v)s
+           UNION ALL
+           SELECT 1 FROM vehicle_events e WHERE e.vehicle_id = %(v)s
+              AND e.occurred_at < (SELECT started_at FROM inspections WHERE id = %(i)s)
            LIMIT 1""",
         {"v": vehicle_id, "i": inspection_id},
     ).fetchone()
@@ -183,7 +188,11 @@ def start_intake(body: IntakeIn, conn=Depends(get_conn)):
         if open_insp:
             _registry_step(conn, vehicle, body)
             return {"inspection_id": open_insp["id"], "resumed": True}
-        if vehicle["status"] == "in_storage":
+        # A car already in stock is only taken in again if it never had an arrival inspection (e.g. added from its
+        # finn.no ad and placed with Move car); completing it places the car anew.
+        if vehicle["status"] == "in_storage" and conn.execute(
+                "SELECT 1 FROM inspections WHERE vehicle_id = %s AND kind = 'arrival' AND status = 'completed'",
+                (vehicle["id"],)).fetchone():
             raise conflict("This vehicle is already in stock")
         conn.execute("UPDATE vehicles SET status = 'intake' WHERE id = %s", (vehicle["id"],))
 

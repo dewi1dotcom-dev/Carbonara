@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Carbonara Sidekick",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Carbonara's helper in Chrome: checks cars for recalls in a dealer portal you are logged in to, and links finn.no ads and their prices to cars.",
   "action": {
     "default_popup": "popup.html",

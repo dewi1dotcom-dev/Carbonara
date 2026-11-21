@@ -217,6 +217,9 @@ const NO = {
   'Check digit does not match. ': 'Kontrollsifferet stemmer ikke. ',
   'For this manufacturer that means a character is probably wrong (8/B, 5/S, 0/D, 2/Z…). Compare with the car.': 'For denne produsenten betyr det trolig at et tegn er feil (8/B, 5/S, 0/D, 2/Z…). Sammenlign med bilen.',
   'Only letters and digits are allowed.': 'Bare bokstaver og tall er tillatt.', 'New vehicle — not seen before.': 'Ny bil — ikke sett før.',
+  'Start arrival inspection': 'Start mottakskontroll', 'No arrival inspection yet': 'Ingen mottakskontroll ennå',
+  'Condition, damage and photos have not been recorded. Do it when the car is here.': 'Tilstand, skader og bilder er ikke registrert. Gjør det når bilen er her.',
+  'Arrival inspection in progress': 'Mottakskontroll pågår', 'No inspections yet.': 'Ingen kontroller ennå.', 'No arrival inspection': 'Ingen mottakskontroll',
   'Start inspection': 'Start kontroll', 'Continue inspection': 'Fortsett kontroll', 'Always compare with the car before starting.': 'Sammenlign alltid med bilen før du starter.',
   'Personalised plate? · tap to look up': 'Personlig skilt? · trykk for å slå opp',
   '1. Vehicle details': '1. Bildetaljer', '2. Photos': '2. Bilder', '3. Damage inspection': '3. Skadekontroll', '4. Place in storage': '4. Plasser på lager', '4. Storage': '4. Lager',
@@ -869,6 +872,7 @@ const NO = {
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
+  ['Started {} by {}.', 'Startet {1} av {2}.'], ['Started {}.', 'Startet {1}.'],
   ['{} not found', '{1t} ble ikke funnet'],
   ['Done ({n})', 'Ferdig ({1})'],
   ['{n} car(s)', '{1} bil(er)'], ['Photos ({n})', 'Bilder ({1})'], ['{n} photos added', '{1} bilder lagt til'],

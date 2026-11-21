@@ -7,7 +7,7 @@ import { priceCard, priceValue } from './prices.js';
 import { recallBadge, recallsCard } from './recalls.js';
 import { batteryCard, storageCard } from './storagecare.js';
 import {
-  api, append, badge, busy, canOpen, CONDITION, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, append, badge, busy, canOpen, CONDITION, session, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   readyBadge, regStatus, showError, spotLabel, STATUS,
   toast, tyreBadge, vehicleTitle, viewPhoto, WHEELS, wheelsSelect,
 } from '../ui.js';
@@ -81,6 +81,7 @@ export function vehicleCard(v, extra = null) {
         svc && svc.cls !== 'good' ? badge(svc) : null,
         v.finn_code ? h('span', { class: 'badge finn' }, 'finn.no') : null,
         v.test_drive_id ? h('span', { class: 'badge warn' }, 'On test drive') : null,
+        v.no_arrival && v.status !== 'intake' ? h('span', { class: 'badge warn' }, 'No arrival inspection') : null,
         recallBadge(v.open_recalls),
         tyreBadge(v.tyre_warning),
         v.pdi_status ? h('span', { class: `badge ${v.pdi_status === 'booked' ? 'good' : 'warn'}` },
@@ -786,6 +787,40 @@ function topActions(v, pdiData, pdiOpts, rerender) {
     h('button', { class: 'btn', type: 'button', onClick: () => documentDialog(v, null, rerender) }, '📄 Add document'));
 }
 
+/** Starts (or resumes) the car's arrival inspection and opens it. The server takes a car in again only if it never
+ *  had a completed arrival inspection, so this is for cars added another way (e.g. from their finn.no ad). */
+async function startArrival(v, btn) {
+  await busy(btn, async () => {
+    const res = await api.post('/intake', {
+      vin: v.vin, inspector_id: session.me?.id || Number(getInspectorId()),
+      vin_source: 'manual', use_registry: true,
+    });
+    location.hash = `#/inspections/${res.inspection_id}`;
+  });
+}
+
+function startArrivalButton(v, cls = 'btn primary') {
+  if (!canOpen('#/intake')) return null;
+  const btn = h('button', { class: cls, type: 'button', onClick: () => startArrival(v, btn) }, '🔍 Start arrival inspection');
+  return btn;
+}
+
+/** Shown near the top while the car has no completed arrival inspection: condition, damage and photos are missing. */
+function arrivalBanner(v) {
+  if (v.inspections.some((i) => i.kind === 'arrival' && i.status === 'completed')) return null;
+  const open = v.inspections.find((i) => i.kind === 'arrival' && i.status === 'in_progress');
+  if (open) {
+    return h('div', { class: 'card notice warn td-banner' },
+      h('div', {}, h('strong', {}, 'Arrival inspection in progress'),
+        h('div', { class: 'small' }, `Started ${fmtDate(open.started_at)}${open.inspector_name ? ` by ${open.inspector_name}` : ''}.`)),
+      canOpen(`#/inspections/${open.id}`) ? h('a', { class: 'btn primary', href: `#/inspections/${open.id}` }, 'Continue inspection') : null);
+  }
+  return h('div', { class: 'card notice warn td-banner' },
+    h('div', {}, h('strong', {}, 'No arrival inspection yet'),
+      h('div', { class: 'small' }, 'Condition, damage and photos have not been recorded. Do it when the car is here.')),
+    startArrivalButton(v));
+}
+
 /** Out on a test drive: who has it and since when (nothing otherwise). */
 function testDriveBanner(v) {
   const d = v.active_test_drive;
@@ -852,6 +887,7 @@ export async function vehicleView(el, [id], host = el) {
     duplicateNotice(v.possible_duplicates),
     topActions(v, pdiData, pdiOpts, rerender),
     testDriveBanner(v),
+    arrivalBanner(v),
     pdiBanner(pdiData.current),
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
@@ -880,6 +916,7 @@ export async function vehicleView(el, [id], host = el) {
       repairedList(v, rerender)),
     h('section', { class: 'card' },
       h('h2', {}, 'Inspections'),
+      v.inspections.length ? null : h('div', { class: 'actions', style: 'justify-content: space-between; align-items: center; margin-top: 0' }, h('p', { class: 'empty' }, 'No inspections yet.'), startArrivalButton(v, 'btn')),
       h('div', { class: 'list' }, v.inspections.map((i) =>
         h('a', { class: 'list-card inner', href: `#/inspections/${i.id}` },
           i.front_photo_id ? h('img', { class: 'mini-thumb', src: photoUrl(i.front_photo_id), alt: '' }) : null,

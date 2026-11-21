@@ -120,7 +120,9 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
                   coalesce(r.first_registered, r.first_registered_norway) AS first_registered,
                   r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code,
                   (SELECT t.id FROM test_drives t WHERE t.vehicle_id = v.id AND t.status = 'out') AS test_drive_id,
-                  po.status AS pdi_status, po.pdi_at, {RIGHT_PHOTO_SQL}, {AD_PHOTO_SQL}, {OPEN_COUNT_SQL} AS open_recalls
+                  po.status AS pdi_status, po.pdi_at, {RIGHT_PHOTO_SQL}, {AD_PHOTO_SQL}, {OPEN_COUNT_SQL} AS open_recalls,
+                  NOT EXISTS (SELECT 1 FROM inspections ai WHERE ai.vehicle_id = v.id AND ai.kind = 'arrival'
+                               AND ai.status = 'completed') AS no_arrival
              FROM vehicles v
              LEFT JOIN pdi_orders po ON po.vehicle_id = v.id AND po.status NOT IN ('done', 'cancelled')
              LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL

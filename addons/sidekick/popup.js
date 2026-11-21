@@ -168,7 +168,20 @@ function readAd() {
     const src = img.currentSrc || img.src;
     if (img.naturalWidth >= 400 && !/logo|icon|avatar|profile/i.test(src)) out.images.push(src);
   }
-  out.images = [...new Set(out.images.filter((u) => /^https:\/\//.test(u || '')))].slice(0, 40);
+  // The same photo comes at several sizes (the ad's data, the share preview, the gallery; finn.no's photo server has
+  // the size in the path, e.g. /dynamic/1280w/ or /dynamic/default/): one per photo, in first-seen order, the largest.
+  const sizeOf = (u) => {
+    const m = u.match(/\/dynamic\/(\d+)/) || u.match(/[?&](?:w|width)=(\d+)/);
+    return m ? Number(m[1]) : (/\/dynamic\/default\//.test(u) ? 1000 : 0);
+  };
+  const photos = new Map();
+  for (const u of out.images.filter((x) => /^https:\/\//.test(x || ''))) {
+    const bare = u.replace(/[?#].*$/, '');
+    const file = bare.split('/').pop();
+    const key = file.length >= 12 ? file : bare.replace(/\/dynamic\/[^/]+\//, '/dynamic/'); // long file names are unique ids
+    if (!photos.has(key) || sizeOf(u) > sizeOf(photos.get(key))) photos.set(key, u);
+  }
+  out.images = [...photos.values()].slice(0, 40);
   out.title = clean(document.querySelector('h1')?.textContent) || clean(document.title);
   return out;
 }
