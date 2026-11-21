@@ -691,15 +691,26 @@ const NO = {
     '{vin} og {reg} byttes ut med bilens VIN og reg.nr., hvis siden tar dem i adressen.',
   'Note for staff': 'Merknad til de ansatte', 'Edit recall source': 'Rediger kilde for tilbakekallinger',
   'Recall source saved': 'Kilde for tilbakekallinger lagret',
-  'Recall helper for Chrome (PC)': 'Hjelper for tilbakekallinger i Chrome (PC)',
-  'finn.no: open one of your ads on finn.no and click the helper to link the ad to the right car in Carbonara.':
-    'finn.no: åpne en av annonsene deres på finn.no og klikk på hjelperen for å koble annonsen til riktig bil i Carbonara.',
+  // ---- Carbonara Sidekick (Chrome extension; the "recall helper" until 0.44)
+  'Carbonara Sidekick for Chrome (PC)': 'Carbonara Sidekick for Chrome (PC)',
+  'A small helper in Chrome. In a dealer portal you are logged in to, it checks the cars that are due for recalls with the portal’s own search: new recalls are added here and those the portal shows as done are closed. On one of your finn.no ads, it links the ad and its asking price to the right car. No password is stored.':
+    'En liten hjelper i Chrome. I en forhandlerportal du er logget inn i, sjekker den bilene som skal sjekkes for tilbakekallinger med portalens eget søk: nye tilbakekallinger legges til her, og de portalen viser som utført lukkes. På en av finn.no-annonsene deres kobler den annonsen og prisantydningen til riktig bil. Ingen passord lagres.',
+  'Download Sidekick and unzip it, e.g. in Documents: ': 'Last ned Sidekick og pakk den ut, f.eks. i Dokumenter: ',
+  'In Chrome, open chrome://extensions, turn on "Developer mode" (top right), click "Load unpacked" and choose the unzipped folder "carbonara-sidekick". If the old "Carbonara recall helper" is there, remove it.':
+    'Åpne chrome://extensions i Chrome, slå på «Utviklermodus» (øverst til høyre), klikk «Last inn upakket» og velg den utpakkede mappen «carbonara-sidekick». Hvis den gamle «Carbonara recall helper» ligger der, fjern den.',
+  'Click the puzzle piece in Chrome’s toolbar and pin "Carbonara Sidekick".':
+    'Klikk på puslespillbrikken i Chromes verktøylinje og fest «Carbonara Sidekick».',
+  'Click Sidekick and enter Carbonara’s address: ': 'Klikk på Sidekick og skriv inn adressen til Carbonara: ',
+  'Log in to Carbonara in the same Chrome. Recalls: open the portal’s campaign page, log in there too, click Sidekick and then "Check cars". finn.no: open one of your ads and click Sidekick.':
+    'Logg inn i Carbonara i samme Chrome. Tilbakekallinger: åpne kampanjesiden i portalen, logg inn der også, klikk på Sidekick og så «Sjekk biler». finn.no: åpne en av annonsene deres og klikk på Sidekick.',
+  'After an update of Carbonara, download it again, unzip it over the old folder and click ↻ on Sidekick in chrome://extensions.':
+    'Etter en oppdatering av Carbonara: last den ned på nytt, pakk den ut over den gamle mappen og klikk ↻ på Sidekick i chrome://extensions.',
   'Find on finn.no': 'Finn på finn.no', 'FINN organisation id': 'FINN-organisasjons-ID',
   // ---- Asking prices (0.44.0)
   'Asking price': 'Prisantydning', 'No price': 'Ingen pris', 'Add price': 'Legg til pris', '+ Add price': '+ Legg til pris',
   'Price saved': 'Pris lagret', 'Price removed': 'Pris fjernet', 'e.g. 289 900': 'f.eks. 289 900',
-  'The asking price in kroner, as on the ad. The helper can read it from the car’s finn.no ad.':
-    'Prisantydningen i kroner, som på annonsen. Hjelperen kan lese den fra bilens finn.no-annonse.',
+  'The asking price in kroner, as on the ad. Carbonara Sidekick can read it from the car’s finn.no ad.':
+    'Prisantydningen i kroner, som på annonsen. Carbonara Sidekick kan lese den fra bilens finn.no-annonse.',
   'Asking price (kr)': 'Prisantydning (kr)', 'Remove price': 'Fjern pris',
   'Price compared with similar cars in stock': 'Pris sammenlignet med lignende biler på lager',
   'No other cars of this make and model in stock.': 'Ingen andre biler av dette merket og denne modellen på lager.',
@@ -711,19 +722,7 @@ const NO = {
     'Forhandlerens nummer på finn.no (orgId= i adressen når du ser på deres egne annonser). «Finn på finn.no» på bilsiden viser da annonsene deres for det merket og den modellen.',
   'FINN organisation id: digits only (the number after orgId= in the address of your ads on finn.no)':
     'FINN-organisasjons-ID: bare sifre (tallet etter orgId= i adressen til annonsene deres på finn.no)',
-  'Checks the cars that are due in a dealer portal you are logged in to, with the portal’s own search, and records the results here: new recalls are added and recalls the portal shows as done are closed. No password is stored.':
-    'Sjekker bilene som forfaller i en forhandlerportal du er logget inn i, med portalens eget søk, og registrerer resultatet her: nye tilbakekallinger legges til, og de portalen viser som utført lukkes. Ingen passord lagres.',
-  'Download the helper and unzip it, e.g. in Documents: ': 'Last ned hjelperen og pakk den ut, f.eks. i Dokumenter: ',
-  'In Chrome, open chrome://extensions, turn on "Developer mode" (top right), click "Load unpacked" and choose the unzipped folder "carbonara-recall-helper".':
-    'Åpne chrome://extensions i Chrome, slå på «Utviklermodus» (øverst til høyre), klikk «Last inn upakket» og velg den utpakkede mappen «carbonara-recall-helper».',
-  'Click the puzzle piece in Chrome’s toolbar and pin "Carbonara recall helper".':
-    'Klikk på puslespillbrikken i Chromes verktøylinje og fest «Carbonara recall helper».',
-  'Click the helper and enter Carbonara’s address: ': 'Klikk på hjelperen og skriv inn adressen til Carbonara: ',
   '. Allow Chrome to reach it.': '. Gi Chrome lov til å nå den.',
-  'Log in to Carbonara in the same Chrome. Open the portal’s campaign page, log in there too, click the helper and then "Check cars".':
-    'Logg inn i Carbonara i samme Chrome. Åpne kampanjesiden i portalen, logg inn der også, klikk på hjelperen og så «Sjekk biler».',
-  'After an update of Carbonara, download it again and click ↻ on the helper in chrome://extensions.':
-    'Etter en oppdatering av Carbonara: last den ned på nytt og klikk ↻ på hjelperen i chrome://extensions.',
   'The address must start with https://': 'Adressen må begynne med https://', 'Give the source a name': 'Gi kilden et navn',
   'Recall source': 'Kilde for tilbakekallinger', 'Recall': 'Tilbakekalling', 'Describe the recall': 'Beskriv tilbakekallingen',
   'Only the person who added it or an administrator can delete it': 'Bare den som la den til eller en administrator kan slette den',

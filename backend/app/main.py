@@ -69,23 +69,25 @@ def ca_root():
                         headers={"Cache-Control": "no-cache"})
 
 
-# The recall helper (a Chrome extension, addons/recall-helper) as a zip to unpack and load in Chrome. Open
-# without login like the certificate: it holds no data or secrets, only the extension's code.
+# Carbonara Sidekick (a Chrome extension, addons/sidekick; the "recall helper" until 0.44) as a zip to unpack and
+# load in Chrome. Open without login like the certificate: it holds no data or secrets, only the extension's code.
+# The old address still gives the same zip.
 _ADDONS = Path(__file__).resolve().parents[2] / "addons"
 
 
+@app.get("/addons/sidekick.zip", include_in_schema=False)
 @app.get("/addons/recall-helper.zip", include_in_schema=False)
-def recall_helper_zip():
-    folder = _ADDONS / "recall-helper"
+def sidekick_zip():
+    folder = _ADDONS / "sidekick"
     if not folder.is_dir():
         raise HTTPException(404, "Not found")
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
         for f in sorted(folder.rglob("*")):
             if f.is_file():
-                z.write(f, f"carbonara-recall-helper/{f.relative_to(folder).as_posix()}")
+                z.write(f, f"carbonara-sidekick/{f.relative_to(folder).as_posix()}")
     return Response(buf.getvalue(), media_type="application/zip", headers={
-        "Content-Disposition": 'attachment; filename="carbonara-recall-helper.zip"', "Cache-Control": "no-store"})
+        "Content-Disposition": 'attachment; filename="carbonara-sidekick.zip"', "Cache-Control": "no-store"})
 
 
 # --------------------------------------------------------------------------- #

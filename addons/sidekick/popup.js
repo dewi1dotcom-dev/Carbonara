@@ -1,12 +1,14 @@
-// Carbonara recall helper: the popup (1.1.0). It only starts a check and shows its progress; the check runs in
-// worker.js, so it continues when this window closes. Texts follow the Carbonara user's language (EN or NO,
-// never mixed), until known the browser's.
+// Carbonara Sidekick (Chrome extension; called "recall helper" until 1.3.0): the popup.
+// - On a dealer portal: starts the recall check and shows its progress. The check runs in worker.js, so it
+//   continues when this window closes.
+// - On one of the dealer's finn.no ads: links the ad to a car and saves its asking price.
+// Texts follow the Carbonara user's language (EN or NO, never mixed), until known the browser's.
 
 const $ = (id) => document.getElementById(id);
 const STALE_MS = 15 * 60 * 1000; // a "running" check this old was cut off (e.g. Chrome closed)
 
 const NO = {
-  'Carbonara recall helper': 'Carbonara-hjelper for tilbakekallinger',
+  'Carbonara Sidekick': 'Carbonara Sidekick',
   'Carbonara\'s address, as you open it in Chrome:': 'Adressen til Carbonara, slik du åpner den i Chrome:',
   'Save': 'Lagre',
   'Open the dealer portal\'s campaign search and log in, then press "Check cars". You can close this window; the check continues.':

@@ -49,7 +49,7 @@ function priceDialog(v, done) {
     await done();
   });
   const form = h('form', {},
-    h('p', { class: 'muted small' }, 'The asking price in kroner, as on the ad. The helper can read it from the car’s finn.no ad.'),
+    h('p', { class: 'muted small' }, 'The asking price in kroner, as on the ad. Carbonara Sidekick can read it from the car’s finn.no ad.'),
     h('div', { class: 'field' }, h('label', {}, 'Asking price (kr)'), input),
     h('div', { class: 'actions spread' },
       v.asking_price != null ? h('button', { class: 'link danger', type: 'button', onClick: () => save(null) }, 'Remove price') : h('span'),

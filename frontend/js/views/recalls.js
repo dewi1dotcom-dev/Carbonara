@@ -234,28 +234,27 @@ export async function renderRecallSources(box) {
     helperBox()));
 }
 
-/** The recall helper (Chrome extension, addons/recall-helper): checks the due cars in a dealer portal the
- *  person is logged in to, and sends the results here (0.42.0). */
+/** Carbonara Sidekick (Chrome extension, addons/sidekick; the "recall helper" until 0.44): recall checks in a dealer
+ *  portal the person is logged in to, and finn.no ads + their prices linked to cars. */
 function helperBox() {
   const step = (text, ...extra) => h('li', {}, h('span', {}, text), ...extra);
   return h('details', { class: 'recall-helper' },
-    h('summary', {}, 'Recall helper for Chrome (PC)'),
+    h('summary', {}, 'Carbonara Sidekick for Chrome (PC)'),
     h('p', { class: 'muted small' },
-      'Checks the cars that are due in a dealer portal you are logged in to, with the portal’s own search, and records '
-      + 'the results here: new recalls are added and recalls the portal shows as done are closed. No password is stored.'),
+      'A small helper in Chrome. In a dealer portal you are logged in to, it checks the cars that are due for recalls with '
+      + 'the portal’s own search: new recalls are added here and those the portal shows as done are closed. On one of your '
+      + 'finn.no ads, it links the ad and its asking price to the right car. No password is stored.'),
     h('ol', { class: 'small' },
-      step('Download the helper and unzip it, e.g. in Documents: ',
-        h('a', { href: '/addons/recall-helper.zip', download: 'carbonara-recall-helper.zip' }, '⬇ carbonara-recall-helper.zip')),
+      step('Download Sidekick and unzip it, e.g. in Documents: ',
+        h('a', { href: '/addons/sidekick.zip', download: 'carbonara-sidekick.zip' }, '⬇ carbonara-sidekick.zip')),
       step('In Chrome, open chrome://extensions, turn on "Developer mode" (top right), click "Load unpacked" and choose the '
-        + 'unzipped folder "carbonara-recall-helper".'),
-      step('Click the puzzle piece in Chrome’s toolbar and pin "Carbonara recall helper".'),
-      step('Click the helper and enter Carbonara’s address: ', h('span', { class: 'mono', translate: 'no' }, location.origin),
+        + 'unzipped folder "carbonara-sidekick". If the old "Carbonara recall helper" is there, remove it.'),
+      step('Click the puzzle piece in Chrome’s toolbar and pin "Carbonara Sidekick".'),
+      step('Click Sidekick and enter Carbonara’s address: ', h('span', { class: 'mono', translate: 'no' }, location.origin),
         h('span', {}, '. Allow Chrome to reach it.')),
-      step('Log in to Carbonara in the same Chrome. Open the portal’s campaign page, log in there too, click the helper '
-        + 'and then "Check cars".')),
-    h('p', { class: 'muted small' },
-      'finn.no: open one of your ads on finn.no and click the helper to link the ad to the right car in Carbonara.'),
-    h('p', { class: 'muted small' }, 'After an update of Carbonara, download it again and click ↻ on the helper in chrome://extensions.'));
+      step('Log in to Carbonara in the same Chrome. Recalls: open the portal’s campaign page, log in there too, click '
+        + 'Sidekick and then "Check cars". finn.no: open one of your ads and click Sidekick.')),
+    h('p', { class: 'muted small' }, 'After an update of Carbonara, download it again, unzip it over the old folder and click ↻ on Sidekick in chrome://extensions.'));
 }
 
 function sourceDialog(s, done) {

@@ -1,4 +1,4 @@
-// Carbonara recall helper: the check itself (1.1.0). It runs here, in the extension's background, so it keeps
+// Carbonara Sidekick: the recall check itself (from 1.1.0). It runs here, in the extension's background, so it keeps
 // going when the small popup window closes (Chrome closes it as soon as you click anywhere else; in 1.0.0 the
 // check ran in the popup and stopped half way). Progress is kept in chrome.storage.local "job"; the popup shows it.
 //

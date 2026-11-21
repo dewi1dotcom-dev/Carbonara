@@ -306,7 +306,7 @@ def set_recall_status(recall_id: int, body: RecallPatch, request: Request, conn=
 
 
 # --------------------------------------------------------------------------- #
-# The recall helper (0.42.0): a Chrome extension (addons/recall-helper) that runs in the person's own,
+# Carbonara Sidekick (0.42.0, the "recall helper" until 0.44): a Chrome extension (addons/sidekick) that runs in the person's own,
 # logged-in dealer portal tab, looks each car up with the portal's own search and sends the result here.
 # It uses the person's Carbonara login (cookie); Carbonara never stores a portal password.
 # --------------------------------------------------------------------------- #

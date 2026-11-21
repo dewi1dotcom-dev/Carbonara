@@ -237,9 +237,9 @@ backend/
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
                         notes (my notes), recalls (recall sources, checks, recalls per car)
   migrations/           001…041
-addons/recall-helper/   Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
+addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
-                        copied into the image (Dockerfile) and served zipped at /addons/recall-helper.zip
+                        copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -1067,9 +1067,10 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
   them; **PDI orders** carry `open_recalls` (`OPEN_RECALLS_JSON` in `ORDER_SELECT`): in the e-mail ("TILBAKEKALLINGER /
   KAMPANJER"), the printed sheet (with "Utført ☐") and the PDI orders page; the **"Delivered" dialog** warns about open
   confirmed recalls (never blocks).
-- **Recall helper (0.42.0, the user's request; a Chrome extension, `addons/recall-helper/`):** automates the check in a
+- **Carbonara Sidekick (0.42.0 as the "recall helper"; renamed 0.44.1 by the user's choice, since it also does finn.no
+  links and prices; a Chrome extension, `addons/sidekick/`, version in its `manifest.json`).** Recalls: automates the check in a
   dealer portal **in the person's own logged-in tab** (no portal password stored anywhere; the server never logs in).
-  - Install: Settings → Recall sources → "Recall helper for Chrome (PC)": `GET /addons/recall-helper.zip` (zipped on the
+  - Install: Settings → Recall sources → "Carbonara Sidekick for Chrome (PC)": `GET /addons/sidekick.zip` (the old `/addons/recall-helper.zip` still works) (zipped on the
     fly from `addons/`, open like the certificate), then chrome://extensions → Developer mode → Load unpacked. The
     popup asks for Carbonara's address once (optional host permission for that origin only) and uses the Carbonara
     login cookie of the same Chrome. Its texts follow the user's language (`/auth/state`), EN/NO dictionary in `popup.js`.
@@ -1437,6 +1438,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.42.1 | Recall helper 1.1.0: the check runs in the background and continues when its small window closes (it stopped after 4 of 8 cars) |
 | 0.43.0 | finn.no: "Find on finn.no" on the car page (your ads for that make / model, FINN organisation id on the System page); the helper (1.2.0) links the finn.no ad you are looking at to a car |
 | 0.44.0 | **Asking prices:** price per car (typed in, or read by the helper from the car's finn.no ad), compared with the same make / model in stock on the car page and on the new Price overview page (migration 041) |
+| 0.44.1 | The Chrome helper is renamed **Carbonara Sidekick** (1.4.0; folder `addons/sidekick`, download `carbonara-sidekick.zip`) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
