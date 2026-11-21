@@ -244,10 +244,14 @@ def purge_vehicle(conn, vehicle_id: int) -> list:
             WHERE vehicle_id = %s AND file_key IS NOT NULL
            UNION ALL
            SELECT sheet_file_key, 'pdf' FROM pdi_orders  -- filled-in PDI sheets
-            WHERE vehicle_id = %s AND sheet_file_key IS NOT NULL""",
-        (vehicle_id, vehicle_id, vehicle_id, vehicle_id),
+            WHERE vehicle_id = %s AND sheet_file_key IS NOT NULL
+           UNION ALL
+           SELECT file_key, original_ext FROM vehicle_photos  -- the car's own photos (0.45.0)
+            WHERE vehicle_id = %s""",
+        (vehicle_id, vehicle_id, vehicle_id, vehicle_id, vehicle_id),
     ).fetchall()
     for stmt in (
+        "DELETE FROM vehicle_photos WHERE vehicle_id = %s",
         # Customer deliveries are kept (by reg. no) with their own retention; only unlinked.
         "UPDATE car_deliveries SET vehicle_id = NULL WHERE vehicle_id = %s",
         "DELETE FROM vehicle_documents WHERE vehicle_id = %s",

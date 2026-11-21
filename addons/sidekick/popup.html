@@ -20,6 +20,15 @@
     .good { color: #15803d; }
     .warn { color: #a16207; }
     [hidden] { display: none !important; }
+    body:has(#finn:not([hidden])) { width: 420px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 8px; margin: 8px 0; }
+    .grid2 label { display: flex; flex-direction: column; font-size: 12px; color: #4A4538; gap: 2px; }
+    .grid2 select { padding: 5px; font: inherit; border: 1px solid #E0D6BA; border-radius: 6px; }
+    .pics { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; max-height: 230px; overflow-y: auto; }
+    .pic { position: relative; cursor: pointer; }
+    .pic img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 4px; opacity: .45; }
+    .pic input { position: absolute; top: 3px; left: 3px; margin: 0; }
+    .pic:has(input:checked) img { opacity: 1; outline: 2px solid #F5B800; }
   </style>
 </head>
 <body>
@@ -35,6 +44,23 @@
     <p id="finnIntro">Link this finn.no ad to a car in Carbonara:</p>
     <p class="muted" id="finnAd"></p>
     <select id="finnCar" style="width:100%;padding:6px;font:inherit;border:1px solid #E0D6BA;border-radius:6px"></select>
+    <div id="finnNew" hidden>
+      <p class="muted" id="newInfo"></p>
+      <div class="grid2">
+        <label><span id="lReg">Reg. no</span><input type="text" id="nReg" spellcheck="false"></label>
+        <label><span id="lVin">VIN</span><input type="text" id="nVin" spellcheck="false"></label>
+        <label><span id="lMake">Make</span><input type="text" id="nMake"></label>
+        <label><span id="lModel">Model</span><input type="text" id="nModel"></label>
+        <label><span id="lYear">Model year</span><input type="text" id="nYear" inputmode="numeric"></label>
+        <label><span id="lKm">Mileage (km)</span><input type="text" id="nKm" inputmode="numeric"></label>
+        <label><span id="lColor">Colour</span><input type="text" id="nColor"></label>
+        <label><span id="lFuel">Fuel</span><input type="text" id="nFuel"></label>
+        <label><span id="lCond">New/used</span>
+          <select id="nCond"><option value="used" id="oUsed">Used</option><option value="new" id="oNew">New</option></select></label>
+      </div>
+      <p id="lPhotos">Photos to copy (tick the ones you want):</p>
+      <div id="nPhotos" class="pics"></div>
+    </div>
     <p><label for="finnPrice" id="finnPriceLabel">Asking price on the ad (kr)</label></p>
     <input type="text" id="finnPrice" inputmode="numeric" autocomplete="off">
     <p class="muted" id="finnPriceNote"></p>

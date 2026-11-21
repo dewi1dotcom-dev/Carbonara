@@ -842,3 +842,8 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .price-table th, .price-table td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 .price-table th { font-weight: 600; color: var(--muted); font-size: .82rem; }
 .price-table tr.this-car td { background: rgba(245, 184, 0, .14); }
+/* The car's own photos (0.45.0, views/carphotos.js). */
+.car-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .5rem; margin: .5rem 0; }
+.car-photos .thumb { position: relative; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: none; cursor: zoom-in; }
+.car-photos .thumb img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.car-photos .badge.first { position: absolute; top: 4px; left: 4px; }

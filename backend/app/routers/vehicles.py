@@ -12,6 +12,7 @@ from ..common import (READY_SQL, RETENTION_DUE_SQL, RIGHT_PHOTO_SQL, add_tyre_wa
 from ..config import settings
 from ..db import get_conn
 from .recalls import OPEN_COUNT_SQL
+from .vehicle_photos import AD_PHOTO_SQL
 from ..schemas import MarkRegisteredIn, MoveIn, RepairIn, ResolveMismatchIn, VehicleDetails
 
 log = logging.getLogger("carbonara.vehicles")
@@ -35,6 +36,9 @@ SELECT km, at, source FROM (
     UNION ALL
     SELECT done_km, done_at, 'pdi'
       FROM pdi_orders WHERE vehicle_id = %(v)s AND done_km IS NOT NULL AND done_at IS NOT NULL
+    UNION ALL
+    SELECT listed_km, listed_km_at, 'ad'  -- the car's ad (0.45.0)
+      FROM vehicles WHERE id = %(v)s AND listed_km IS NOT NULL AND listed_km_at IS NOT NULL
 ) m
 ORDER BY at DESC, km DESC
 LIMIT 1"""
@@ -116,7 +120,7 @@ def list_vehicles(q: Optional[str] = None, status: Optional[str] = None, conditi
                   coalesce(r.first_registered, r.first_registered_norway) AS first_registered,
                   r.data -> 'registrering' -> 'registreringsstatus' ->> 'kodeVerdi' AS registration_status_code,
                   (SELECT t.id FROM test_drives t WHERE t.vehicle_id = v.id AND t.status = 'out') AS test_drive_id,
-                  po.status AS pdi_status, po.pdi_at, {RIGHT_PHOTO_SQL}, {OPEN_COUNT_SQL} AS open_recalls
+                  po.status AS pdi_status, po.pdi_at, {RIGHT_PHOTO_SQL}, {AD_PHOTO_SQL}, {OPEN_COUNT_SQL} AS open_recalls
              FROM vehicles v
              LEFT JOIN pdi_orders po ON po.vehicle_id = v.id AND po.status NOT IN ('done', 'cancelled')
              LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
@@ -539,6 +543,9 @@ def patch_vehicle(vehicle_id: int, body: VehicleDetails, conn=Depends(get_conn))
         fields["asking_price"] = price
         fields["asking_price_at"] = dt.datetime.now(dt.timezone.utc) if price is not None else None
         fields["asking_price_source"] = (sent.get("asking_price_source") or "manual") if price is not None else None
+    if "listed_km" in sent:  # the ad's mileage: when it was read
+        fields["listed_km"] = sent["listed_km"]
+        fields["listed_km_at"] = dt.datetime.now(dt.timezone.utc) if sent["listed_km"] is not None else None
     if not fields:
         return before
     row = update_row(conn, "vehicles", vehicle_id, fields)

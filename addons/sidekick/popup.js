@@ -45,6 +45,28 @@ const NO = {
   'Read from the ad – check it before saving.': 'Lest fra annonsen – sjekk den før du lagrer.',
   'Could not find the price on the ad. Type it in, or leave it empty.': 'Fant ikke prisen på annonsen. Skriv den inn, eller la feltet stå tomt.',
   'Linked to {0}, price {1} kr.': 'Koblet til {0}, pris {1} kr.',
+  '➕ New car from this ad': '➕ Ny bil fra denne annonsen',
+  'Add car': 'Legg til bil',
+  'Reg. no': 'Reg.nr.', 'VIN': 'VIN', 'Make': 'Merke', 'Model': 'Modell', 'Model year': 'Årsmodell',
+  'Mileage (km)': 'Kilometerstand (km)', 'Colour': 'Farge', 'Fuel': 'Drivstoff', 'New/used': 'Ny/brukt',
+  'Used': 'Brukt', 'New': 'Ny',
+  'Photos to copy (tick the ones you want):': 'Bilder som skal kopieres (kryss av de du vil ha):',
+  'Looking the car up at Statens vegvesen…': 'Slår opp bilen hos Statens vegvesen …',
+  'From the ad and Statens vegvesen – check the details.': 'Fra annonsen og Statens vegvesen – sjekk opplysningene.',
+  'This car is already in Carbonara: {0}. Link the ad to it instead.':
+    'Denne bilen er allerede i Carbonara: {0}. Koble annonsen til den i stedet.',
+  'The VIN is needed. Statens vegvesen gives it from the reg. no, or type it in.':
+    'VIN trengs. Statens vegvesen gir den fra reg.nr., eller skriv den inn.',
+  'Copying photo {0} of {1}…': 'Kopierer bilde {0} av {1} …',
+  'Added to Carbonara with {0} photo(s). ': 'Lagt til i Carbonara med {0} bilde(r). ',
+  'Open it in Carbonara': 'Åpne den i Carbonara',
+  // Carbonara's own messages (from the server, in English)
+  'The ad shows no registration number': 'Annonsen viser ikke noe registreringsnummer',
+  'Statens vegvesen lookup is not set up (System page)': 'Oppslag hos Statens vegvesen er ikke satt opp (System-siden)',
+  'Statens vegvesen does not know this registration number': 'Statens vegvesen kjenner ikke dette registreringsnummeret',
+  'This car is already in Carbonara': 'Denne bilen er allerede i Carbonara',
+  'This car is in Recently deleted; restore it there': 'Denne bilen ligger i Nylig slettet; gjenopprett den der',
+  'VIN must be 17 characters: A–Z and 0–9, without I, O or Q': 'VIN må være 17 tegn: A–Z og 0–9, uten I, O eller Q',
   'FINN code {0}': 'FINN-kode {0}',
   'Choose the car…': 'Velg bilen …',
   'Already linked to {0}.': 'Allerede koblet til {0}.',
@@ -57,7 +79,8 @@ let lang = (navigator.language || '').toLowerCase().startsWith('n') ? 'no' : 'en
 const t = (text, ...args) => (lang === 'no' ? NO[text] ?? text : text).replace(/\{(\d)\}/g, (_, i) => args[i] ?? '');
 
 function translatePage() {
-  for (const id of ['title', 'setupText', 'save', 'intro', 'allText', 'run', 'change', 'finnIntro', 'finnLink', 'finnPriceLabel']) {
+  for (const id of ['title', 'setupText', 'save', 'intro', 'allText', 'run', 'change', 'finnIntro', 'finnLink', 'finnPriceLabel',
+    'lReg', 'lVin', 'lMake', 'lModel', 'lYear', 'lKm', 'lColor', 'lFuel', 'lCond', 'oUsed', 'oNew', 'lPhotos']) {
     $(id).textContent = t($(id).textContent);
   }
 }
@@ -76,115 +99,277 @@ const finnCode = (url) => {
 };
 const carName = (c) => [c.registration_number || c.vin, [c.make, c.model, c.model_year].filter(Boolean).join(' ')]
   .filter(Boolean).join(' · ');
-/** In the ad page (the one the person opened and clicked the helper on): its asking price, or null.
- *  Structured data first (schema.org offers.price), then price meta tags, then the visible "Totalpris" / "Pris". */
-function readAdPrice() {
-  const num = (s) => {
+/** In the ad page (the one the person opened and clicked Sidekick on; self-contained, it runs in the page): what
+ *  the ad says about the car, and its photos. Structured data first (schema.org Car / Product), then the details
+ *  list (a label followed by its value), then meta tags / visible text. Anything not found is null. */
+function readAd() {
+  const clean = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+  const num = (s, min, max) => {
     const d = String(s ?? '').replace(/[^\d]/g, '');
     const n = d ? Number(d) : null;
-    return n && n >= 1000 && n < 100000000 ? n : null;
+    return n != null && n >= min && n <= max ? n : null;
   };
-  const walk = (o) => {
-    if (!o || typeof o !== 'object') return null;
-    if (Array.isArray(o)) { for (const x of o) { const r = walk(x); if (r) return r; } return null; }
-    const offers = Array.isArray(o.offers) ? o.offers[0] : o.offers;
-    if (offers && num(offers.price)) return num(offers.price);
-    for (const v of Object.values(o)) { const r = walk(v); if (r) return r; }
-    return null;
+  const out = { images: [] };
+  // 1. Structured data.
+  const nodes = [];
+  const collect = (o) => {
+    if (!o || typeof o !== 'object') return;
+    if (Array.isArray(o)) { o.forEach(collect); return; }
+    nodes.push(o);
+    Object.values(o).forEach(collect);
   };
   for (const s of document.querySelectorAll('script[type="application/ld+json"]')) {
-    try { const p = walk(JSON.parse(s.textContent)); if (p) return p; } catch { /* next */ }
+    try { collect(JSON.parse(s.textContent)); } catch { /* next */ }
   }
-  const meta = document.querySelector('meta[property="product:price:amount"], meta[itemprop="price"], [itemprop="price"][content]');
-  if (meta && num(meta.getAttribute('content'))) return num(meta.getAttribute('content'));
+  const typeOf = (o) => [].concat(o['@type'] || []).join(' ').toLowerCase();
+  const car = nodes.find((o) => /\b(car|vehicle)\b/.test(typeOf(o))) || nodes.find((o) => /product/.test(typeOf(o))) || {};
+  const nameOf = (x) => (typeof x === 'string' ? x : x?.name);
+  out.make = clean(nameOf(car.brand) || nameOf(car.manufacturer)) || null;
+  out.model = clean(nameOf(car.model)) || null;
+  out.year = num(car.vehicleModelDate || car.modelDate || car.productionDate, 1950, 2100);
+  out.km = num(car.mileageFromOdometer?.value ?? car.mileageFromOdometer, 0, 5000000);
+  out.color = clean(car.color) || null;
+  out.fuel = clean(nameOf(car.fuelType) || car.vehicleEngine?.fuelType) || null;
+  out.vin = clean(car.vehicleIdentificationNumber) || null;
+  const offers = nodes.map((o) => (Array.isArray(o.offers) ? o.offers[0] : o.offers)).find((o) => o?.price);
+  out.price = num(offers?.price, 1000, 99999999);
+  [].concat(car.image || []).forEach((i) => out.images.push(typeof i === 'string' ? i : i?.url || i?.contentUrl));
+  // 2. The details list: a short label followed by its value.
+  const byLabel = {};
+  for (const el of document.querySelectorAll('dt, th, span, div, p, li, h3, h4')) {
+    if (el.children.length > 2) continue;
+    const label = clean(el.textContent).replace(/:$/, '').toLowerCase();
+    if (!label || label.length > 30 || byLabel[label]) continue;
+    const value = clean(el.nextElementSibling?.textContent);
+    if (value && value.length < 60) byLabel[label] = value;
+  }
+  const pick = (...labels) => labels.map((l) => byLabel[l]).find(Boolean) || null;
+  out.make ||= pick('merke');
+  out.model ||= pick('modell');
+  out.year ||= num(pick('modellår', 'årsmodell'), 1950, 2100);
+  out.km ??= num(pick('kilometerstand', 'kilometer', 'km.stand'), 0, 5000000);
+  out.color ||= pick('farge', 'karosserifarge');
+  out.fuel ||= pick('drivstoff');
+  out.reg = pick('registreringsnummer', 'reg.nr.', 'reg.nr', 'regnr', 'kjennemerke');
+  out.vin ||= pick('chassisnr. (vin)', 'chassisnr.', 'chassisnummer', 'understellsnummer', 'vin');
+  out.price ??= num(pick('totalpris', 'pris'), 1000, 99999999);
+  // 3. Meta tags and visible text.
   const text = document.body?.innerText || '';
-  const m = text.match(/Totalpris\s*:?\s*([\d\s .]{4,})\s*kr/i) || text.match(/\bPris\s*:?\s*([\d\s .]{4,})\s*kr/i);
-  return m ? num(m[1]) : null;
+  if (!out.price) {
+    const meta = document.querySelector('meta[property="product:price:amount"], [itemprop="price"][content]');
+    out.price = num(meta?.getAttribute('content'), 1000, 99999999)
+      ?? num((text.match(/Totalpris\s*:?\s*([\d\s.]{4,})\s*kr/i) || [])[1], 1000, 99999999);
+  }
+  if (!out.reg) out.reg = (text.match(/Reg(?:istrerings)?\.?\s*nr\.?\s*:?\s*([A-Z]{2}\s?\d{4,5})\b/i) || [])[1] || null;
+  document.querySelectorAll('meta[property="og:image"]').forEach((m) => out.images.push(m.content));
+  for (const img of document.images) {
+    const src = img.currentSrc || img.src;
+    if (img.naturalWidth >= 400 && !/logo|icon|avatar|profile/i.test(src)) out.images.push(src);
+  }
+  out.images = [...new Set(out.images.filter((u) => /^https:\/\//.test(u || '')))].slice(0, 40);
+  out.title = clean(document.querySelector('h1')?.textContent) || clean(document.title);
+  return out;
 }
 
 const words = (s) => (s || '').toLowerCase().normalize('NFKD').replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter((w) => w.length > 1);
+
+const regNorm = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9ÆØÅ]/g, '');
+const digitsOf = (s) => { const d = String(s || '').replace(/[^\d]/g, ''); return d ? Number(d) : null; };
+/** Norwegian fuel on an ad -> Carbonara's fuel names (Statens vegvesen's value wins when there is one). */
+function fuelName(text) {
+  const s = String(text || '').toLowerCase();
+  if (!s) return null;
+  if (/plug|ladbar/.test(s)) return 'Plug-in hybrid';
+  if (/hybrid/.test(s)) return 'Hybrid';
+  if (/^el|elektr/.test(s)) return 'Electric';
+  if (/bensin|petrol/.test(s)) return 'Petrol';
+  if (/diesel/.test(s)) return 'Diesel';
+  if (/hydrogen/.test(s)) return 'Hydrogen';
+  return text;
+}
+
+async function carbonaraJson(path, body, method = body ? 'POST' : 'GET') {
+  const r = await fetch(`${base}${path}`, {
+    method, credentials: 'include', cache: 'no-store',
+    headers: body ? { 'Content-Type': 'application/json' } : {}, body: body ? JSON.stringify(body) : undefined,
+  });
+  if (r.status === 401) throw new Error(t('Log in to Carbonara in this Chrome first, then try again.'));
+  if (!r.ok) {
+    let detail = '';
+    try { detail = (await r.json()).detail; } catch { /* no text */ }
+    throw new Error(typeof detail === 'string' && detail ? t(detail) : t('Carbonara answered {0}.', r.status));
+  }
+  return r.status === 204 ? null : r.json();
+}
 
 async function finnPanel(tab, code) {
   $('finn').hidden = false;
   $('main').hidden = true;
   $('finnAd').textContent = `${tab.title || ''} · ${t('FINN code {0}', code)}`;
-  const status = (text, cls = '') => { $('finnStatus').textContent = text; $('finnStatus').className = cls; };
+  const status = (text, cls = '') => { $('finnStatus').replaceChildren(text); $('finnStatus').className = cls; };
   let cars;
   try {
-    const r = await fetch(`${base}/api/vehicles?limit=500`, { credentials: 'include', cache: 'no-store' });
-    if (r.status === 401) throw new Error(t('Log in to Carbonara in this Chrome first, then try again.'));
-    if (!r.ok) throw new Error(t('Carbonara answered {0}.', r.status));
-    cars = await r.json();
+    cars = await carbonaraJson('/api/vehicles?limit=500');
   } catch (e) {
     status(e.message.startsWith('Failed') ? t('Could not reach Carbonara. Check the address and that you are on the dealership network.')
       : e.message, 'bad');
     $('finnLink').disabled = true;
     return;
   }
+  // What the ad says (read from the page the person is looking at, once, on their click).
+  let ad = {};
+  try {
+    const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readAd });
+    ad = res?.result || {};
+  } catch { /* not readable: typed in instead */ }
+
   const linked = cars.find((c) => c.finn_code === code);
+  const byReg = ad.reg ? cars.find((c) => regNorm(c.registration_number) === regNorm(ad.reg)) : null;
   if (linked) status(t('Already linked to {0}.', carName(linked)), 'good');
   // Best guess first: the most words of make / model / year found in the ad's title; cars without a link first.
-  const title = new Set(words(tab.title));
+  const title = new Set(words(`${tab.title} ${ad.title || ''}`));
   const score = (c) => words([c.make, c.model, c.variant, c.model_year].join(' ')).filter((w) => title.has(w)).length;
-  const here = cars.filter((c) => c.status !== 'off_site' || c.finn_code === code);
+  const option = (value, text) => { const o = document.createElement('option'); o.value = value; o.textContent = text; return o; };
   const group = (label, list) => {
     const g = document.createElement('optgroup');
     g.label = label;
-    list.sort((a, b) => score(b) - score(a) || carName(a).localeCompare(carName(b))).forEach((c) => {
-      const o = document.createElement('option');
-      o.value = c.id;
-      o.textContent = carName(c);
-      g.append(o);
-    });
+    list.sort((a, b) => score(b) - score(a) || carName(a).localeCompare(carName(b))).forEach((c) => g.append(option(c.id, carName(c))));
     return list.length ? g : null;
   };
-  const first = document.createElement('option');
-  first.value = '';
-  first.textContent = t('Choose the car…');
-  $('finnCar').replaceChildren(first, ...[
-    group(t('Cars without a finn.no link'), here.filter((c) => !c.finn_code)),
-    group(t('Cars with a finn.no link'), here.filter((c) => c.finn_code)),
+  $('finnCar').replaceChildren(option('', t('Choose the car…')), option('new', t('➕ New car from this ad')), ...[
+    group(t('Cars without a finn.no link'), cars.filter((c) => !c.finn_code)),
+    group(t('Cars with a finn.no link'), cars.filter((c) => c.finn_code)),
   ].filter(Boolean));
-  const best = here.filter((c) => !c.finn_code).sort((a, b) => score(b) - score(a))[0];
-  $('finnCar').value = linked ? String(linked.id) : best && score(best) > 0 ? String(best.id) : '';
-  // The asking price on this ad (read from the page the person is looking at, once, on their click).
-  let price = null;
-  try {
-    const [res] = await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: readAdPrice });
-    price = res?.result ?? null;
-  } catch { /* not readable: typed in instead */ }
-  $('finnPrice').value = price ? Number(price).toLocaleString('nb-NO') : '';
-  $('finnPriceNote').textContent = price ? t('Read from the ad – check it before saving.')
+  const best = cars.filter((c) => !c.finn_code).sort((a, b) => score(b) - score(a))[0];
+  const guess = linked || byReg || (best && score(best) > 0 ? best : null);
+  $('finnCar').value = guess ? String(guess.id) : 'new';
+
+  $('finnPrice').value = ad.price ? Number(ad.price).toLocaleString('nb-NO') : '';
+  $('finnPriceNote').textContent = ad.price ? t('Read from the ad – check it before saving.')
     : t('Could not find the price on the ad. Type it in, or leave it empty.');
+
+  // ---- a new car: the ad's details + Statens vegvesen (the VIN), and the photos to copy
+  let previewed = false;
+  const fill = (id, value) => { if (value != null && value !== '' && !$(id).value) $(id).value = value; };
+  async function preview() {
+    previewed = true;
+    fill('nReg', ad.reg); fill('nVin', ad.vin); fill('nMake', ad.make); fill('nModel', ad.model);
+    fill('nYear', ad.year); fill('nKm', ad.km != null ? Number(ad.km).toLocaleString('nb-NO') : '');
+    fill('nColor', ad.color); fill('nFuel', fuelName(ad.fuel));
+    $('nPhotos').replaceChildren(...(ad.images || []).map((src, i) => {
+      const box = document.createElement('input');
+      box.type = 'checkbox'; box.value = src; box.checked = i < 8;
+      const img = document.createElement('img');
+      img.src = src; img.alt = ''; img.loading = 'lazy';
+      const label = document.createElement('label');
+      label.className = 'pic';
+      label.append(box, img);
+      return label;
+    }));
+    $('lPhotos').hidden = !(ad.images || []).length;
+    $('newInfo').textContent = t('Looking the car up at Statens vegvesen…');
+    try {
+      const p = await carbonaraJson('/api/vehicles/from-ad/preview', { registration_number: $('nReg').value || null, vin: $('nVin').value || null });
+      if (p.existing && !p.existing.deleted_at && cars.some((c) => c.id === p.existing.id)) {
+        $('finnCar').value = String(p.existing.id);
+        toggle();
+        status(t('This car is already in Carbonara: {0}. Link the ad to it instead.', carName(p.existing)), 'warn');
+        return;
+      }
+      if (p.vin) $('nVin').value = p.vin;
+      if (p.registration_number) $('nReg').value = p.registration_number;
+      const values = p.registry?.values || {};
+      for (const [id, key] of [['nMake', 'make'], ['nModel', 'model'], ['nColor', 'color'], ['nFuel', 'fuel_type']]) {
+        if (values[key]) $(id).value = values[key]; // the registry's official values win
+      }
+      $('newInfo').textContent = p.registry_error ? t(p.registry_error)
+        : t('From the ad and Statens vegvesen – check the details.');
+      $('newInfo').className = p.registry_error ? 'warn' : 'muted';
+    } catch (e) {
+      $('newInfo').textContent = e.message;
+      $('newInfo').className = 'bad';
+    }
+  }
+  function toggle() {
+    const isNew = $('finnCar').value === 'new';
+    $('finnNew').hidden = !isNew;
+    $('finnLink').textContent = isNew ? t('Add car') : t('Save');
+    if (isNew && !previewed) preview();
+  }
+  $('finnCar').addEventListener('change', toggle);
+  toggle();
+
+  async function addNew() {
+    // Asked first, while the click still counts: Chrome lets Sidekick fetch the ticked photos only with permission.
+    const pics = [...document.querySelectorAll('#nPhotos input:checked')].map((i) => i.value);
+    let photosAllowed = true;
+    if (pics.length) {
+      const origins = [...new Set(pics.map((u) => `${new URL(u).origin}/*`))];
+      photosAllowed = await chrome.permissions.request({ origins });
+    }
+    const vin = $('nVin').value.trim();
+    if (!vin) { status(t('The VIN is needed. Statens vegvesen gives it from the reg. no, or type it in.'), 'bad'); return; }
+    const price = digitsOf($('finnPrice').value);
+    const created = await carbonaraJson('/api/vehicles/from-ad', {
+      vin, registration_number: $('nReg').value || null, make: $('nMake').value || null, model: $('nModel').value || null,
+      model_year: digitsOf($('nYear').value), listed_km: digitsOf($('nKm').value), color: $('nColor').value || null,
+      fuel_type: $('nFuel').value || null, condition: $('nCond').value, finn_code: code, asking_price: price,
+    });
+    let copied = 0;
+    if (pics.length && photosAllowed) {
+      for (const [i, src] of pics.entries()) {
+        status(t('Copying photo {0} of {1}…', i + 1, pics.length));
+        try {
+          const blob = await (await fetch(src)).blob();
+          const fd = new FormData();
+          fd.append('file', blob, `photo-${i + 1}.jpg`);
+          fd.append('source', 'finn');
+          const r = await fetch(`${base}/api/vehicles/${created.id}/photos`, { method: 'POST', credentials: 'include', body: fd });
+          if (r.ok) copied += 1;
+        } catch { /* skip this one */ }
+      }
+    }
+    const open = document.createElement('a');
+    open.href = `${base}/#/vehicles/${created.id}`;
+    open.target = '_blank';
+    open.textContent = t('Open it in Carbonara');
+    const done = document.createElement('span');
+    done.append(t('Added to Carbonara with {0} photo(s). ', copied), open);
+    $('finnStatus').replaceChildren(done);
+    $('finnStatus').className = 'good';
+    $('finnCar').disabled = true;
+    $('finnLink').disabled = true;
+  }
+
+  async function linkExisting(id) {
+    const priceNow = digitsOf($('finnPrice').value);
+    // One ad, one car: moved from another car, the link is taken off that one first.
+    for (const other of cars.filter((c) => c.finn_code === code && String(c.id) !== id)) {
+      await carbonaraJson(`/api/vehicles/${other.id}`, { finn_code: null }, 'PATCH');
+      other.finn_code = null;
+    }
+    // The price / mileage are saved only when there is one (empty leaves the car's value as it was).
+    await carbonaraJson(`/api/vehicles/${id}`, {
+      finn_code: code,
+      ...(priceNow ? { asking_price: priceNow, asking_price_source: 'finn' } : {}),
+      ...(ad.km != null ? { listed_km: ad.km } : {}),
+    }, 'PATCH');
+    const car = cars.find((c) => String(c.id) === id);
+    car.finn_code = code;
+    status(priceNow ? t('Linked to {0}, price {1} kr.', carName(car), priceNow.toLocaleString('nb-NO'))
+      : t('Linked to {0}.', carName(car)), 'good');
+  }
+
   $('finnLink').addEventListener('click', async () => {
     const id = $('finnCar').value;
     if (!id) { status(t('Choose the car first.'), 'bad'); return; }
     $('finnLink').disabled = true;
-    const patch = async (carId, body) => {
-      const r = await fetch(`${base}/api/vehicles/${carId}`, {
-        method: 'PATCH', credentials: 'include', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-      });
-      if (!r.ok) throw new Error(t('Carbonara answered {0}.', r.status));
-    };
-    const digits = $('finnPrice').value.replace(/[^\d]/g, '');
-    const priceNow = digits ? Number(digits) : null;
     try {
-      // One ad, one car: moved from another car, the link is taken off that one first.
-      for (const other of cars.filter((c) => c.finn_code === code && String(c.id) !== id)) {
-        await patch(other.id, { finn_code: null });
-        other.finn_code = null;
-      }
-      // The price is saved only when there is one (an empty field leaves the car's price as it was).
-      await patch(id, priceNow ? { finn_code: code, asking_price: priceNow, asking_price_source: 'finn' } : { finn_code: code });
-      const car = cars.find((c) => String(c.id) === id);
-      car.finn_code = code;
-      status(priceNow ? t('Linked to {0}, price {1} kr.', carName(car), priceNow.toLocaleString('nb-NO'))
-        : t('Linked to {0}.', carName(car)), 'good');
+      if (id === 'new') await addNew(); else await linkExisting(id);
     } catch (e) {
       status(e.message, 'bad');
     } finally {
-      $('finnLink').disabled = false;
+      if (!$('finnCar').disabled) $('finnLink').disabled = false;
     }
   });
 }

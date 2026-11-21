@@ -706,6 +706,12 @@ const NO = {
   'After an update of Carbonara, download it again, unzip it over the old folder and click ↻ on Sidekick in chrome://extensions.':
     'Etter en oppdatering av Carbonara: last den ned på nytt, pakk den ut over den gamle mappen og klikk ↻ på Sidekick i chrome://extensions.',
   'Find on finn.no': 'Finn på finn.no', 'FINN organisation id': 'FINN-organisasjons-ID',
+  // ---- The car's own photos; cars added from their finn.no ad (0.45.0)
+  'Add photos': 'Legg til bilder', 'Photo added': 'Bilde lagt til', 'Photo deleted': 'Bilde slettet',
+  'The car’s picture in lists': 'Bilens bilde i listene', 'Open photo': 'Åpne bildet', 'Show first': 'Vis først',
+  'The file is too large': 'Filen er for stor', 'From its finn.no ad': 'Fra finn.no-annonsen', 'from the finn.no ad': 'fra finn.no-annonsen',
+  'No photos yet. Carbonara Sidekick can copy them from the car’s finn.no ad.':
+    'Ingen bilder ennå. Carbonara Sidekick kan kopiere dem fra bilens finn.no-annonse.',
   // ---- Asking prices (0.44.0)
   'Asking price': 'Prisantydning', 'No price': 'Ingen pris', 'Add price': 'Legg til pris', '+ Add price': '+ Legg til pris',
   'Price saved': 'Pris lagret', 'Price removed': 'Pris fjernet', 'e.g. 289 900': 'f.eks. 289 900',
@@ -865,7 +871,8 @@ const NO = {
 const NO_PATTERNS = [
   ['{} not found', '{1t} ble ikke funnet'],
   ['Done ({n})', 'Ferdig ({1})'],
-  ['{n} car(s)', '{1} bil(er)'], [' · {} – {} · median {}', ' · {1} – {2} · median {3}'],
+  ['{n} car(s)', '{1} bil(er)'], ['Photos ({n})', 'Bilder ({1})'], ['{n} photos added', '{1} bilder lagt til'],
+  ['A car can have at most {n} photos', 'En bil kan ha høyst {1} bilder'], [' · {} – {} · median {}', ' · {1} – {2} · median {3}'],
   ['Open recalls: {n}', 'Åpne tilbakekallinger: {1}'], ['Closed recalls ({n})', 'Lukkede tilbakekallinger ({1})'],
   ['Check history ({n})', 'Historikk for sjekker ({1})'], ['Recall {} is already open on this car', 'Tilbakekalling {1} er allerede åpen på denne bilen'],
   ['Last checked {}', 'Sist sjekket {1}'], ['last checked {}', 'sist sjekket {1}'], ['{} copied', '{1t} kopiert'], ['Open {}', 'Åpne {1}'], ['Done notes are deleted after {n} days.', 'Ferdige notater slettes etter {1} dager.'],

@@ -2,6 +2,7 @@ import { PANEL_LABELS } from '../diagram.js';
 import { tr as trText } from '../i18n.js';
 import { documentDialog, documentsCard } from './documents.js';
 import { editDialog as pdiEditDialog, pdiBanner, pdiCard } from './pdi.js';
+import { photosCard } from './carphotos.js';
 import { priceCard, priceValue } from './prices.js';
 import { recallBadge, recallsCard } from './recalls.js';
 import { batteryCard, storageCard } from './storagecare.js';
@@ -88,6 +89,7 @@ export function vehicleCard(v, extra = null) {
     h('div', { class: 'car-photo' },
       v.right_photo_id
         ? h('img', { src: photoUrl(v.right_photo_id), alt: '', loading: 'lazy' })
+        : v.ad_photo_id ? h('img', { src: `/api/vehicle-photos/${v.ad_photo_id}/thumb`, alt: '', loading: 'lazy' }) // the car's own photo (0.45.0)
         : h('span', { class: 'car-photo-none muted small' }, 'No photo')));
 }
 
@@ -130,6 +132,8 @@ export const EVENT_LABELS = {
   document_deleted: 'Document deleted',
   customer_delivery: 'Delivered by the customer (kiosk)',
   customer_delivery_received: 'Customer delivery received',
+  photo_added: 'Photo added',
+  photo_deleted: 'Photo deleted',
   recall_check: 'Checked for recalls',
   recall_added: 'Recall added',
   recall_closed: 'Recall closed',
@@ -206,6 +210,8 @@ export function eventDetail(e) {
         d.items_checked === false && 'Items not all back', d.note].filter(Boolean).join(' · ');
     case 'arrival_inspection_completed': return `${fmtKm(d.odometer_km)}, ${d.damage_count} damage(s)`;
     case 'vehicle_created':
+      if (d.source === 'finn') return 'From its finn.no ad';
+      return d.vin_source ? `VIN via ${d.vin_source}` : '';
     case 'arrival_inspection_started': return d.vin_source ? `VIN via ${d.vin_source}` : '';
     case 'vehicle_details_updated': return changeText(d.changes);
     case 'registry_first_sync':
@@ -663,7 +669,7 @@ function overviewCard(v, rerender) {
 // separate nodes so each translates.
 const KM_SOURCE = {
   inspection: 'from the arrival inspection', service: 'from the service',
-  test_drive: 'from a test drive', pdi: 'from the PDI',
+  test_drive: 'from a test drive', pdi: 'from the PDI', ad: 'from the finn.no ad',
 };
 const mileageRow = (m) => (m ? h('span', { class: 'inline' },
   h('span', {}, fmtKm(m.km)),
@@ -820,10 +826,10 @@ function arrivalPhotosCard(v) {
 // host: the page's real container. A redraw renders into a fresh div and moves the result
 // into host, so every redraw (not only the first) updates the visible page.
 export async function vehicleView(el, [id], host = el) {
-  const [v, pdiData, pdiOpts, care, charging, docs, recallData] = await Promise.all([
+  const [v, pdiData, pdiOpts, care, charging, docs, recallData, photos] = await Promise.all([
     api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options'),
     api.get(`/vehicles/${id}/storage-care`), api.get(`/vehicles/${id}/battery-charging`),
-    api.get(`/vehicles/${id}/documents`), api.get(`/vehicles/${id}/recalls`)]);
+    api.get(`/vehicles/${id}/documents`), api.get(`/vehicles/${id}/recalls`), api.get(`/vehicles/${id}/photos`)]);
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -850,6 +856,7 @@ export async function vehicleView(el, [id], host = el) {
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
     priceCard(v), // null when neither this car nor a similar one in stock has a price
+    photosCard(v, photos, rerender), // the car's own photos (from its finn.no ad, or added here)
     arrivalPhotosCard(v),
     documentsCard(v, docs, rerender),
     recallsCard(v, recallData, rerender), // before the PDI: open recalls go with the PDI order

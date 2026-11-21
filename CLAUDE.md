@@ -236,7 +236,7 @@ backend/
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
                         notes (my notes), recalls (recall sources, checks, recalls per car)
-  migrations/           001…041
+  migrations/           001…042
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -304,6 +304,7 @@ frontend/               no build step; plain ES modules
 | 039 | `notes` | `notes` (my notes: `staff_id`, `body` ≤ 1000, pinned `vehicle_id` or `link` + `link_title`, `remind_at`, `reminded_at`, `done_at`) |
 | 040 | `recalls` | `recall_sources` (name, `makes[]`, `url` with {vin}/{reg}, note), `vehicle_recalls` (code, title, details, certainty, status open/done/not_applicable), `recall_checks` (result, reason), `vehicles.recall_check_requested_at / _reason` |
 | 041 | `asking_price` | `vehicles.asking_price` (kr), `asking_price_at`, `asking_price_source` ('manual' / 'finn') |
+| 042 | `vehicle_photos` | `vehicle_photos` (the car's own photos: from its finn.no ad or uploaded; `sort`, `source`), `vehicles.listed_km / listed_km_at` (the ad's mileage) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1147,6 +1148,28 @@ to take notes, pin cars and other things to remember, quick and easy"):
   ads (agreement + key, api@finn.no / account manager) would let the server link cars by reg. no / VIN on its own.
   Market prices: FINN Dealer Hub "Prissjekk" (API unknown), or licensed data (OFV Kjøretøydata API, Bilpriser API);
   never scraped listings. Planned as a pluggable "Market price" card on used cars once a provider is chosen.
+- **Adding a car from its finn.no ad (0.45.0, the user's request: cars advertised before they arrive, or already
+  advertised when Carbonara is taken into use)** (`routers/from_ad.py`, `routers/vehicle_photos.py`,
+  `views/carphotos.js`, migration 042; Sidekick 1.5.0):
+  - Sidekick on the dealer's own ad reads it **once, on the person's click** (`readAd`: schema.org Car / Product in
+    JSON-LD, then the details list "label → value" (Merke, Modell, Modellår, Kilometerstand, Farge, Drivstoff,
+    Registreringsnummer, Chassisnr., Totalpris), then meta tags / text; photos from JSON-LD `image`, og:image and
+    large `<img>`s). The car list offers "➕ New car from this ad", preselected when no car matches (a car whose reg.
+    no is on the ad wins, then the finn link, then the title words).
+  - `POST /vehicles/from-ad/preview` {registration_number, vin}: an existing car (reg. no or VIN; a deleted one says
+    "Recently deleted") and Statens vegvesen's `summary` (the **VIN**, rarely on an ad, and official make / model /
+    colour / fuel, which replace the ad's). `POST /vehicles/from-ad` (`FromAdIn` = `VehicleDetails` + vin): creates
+    the car **off site** (the user's choice; arrival inspection or Move car places it later), with `finn_code`, asking
+    price (source finn), `listed_km`, condition (Sidekick's New/used, default used), event `vehicle_created`
+    `{source: 'finn'}`, then `sync_vehicle` (a registered car is marked as registered, like "Sync now").
+  - The ticked photos (first 8 ticked by default): Sidekick asks Chrome for permission to the photos' host (on the
+    click), fetches them and uploads each to `POST /vehicles/{id}/photos` (source finn). The server never contacts
+    finn.no.
+  - **The car's own photos** (`vehicle_photos`, photostore; max 60 per car): "Photos (n)" card on the car page (tap to
+    enlarge, ★ Show first, Delete, 📷 Add photos from the device); the first one is the car's picture in lists until
+    the arrival inspection has a right-side photo (`AD_PHOTO_SQL` → `ad_photo_id`); `purge_vehicle` removes them.
+  - `listed_km` (the ad's mileage, `listed_km_at`) is a mileage source (`LATEST_KM_SQL` 'ad', "from the finn.no ad");
+    linking an existing car also saves it.
 - **Asking prices, compared within our own stock (0.44.0, the user's request)** (`views/prices.js`, migration 041):
   - **Where the price comes from:** typed in (car page → overview "Asking price" → `priceDialog`), or the helper
     (1.3.0) on the car's finn.no ad reads it from **that page only, on the person's click** (`readAdPrice`: schema.org
@@ -1439,6 +1462,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.43.0 | finn.no: "Find on finn.no" on the car page (your ads for that make / model, FINN organisation id on the System page); the helper (1.2.0) links the finn.no ad you are looking at to a car |
 | 0.44.0 | **Asking prices:** price per car (typed in, or read by the helper from the car's finn.no ad), compared with the same make / model in stock on the car page and on the new Price overview page (migration 041) |
 | 0.44.1 | The Chrome helper is renamed **Carbonara Sidekick** (1.4.0; folder `addons/sidekick`, download `carbonara-sidekick.zip`) |
+| 0.45.0 | **Add a car from its finn.no ad** with Sidekick 1.5.0 (details from the ad + VIN from Statens vegvesen, starts off site, ticked photos copied); **Photos** card on the car page (migration 042) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

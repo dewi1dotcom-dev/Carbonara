@@ -84,6 +84,8 @@ class VehicleDetails(_Clean):
     # Asking price in kroner (0.44.0): typed in, or read from the finn.no ad by the helper.
     asking_price: Optional[int] = Field(None, ge=0, le=99_999_999)
     asking_price_source: Optional[Literal["manual", "finn"]] = None
+    # The mileage stated on the car's ad (0.45.0; read by Carbonara Sidekick); stamped with listed_km_at.
+    listed_km: Optional[int] = Field(None, ge=0, le=5_000_000)
 
     @field_validator("finn_code")
     @classmethod
