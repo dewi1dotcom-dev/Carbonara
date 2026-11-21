@@ -1052,6 +1052,9 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
   sources with "Open {source} ↗" (url filled) + Copy VIN / reg. no; then "✓ No open recalls" (`POST
   /vehicles/{id}/recall-checks`) or "⚠ Found recalls" → add each one (`POST /vehicles/{id}/recalls`, the first with
   `as_check`). Logging into a brand's dealer site from the server (scraping) was ruled out (terms, staff passwords).
+  **No referrer (0.41.1):** a dealer portal's login returned to the referring page (Carbonara) when opened from here,
+  so `index.html` has `<meta name="referrer" content="same-origin">` (other sites never see Carbonara's address or
+  paths) and the source link is `rel="noopener noreferrer"`. Keep external links that way.
 - **A recall:** code, title, details, `certainty` confirmed / possible (later sources), status open → ✓ Done / Doesn't
   apply (reason) → Reopen; deleted only by whoever added it or an admin. Events `recall_check / _added / _closed /
   _reopened / _deleted` (no personal data).
@@ -1375,6 +1378,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.39.0 | **Server address on the System page** (HTTPS card): kept in the database, so it survives redeploys and each location sets its own; caddy follows a change within ~10 s without a restart (`caddy_host` volume, `caddy/start.sh`) |
 | 0.40.0 | **My notes:** 📝 panel on every page with private notes, pinned cars / pages, reminders (with phone notification) and done list (migration 039) |
 | 0.41.0 | **Recalls, phase 1:** recall sources per brand (Settings), checks due after arrival / when a PDI is booked / every 30 days in storage, check dialog (open the brand's system, record the result), recalls per car (done / doesn't apply), on Today, PDI orders and the Delivered dialog (migration 040) |
+| 0.41.1 | Fix: a dealer portal opened from the recall check sent you back to Carbonara after login (Carbonara no longer tells other sites where a link came from) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

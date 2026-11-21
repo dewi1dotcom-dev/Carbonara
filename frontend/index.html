@@ -4,6 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#EFE8D4">
+  <!-- Never tell other sites which Carbonara page a link came from (0.41.1): a dealer portal opened from the recall
+       check sent the user back to Carbonara after login, and the server's address and page paths stay private. -->
+  <meta name="referrer" content="same-origin">
   <title>Carbonara</title>
   <!-- Set the theme before the first paint, so a light-theme user never sees a dark flash
        (same logic as applyTheme() in ui.js, which also sets theme-color). -->

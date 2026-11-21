@@ -142,7 +142,8 @@ function checkDialog(v, data, rerender) {
       h('strong', { translate: 'no' }, s.name),
       s.note ? h('div', { class: 'muted small', translate: 'no' }, s.note) : null,
       h('div', { class: 'row' },
-        s.url ? h('a', { class: 'btn', href: lookupUrl(s, v), target: '_blank', rel: 'noopener' }, `Open ${s.name} ↗`) : null,
+        // noreferrer: a portal whose login returns to the referring page sent staff back to Carbonara (0.41.1).
+        s.url ? h('a', { class: 'btn', href: lookupUrl(s, v), target: '_blank', rel: 'noopener noreferrer' }, `Open ${s.name} ↗`) : null,
         h('button', { class: 'btn', type: 'button', onClick: () => copy(v.vin, 'VIN') }, 'Copy VIN'),
         v.registration_number
           ? h('button', { class: 'btn', type: 'button', onClick: () => copy(v.registration_number, 'Reg. no') }, 'Copy reg. no')
