@@ -237,7 +237,8 @@ backend/
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
                         notes (my notes), recalls (recall sources, checks, recalls per car)
   migrations/           001…040
-addons/recall-helper/   Chrome extension (manifest, popup.html, popup.js): recall checks in a dealer portal (0.42.0);
+addons/recall-helper/   Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
+                        in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/recall-helper.zip
 frontend/               no build step; plain ES modules
   index.html, css/app.css
@@ -1071,6 +1072,11 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
     fly from `addons/`, open like the certificate), then chrome://extensions → Developer mode → Load unpacked. The
     popup asks for Carbonara's address once (optional host permission for that origin only) and uses the Carbonara
     login cookie of the same Chrome. Its texts follow the user's language (`/auth/state`), EN/NO dictionary in `popup.js`.
+  - **The check runs in the extension's background (`worker.js`, 0.42.1)**, not in the popup: Chrome closes the popup
+    at the first click elsewhere, and 1.0.0 stopped half way (4 of 8 cars). Progress is kept in
+    `chrome.storage.local` `job` (status + lines as English keys with arguments; the popup translates and shows it,
+    "cut off" after 15 min). The portal's answer is read inside the page (`checkVin`, self-contained: a service
+    worker has no DOMParser). One check at a time.
   - Run: on the portal's campaign page, "Check cars" → `GET /api/recall-helper/cars` (due, or `?all=1` every covered
     car here, each with its sources); only cars whose source `url` is on the **open tab's origin** are checked (so no
     portal address in code). For each VIN, `chrome.scripting` (activeTab, world MAIN) runs the portal's own request:
@@ -1401,6 +1407,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.41.0 | **Recalls, phase 1:** recall sources per brand (Settings), checks due after arrival / when a PDI is booked / every 30 days in storage, check dialog (open the brand's system, record the result), recalls per car (done / doesn't apply), on Today, PDI orders and the Delivered dialog (migration 040) |
 | 0.41.1 | Fix: a dealer portal opened from the recall check sent you back to Carbonara after login (Carbonara no longer tells other sites where a link came from) |
 | 0.42.0 | **Recall helper:** a Chrome extension (download in Settings → Recall sources) that checks the due cars in a dealer portal you are logged in to, adds open campaigns and closes the ones done |
+| 0.42.1 | Recall helper 1.1.0: the check runs in the background and continues when its small window closes (it stopped after 4 of 8 cars) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
