@@ -691,6 +691,20 @@ const NO = {
     '{vin} og {reg} byttes ut med bilens VIN og reg.nr., hvis siden tar dem i adressen.',
   'Note for staff': 'Merknad til de ansatte', 'Edit recall source': 'Rediger kilde for tilbakekallinger',
   'Recall source saved': 'Kilde for tilbakekallinger lagret',
+  'Recall helper for Chrome (PC)': 'Hjelper for tilbakekallinger i Chrome (PC)',
+  'Checks the cars that are due in a dealer portal you are logged in to, with the portal’s own search, and records the results here: new recalls are added and recalls the portal shows as done are closed. No password is stored.':
+    'Sjekker bilene som forfaller i en forhandlerportal du er logget inn i, med portalens eget søk, og registrerer resultatet her: nye tilbakekallinger legges til, og de portalen viser som utført lukkes. Ingen passord lagres.',
+  'Download the helper and unzip it, e.g. in Documents: ': 'Last ned hjelperen og pakk den ut, f.eks. i Dokumenter: ',
+  'In Chrome, open chrome://extensions, turn on "Developer mode" (top right), click "Load unpacked" and choose the unzipped folder "carbonara-recall-helper".':
+    'Åpne chrome://extensions i Chrome, slå på «Utviklermodus» (øverst til høyre), klikk «Last inn upakket» og velg den utpakkede mappen «carbonara-recall-helper».',
+  'Click the puzzle piece in Chrome’s toolbar and pin "Carbonara recall helper".':
+    'Klikk på puslespillbrikken i Chromes verktøylinje og fest «Carbonara recall helper».',
+  'Click the helper and enter Carbonara’s address: ': 'Klikk på hjelperen og skriv inn adressen til Carbonara: ',
+  '. Allow Chrome to reach it.': '. Gi Chrome lov til å nå den.',
+  'Log in to Carbonara in the same Chrome. Open the portal’s campaign page, log in there too, click the helper and then "Check cars".':
+    'Logg inn i Carbonara i samme Chrome. Åpne kampanjesiden i portalen, logg inn der også, klikk på hjelperen og så «Sjekk biler».',
+  'After an update of Carbonara, download it again and click ↻ on the helper in chrome://extensions.':
+    'Etter en oppdatering av Carbonara: last den ned på nytt og klikk ↻ på hjelperen i chrome://extensions.',
   'The address must start with https://': 'Adressen må begynne med https://', 'Give the source a name': 'Gi kilden et navn',
   'Recall source': 'Kilde for tilbakekallinger', 'Recall': 'Tilbakekalling', 'Describe the recall': 'Beskriv tilbakekallingen',
   'Only the person who added it or an administrator can delete it': 'Bare den som la den til eller en administrator kan slette den',

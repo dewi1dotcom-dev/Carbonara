@@ -305,6 +305,75 @@ def set_recall_status(recall_id: int, body: RecallPatch, request: Request, conn=
     return vehicle_recalls(r["vehicle_id"], conn)
 
 
+# --------------------------------------------------------------------------- #
+# The recall helper (0.42.0): a Chrome extension (addons/recall-helper) that runs in the person's own,
+# logged-in dealer portal tab, looks each car up with the portal's own search and sends the result here.
+# It uses the person's Carbonara login (cookie); Carbonara never stores a portal password.
+# --------------------------------------------------------------------------- #
+
+@router.get("/recall-helper/cars")
+def helper_cars(all: bool = False, conn=Depends(get_conn)):
+    """Cars to check: the due ones, or every car here that a source covers (all=1), with their sources."""
+    where = DUE_WHERE if not all else f"v.deleted_at IS NULL AND v.status NOT IN ('intake', 'off_site') AND {COVERED_SQL}"
+    rows = conn.execute(f"""SELECT v.id, v.vin, v.registration_number, v.make, v.model, v.model_year
+                              FROM vehicles v WHERE {where} ORDER BY v.id""",
+                        {"days": settings.recall_check_days}).fetchall()
+    for r in rows:
+        r["sources"] = _sources_for(conn, r["id"])
+    return rows
+
+
+class HelperCampaign(BaseModel):
+    code: str = Field(min_length=1, max_length=60)
+    title: str = Field(min_length=1, max_length=200)
+    details: Optional[str] = Field(None, max_length=2000)
+
+
+class HelperResult(BaseModel):
+    vehicle_id: int
+    source_id: Optional[int] = None
+    error: Optional[str] = Field(None, max_length=300)  # the portal couldn't be asked / read: nothing changes
+    open: list[HelperCampaign] = Field(default_factory=list, max_length=100)  # campaigns still to do on the car
+    done: list[str] = Field(default_factory=list, max_length=200)  # campaign numbers the portal shows as done
+
+
+@router.post("/recall-helper/result")
+def helper_result(body: HelperResult, request: Request, conn=Depends(get_conn)):
+    """One car's answer from the portal: add the open campaigns not on the car yet, close the open ones the
+    portal shows as done, and record the check (an error is recorded but keeps the check due)."""
+    v = _vehicle(conn, body.vehicle_id)
+    me = request.state.staff["id"]
+    source_id = _source_id(conn, body.source_id)
+    if body.error:
+        conn.execute("""INSERT INTO recall_checks (vehicle_id, source_id, checked_by, result, reason, note)
+                        VALUES (%s, %s, %s, 'error', %s, %s)""", (v["id"], source_id, me, _reason(conn, v), _text(body.error)))
+        return {"added": 0, "closed": 0, "open": None}
+    added = closed = 0
+    for c in body.open:
+        code, title = _text(c.code), _text(c.title)
+        # Any status: a campaign closed here (e.g. "doesn't apply") isn't added again.
+        if conn.execute("SELECT 1 FROM vehicle_recalls WHERE vehicle_id = %s AND lower(code) = lower(%s)",
+                        (v["id"], code)).fetchone():
+            continue
+        conn.execute("""INSERT INTO vehicle_recalls (vehicle_id, source_id, code, title, details, created_by)
+                        VALUES (%s, %s, %s, %s, %s, %s)""",
+                     (v["id"], source_id, code, title, (c.details or "").strip() or None, me))
+        log_event(conn, v["id"], "recall_added", staff_id=me, data={"code": code, "title": title, "helper": True})
+        added += 1
+    done = [d.strip().lower() for d in body.done if d.strip()]
+    if done:
+        for r in conn.execute("""UPDATE vehicle_recalls SET status = 'done', closed_at = now(), closed_by = %s
+                                  WHERE vehicle_id = %s AND status = 'open' AND lower(code) = ANY(%s)
+                              RETURNING code, title""", (me, v["id"], done)).fetchall():
+            log_event(conn, v["id"], "recall_closed", staff_id=me,
+                      data={"code": r["code"], "title": r["title"], "status": "done", "helper": True})
+            closed += 1
+    still_open = conn.execute("SELECT count(*) AS n FROM vehicle_recalls WHERE vehicle_id = %s AND status = 'open'",
+                              (v["id"],)).fetchone()["n"]
+    _record_check(conn, v, source_id, "found" if still_open else "none", me, None)
+    return {"added": added, "closed": closed, "open": still_open}
+
+
 @router.delete("/recalls/{recall_id}")
 def delete_recall(recall_id: int, request: Request, conn=Depends(get_conn)):
     """For a recall added by mistake: the person who added it, or an admin."""

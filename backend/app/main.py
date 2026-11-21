@@ -1,10 +1,12 @@
+import io
 import logging
 import re
+import zipfile
 from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, HTTPException
-from fastapi.responses import FileResponse, HTMLResponse
+from fastapi.responses import FileResponse, HTMLResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
@@ -65,6 +67,25 @@ def ca_root():
         raise HTTPException(404, "HTTPS is not set up on this server yet")
     return FileResponse(settings.ca_root, media_type="application/x-x509-ca-cert", filename="carbonara-ca.crt",
                         headers={"Cache-Control": "no-cache"})
+
+
+# The recall helper (a Chrome extension, addons/recall-helper) as a zip to unpack and load in Chrome. Open
+# without login like the certificate: it holds no data or secrets, only the extension's code.
+_ADDONS = Path(__file__).resolve().parents[2] / "addons"
+
+
+@app.get("/addons/recall-helper.zip", include_in_schema=False)
+def recall_helper_zip():
+    folder = _ADDONS / "recall-helper"
+    if not folder.is_dir():
+        raise HTTPException(404, "Not found")
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        for f in sorted(folder.rglob("*")):
+            if f.is_file():
+                z.write(f, f"carbonara-recall-helper/{f.relative_to(folder).as_posix()}")
+    return Response(buf.getvalue(), media_type="application/zip", headers={
+        "Content-Disposition": 'attachment; filename="carbonara-recall-helper.zip"', "Cache-Control": "no-store"})
 
 
 # --------------------------------------------------------------------------- #

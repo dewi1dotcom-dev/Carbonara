@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Carbonara recall helper",
+  "version": "1.0.0",
+  "description": "Checks Carbonara's cars for recalls in a dealer portal you are logged in to, and sends the results to Carbonara.",
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Carbonara recall helper"
+  },
+  "permissions": ["activeTab", "scripting", "storage"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"]
+}

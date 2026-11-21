@@ -20,6 +20,8 @@ RUN pip install --no-cache-dir -r backend/requirements.txt \
 
 COPY backend backend
 COPY frontend frontend
+# Browser add-ons offered as downloads (the recall helper, Settings → Recall sources).
+COPY addons addons
 COPY VERSION VERSION
 # Stamp the build time (UTC) so the footer shows exactly which build is running.
 RUN date -u +"%Y-%m-%dT%H:%M:%SZ" > BUILD_TIME

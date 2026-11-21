@@ -237,6 +237,8 @@ backend/
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
                         notes (my notes), recalls (recall sources, checks, recalls per car)
   migrations/           001…040
+addons/recall-helper/   Chrome extension (manifest, popup.html, popup.js): recall checks in a dealer portal (0.42.0);
+                        copied into the image (Dockerfile) and served zipped at /addons/recall-helper.zip
 frontend/               no build step; plain ES modules
   index.html, css/app.css
   img/                  logo + app icon SVGs (favicon = carbonara-icon.svg); PNG app icons 192/512 +
@@ -1063,6 +1065,25 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
   them; **PDI orders** carry `open_recalls` (`OPEN_RECALLS_JSON` in `ORDER_SELECT`): in the e-mail ("TILBAKEKALLINGER /
   KAMPANJER"), the printed sheet (with "Utført ☐") and the PDI orders page; the **"Delivered" dialog** warns about open
   confirmed recalls (never blocks).
+- **Recall helper (0.42.0, the user's request; a Chrome extension, `addons/recall-helper/`):** automates the check in a
+  dealer portal **in the person's own logged-in tab** (no portal password stored anywhere; the server never logs in).
+  - Install: Settings → Recall sources → "Recall helper for Chrome (PC)": `GET /addons/recall-helper.zip` (zipped on the
+    fly from `addons/`, open like the certificate), then chrome://extensions → Developer mode → Load unpacked. The
+    popup asks for Carbonara's address once (optional host permission for that origin only) and uses the Carbonara
+    login cookie of the same Chrome. Its texts follow the user's language (`/auth/state`), EN/NO dictionary in `popup.js`.
+  - Run: on the portal's campaign page, "Check cars" → `GET /api/recall-helper/cars` (due, or `?all=1` every covered
+    car here, each with its sources); only cars whose source `url` is on the **open tab's origin** are checked (so no
+    portal address in code). For each VIN, `chrome.scripting` (activeTab, world MAIN) runs the portal's own request:
+    `POST url_AsyncMethods` with `AsyncMethod=CampaignByVIN`, `chassisNumber`; 1.5 s between cars.
+  - The portal's answer (the "PTS" campaign list the user saved, 21.11.2026): an HTML table, one `tr.rowCampaign` per
+    operation (`data-id` = campaign no.; cells: type, status, status date, start, end, op. no, description, chassis,
+    repair date, odometer, op. no, icon). Rows of one campaign are variants; **the campaign is done when any row has
+    the "Utført" mark / a repair date**. No rows: "Antall: 0" = none; a login form = stop; anything else = error (never
+    recorded as "no recalls").
+  - `POST /api/recall-helper/result` `{vehicle_id, source_id, open[], done[], error}`: adds open campaigns whose code
+    isn't on the car in any status (`certainty` confirmed), closes open recalls whose code the portal shows as done,
+    records the check (`found` / `none`; an error is logged as `result='error'` and keeps the car due). Events carry
+    `helper: true`.
 
 **My notes (0.40.0)** (`notes`, migration 039; `routers/notes.py`, `views/notes.js`; the user's request: "every user needs
 to take notes, pin cars and other things to remember, quick and easy"):
@@ -1379,6 +1400,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.40.0 | **My notes:** 📝 panel on every page with private notes, pinned cars / pages, reminders (with phone notification) and done list (migration 039) |
 | 0.41.0 | **Recalls, phase 1:** recall sources per brand (Settings), checks due after arrival / when a PDI is booked / every 30 days in storage, check dialog (open the brand's system, record the result), recalls per car (done / doesn't apply), on Today, PDI orders and the Delivered dialog (migration 040) |
 | 0.41.1 | Fix: a dealer portal opened from the recall check sent you back to Carbonara after login (Carbonara no longer tells other sites where a link came from) |
+| 0.42.0 | **Recall helper:** a Chrome extension (download in Settings → Recall sources) that checks the due cars in a dealer portal you are logged in to, adds open campaigns and closes the ones done |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
