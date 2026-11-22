@@ -564,7 +564,7 @@ def _norm_sql(col: str) -> str:
     return f"lower(regexp_replace(coalesce({col}, ''), '[^A-Za-z0-9]', '', 'g'))"
 
 
-PRICE_SELECT = f"""
+PRICE_BASE = f"""
     SELECT v.id, v.vin, v.registration_number, v.make, v.model, v.variant, v.model_year, v.condition, v.status,
            v.fuel_type, v.color, v.finn_code, v.asking_price, v.asking_price_at, v.asking_price_source,
            extract(year FROM coalesce(r.first_registered, r.first_registered_norway))::int AS first_reg_year,
@@ -574,7 +574,9 @@ PRICE_SELECT = f"""
       LEFT JOIN storage_assignments a ON a.vehicle_id = v.id AND a.removed_at IS NULL
       LEFT JOIN storage_spots l ON l.id = a.location_id
       LEFT JOIN LATERAL ({LATEST_KM_SQL.replace('%(v)s', 'v.id')}) km ON true
-     WHERE v.deleted_at IS NULL AND v.status <> 'off_site'"""
+     WHERE v.deleted_at IS NULL"""
+# In stock: not off site.
+PRICE_SELECT = PRICE_BASE + " AND v.status <> 'off_site'"
 
 
 def stock_prices_list(conn) -> list[dict]:

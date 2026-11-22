@@ -217,6 +217,27 @@ const NO = {
   'Check digit does not match. ': 'Kontrollsifferet stemmer ikke. ',
   'For this manufacturer that means a character is probably wrong (8/B, 5/S, 0/D, 2/Z…). Compare with the car.': 'For denne produsenten betyr det trolig at et tegn er feil (8/B, 5/S, 0/D, 2/Z…). Sammenlign med bilen.',
   'Only letters and digits are allowed.': 'Bare bokstaver og tall er tillatt.', 'New vehicle — not seen before.': 'Ny bil — ikke sett før.',
+  // Market data (test, 0.46.0)
+  'Market prices': 'Markedspriser', 'Market prices (test)': 'Markedspriser (test)', 'Market price (imported listings)': 'Markedspris (importerte annonser)',
+  'Estimate for this car': 'Anslag for denne bilen', 'Similar listings': 'Lignende annonser', 'All listings of the model': 'Alle annonser for modellen',
+  'No asking price': 'Ingen prisantydning', 'Too few listings with year and mileage': 'For få annonser med årsmodell og kilometerstand',
+  'The car has no model year': 'Bilen har ingen årsmodell', 'None (year ± 1, similar mileage)': 'Ingen (årsmodell ± 1, lignende kilometerstand)',
+  'Listing': 'Annonse', 'Private': 'Privat', 'Dealer': 'Forhandler', 'Import': 'Importer', 'Choose a file first': 'Velg en fil først',
+  'Market data is turned off. A system admin can turn it on: System → Market data.': 'Markedsdata er slått av. En systemadministrator kan slå det på: System → Markedsdata.',
+  'Test: car listings imported from a file, compared with the asking prices of our cars.': 'Test: bilannonser importert fra en fil, sammenlignet med prisantydningen på våre biler.',
+  'Import listings': 'Importer annonser',
+  'A CSV file with one listing per row. Needed columns: make, model, price (or price_nok). Used when present: year, km, variant, fuel, seller, status, first_price_nok, first_seen, last_seen, finn_code, url. Each make and model in the file replaces the earlier listings of that make and model; other models are kept. Seller names and places are not stored.':
+    'En CSV-fil med én annonse per rad. Kolonner som trengs: make, model, price (eller price_nok). Brukes når de finnes: year, km, variant, fuel, seller, status, first_price_nok, first_seen, last_seen, finn_code, url. Hvert merke og hver modell i filen erstatter de tidligere annonsene for samme merke og modell; andre modeller beholdes. Selgernavn og steder lagres ikke.',
+  'Delete this import and its listings?': 'Slette denne importen og annonsene i den?', 'Nothing imported yet.': 'Ingenting importert ennå.',
+  'Cars in stock, and cars added from their ad that have not arrived yet. The estimate is worked out from the listings\' year and mileage.':
+    'Biler på lager, og biler lagt til fra annonsen som ikke har kommet ennå. Anslaget regnes ut fra annonsenes årsmodell og kilometerstand.',
+  'Estimate': 'Anslag', 'vs. estimate': 'mot anslag', 'None of our cars match the imported make and model yet.': 'Ingen av våre biler passer med importert merke og modell ennå.',
+  'Make and model': 'Merke og modell', 'For sale': 'Til salgs', 'Years': 'Årsmodeller', 'Price range': 'Prisområde', 'Last seen': 'Sist sett',
+  'No listings imported.': 'Ingen annonser importert.', 'Market data (test)': 'Markedsdata (test)', 'Market data': 'Markedsdata', 'Off': 'Av', 'On': 'På',
+  'Import a file of car listings (CSV) on the Market prices page and compare the cars\' asking prices with the market by make, model, year and mileage. Off hides the page and the car page card; imported data is kept.':
+    'Importer en fil med bilannonser (CSV) på siden Markedspriser og sammenlign prisantydningen på bilene med markedet etter merke, modell, årsmodell og kilometerstand. Av skjuler siden og kortet på bilsiden; importerte data beholdes.',
+  'Market data (turned off on the System page)': 'Markedsdata (slått av på System-siden)',
+  'No usable rows in the file (each needs make, model and price)': 'Ingen brukbare rader i filen (hver trenger merke, modell og pris)',
   'Start arrival inspection': 'Start mottakskontroll', 'No arrival inspection yet': 'Ingen mottakskontroll ennå',
   'Condition, damage and photos have not been recorded. Do it when the car is here.': 'Tilstand, skader og bilder er ikke registrert. Gjør det når bilen er her.',
   'Arrival inspection in progress': 'Mottakskontroll pågår', 'No inspections yet.': 'Ingen kontroller ennå.', 'No arrival inspection': 'Ingen mottakskontroll',
@@ -872,6 +893,14 @@ const NO = {
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
+  ['{}: {n} listing(s) for sale. A test: based on the imported file only.', '{1}: {2} annonse(r) til salgs. En test: bare basert på den importerte filen.'],
+  ['year {n}, typical mileage (this car has none recorded)', 'årsmodell {1}, vanlig kilometerstand (bilen har ingen registrert)'],
+  ['year {n}, {}', 'årsmodell {1}, {2}'], ['{n} · {} · median {}', '{1} · {2} · median {3}'], ['{} · median {}', '{1} · median {2}'],
+  ['Closest listings ({n})', 'Nærmeste annonser ({1})'], ['was {}', 'var {1}'],
+  ['Imported {n} listing(s), {n} row(s) skipped', 'Importerte {1} annonse(r), {2} rad(er) hoppet over'], ['Imported {n} listing(s)', 'Importerte {1} annonse(r)'],
+  ['{n} listing(s)', '{1} annonse(r)'], ['Our cars with market data ({n})', 'Våre biler med markedsdata ({1})'],
+  ['Imported models ({n})', 'Importerte modeller ({1})'], ['{n} (+{n} sold)', '{1} (+{2} solgt)'],
+  ['The file has no column for: {}', 'Filen har ingen kolonne for: {1}'], ['The file has more than {n} rows', 'Filen har mer enn {1} rader'],
   ['Started {} by {}.', 'Startet {1} av {2}.'], ['Started {}.', 'Startet {1}.'],
   ['{} not found', '{1t} ble ikke funnet'],
   ['Done ({n})', 'Ferdig ({1})'],

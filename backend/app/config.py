@@ -115,6 +115,11 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("recall_check_days", "Check cars in storage for recalls every (days)", "Recalls", int, 30, min=1, max=365,
             help="Also checked after the arrival inspection and when a PDI is booked. Only cars whose make has a "
                  "recall source (Settings → Recall sources) are checked."),
+    # Market data (routers/market.py, 0.46.0): imported listings (CSV) compared with our asking prices. A test for now.
+    Setting("market_data", "Market data (test)", "Market data", default="off", choices=("off", "on"),
+            help="Import a file of car listings (CSV) on the Market prices page and compare the cars' asking prices "
+                 "with the market by make, model, year and mileage. Off hides the page and the car page card; "
+                 "imported data is kept."),
     # HTTPS: the address staff type at this location; the caddy container makes its certificate for it
     # (caddyhost.py → caddy/start.sh). Saved here, it survives redeploys; the env var is the stack fallback.
     Setting("carbonara_host", "Server address", "HTTPS", pattern=HOST_PATTERN,

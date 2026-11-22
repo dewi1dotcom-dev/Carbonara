@@ -14,7 +14,8 @@ from .db import pool
 from .migrate import run_migrations
 from . import caddyhost, push
 from .auth import require_staff
-from .routers import (admin, dashboard, deliveries, dm, documents, from_ad, inspections, messages, notes, notifications, pdi,
+from .routers import (admin, dashboard, deliveries, dm, documents, from_ad, inspections, market, messages, notes,
+                      notifications, pdi,
                       pdi_sheets, recalls, rentals, session, storage_care, system, testdrives, vehicle_photos, vehicles,
                       vin)
 
@@ -41,7 +42,8 @@ app = FastAPI(title="Carbonara", version=settings.version, lifespan=lifespan)
 app.include_router(session.router, prefix="/api")
 app.include_router(deliveries.kiosk_router, prefix="/api")
 for module in (admin, vin, inspections, vehicles, testdrives, rentals, pdi, pdi_sheets, dashboard, system, storage_care,
-               documents, deliveries, messages, dm, notifications, notes, recalls, vehicle_photos, from_ad):
+               documents, deliveries, messages, dm, notifications, notes, recalls, vehicle_photos, from_ad,
+               market):
     app.include_router(module.router, prefix="/api", dependencies=[Depends(require_staff)])
 
 

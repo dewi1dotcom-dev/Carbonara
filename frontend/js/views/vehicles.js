@@ -3,6 +3,7 @@ import { tr as trText } from '../i18n.js';
 import { documentDialog, documentsCard } from './documents.js';
 import { editDialog as pdiEditDialog, pdiBanner, pdiCard } from './pdi.js';
 import { photosCard } from './carphotos.js';
+import { marketCard, marketOn } from './market.js';
 import { priceCard, priceValue } from './prices.js';
 import { recallBadge, recallsCard } from './recalls.js';
 import { batteryCard, storageCard } from './storagecare.js';
@@ -50,7 +51,8 @@ export async function vehiclesView(el) {
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Vehicles'),
         h('a', { href: '#/vehicles/deleted', class: 'small' }, '🗑 Recently deleted'), ' · ',
-        h('a', { href: '#/prices', class: 'small' }, '💰 Price overview')),
+        h('a', { href: '#/prices', class: 'small' }, '💰 Price overview'),
+        marketOn() ? [' · ', h('a', { href: '#/market', class: 'small' }, '📈 Market prices (test)')] : null),
       // Same as on Today / Arrivals (a smoother workflow); only for teams that can open the arrival inspection.
       canOpen('#/intake') ? h('a', { class: 'btn primary big', href: '#/intake' }, '+ New arrival') : null),
     h('div', { class: 'toolbar' }, search, statusSel, conditionSel),
@@ -861,10 +863,11 @@ function arrivalPhotosCard(v) {
 // host: the page's real container. A redraw renders into a fresh div and moves the result
 // into host, so every redraw (not only the first) updates the visible page.
 export async function vehicleView(el, [id], host = el) {
-  const [v, pdiData, pdiOpts, care, charging, docs, recallData, photos] = await Promise.all([
+  const [v, pdiData, pdiOpts, care, charging, docs, recallData, photos, market] = await Promise.all([
     api.get(`/vehicles/${id}`), api.get(`/vehicles/${id}/pdi`), api.get('/pdi/options'),
     api.get(`/vehicles/${id}/storage-care`), api.get(`/vehicles/${id}/battery-charging`),
-    api.get(`/vehicles/${id}/documents`), api.get(`/vehicles/${id}/recalls`), api.get(`/vehicles/${id}/photos`)]);
+    api.get(`/vehicles/${id}/documents`), api.get(`/vehicles/${id}/recalls`), api.get(`/vehicles/${id}/photos`),
+    marketOn() ? api.get(`/vehicles/${id}/market`).catch(() => null) : null]);
   const rerender = async () => {
     try {
       const fresh = h('div');
@@ -892,6 +895,7 @@ export async function vehicleView(el, [id], host = el) {
     mismatchCard(v, rerender),
     overviewCard(v, rerender),
     priceCard(v), // null when neither this car nor a similar one in stock has a price
+    marketCard(v, market), // null unless market data is on and listings of this make + model are imported
     photosCard(v, photos, rerender), // the car's own photos (from its finn.no ad, or added here)
     arrivalPhotosCard(v),
     documentsCard(v, docs, rerender),

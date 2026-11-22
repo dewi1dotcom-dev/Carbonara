@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field
 
 from .. import auth
 from ..common import cap_name
+from ..config import settings
 from ..db import get_conn
 
 log = logging.getLogger("carbonara.session")
@@ -54,6 +55,7 @@ def state(request: Request, conn=Depends(get_conn)):
     me = auth.session_staff(conn, request.cookies.get(auth.COOKIE))
     if me:
         me["menu_more"] = auth.menu_more(conn)  # top menu items shown under "More"
+        me["market_data"] = settings.market_data == "on"  # Market prices page + car page card (System page)
     return {"setup_needed": setup, "staff": staff, "me": me,
             # A delivery kiosk tablet shows the delivery form instead of the login screen.
             "kiosk": auth.kiosk_device(conn, request.cookies.get(auth.KIOSK_COOKIE))}

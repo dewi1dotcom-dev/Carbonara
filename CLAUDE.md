@@ -235,8 +235,9 @@ backend/
                         session (login/language), pdi, dashboard (Today), system, storage_care,
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
-                        notes (my notes), recalls (recall sources, checks, recalls per car)
-  migrations/           001…042
+                        notes (my notes), recalls (recall sources, checks, recalls per car),
+                        market (market data test: CSV import, comparison)
+  migrations/           001…043
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -256,7 +257,8 @@ frontend/               no build step; plain ES modules
                         stamps, signature, PDI done dialog), storagecare (card + check form
                         + report), messages (Today message board), dm (private messages), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
                         login, settings, system, notifications (👤 menu → Notifications), notes (📝 panel + #/notes),
-                        recalls (car page card, check dialog, Settings → Recall sources)
+                        recalls (car page card, check dialog, Settings → Recall sources),
+                        market (#/market Market prices + car page card; market data test)
 ```
 
 **Migrations:**
@@ -305,6 +307,7 @@ frontend/               no build step; plain ES modules
 | 040 | `recalls` | `recall_sources` (name, `makes[]`, `url` with {vin}/{reg}, note), `vehicle_recalls` (code, title, details, certainty, status open/done/not_applicable), `recall_checks` (result, reason), `vehicles.recall_check_requested_at / _reason` |
 | 041 | `asking_price` | `vehicles.asking_price` (kr), `asking_price_at`, `asking_price_source` ('manual' / 'finn') |
 | 042 | `vehicle_photos` | `vehicle_photos` (the car's own photos: from its finn.no ad or uploaded; `sort`, `source`), `vehicles.listed_km / listed_km_at` (the ad's mileage) |
+| 043 | `market_data` | `market_imports` (file name, rows read / skipped, models), `market_listings` (make / model + match keys, variant, year, km, price, first price, fuel, `seller_kind` private / dealer, status, `active`, first / last seen, finn code, url; no seller names or places) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -724,6 +727,7 @@ the server is LAN-only, so no customer phones / public internet).
   - **Rental cars (0.28.1):** the same four fields for the rental privacy notice
   - **HTTPS (0.39.0):** server address (`carbonara_host`), shown inside the HTTPS card, not as its own card
   - **Recalls (0.41.0):** `recall_check_days` (default 30): how often a car in storage is due for a recall check
+  - **Market data (0.46.0):** `market_data` off / on (choice labels Off / On); `/auth/state` sends `me.market_data`
   - **Wheels (0.29.0):** studded tyre region (`tyre_region` south / north; readable names via `CHOICE_LABEL` in `system.js`)
   - **Data retention**
 - **Where a value comes from:** `settings.<name>` = DB `app_settings`, else env `NAME`, else
@@ -1193,6 +1197,35 @@ to take notes, pin cars and other things to remember, quick and easy"):
     overview** page `#/prices` (link on Vehicles; `GET /vehicles/prices`, declared before `/vehicles/{vehicle_id}`):
     every car in stock grouped by make + model, sorted by price, "vs. median" badge (above +5 % amber, below −5 % green),
     New/used filter.
+- **Market data (test, 0.46.0, the user's request)** (`routers/market.py`, `views/market.js`, migration 043): the user
+  wanted to see whether a listings database is good enough and how it works in Carbonara. **Carbonara never fetches
+  listings** (building a finn.no scraper was declined: finn.no's terms / robots.txt and the database right in
+  åndsverkloven § 24, with the risk on the dealer's FINN account); the user brings a **CSV file** made elsewhere, so
+  where the file comes from is the user's responsibility. The same import fits licensed data later.
+  - **On / off:** System → Market data (`market_data`, default off). Off: `/api/market*` answer 404, the page shows a
+    notice, the Vehicles link and the car page card are hidden; imported data stays. The browser learns it from
+    `/auth/state` (`me.market_data`), so a change shows after a reload.
+  - **Import (admins, `POST /market/import`, multipart `file`, ≤ 10 MB / 50 000 rows):** comma / semicolon / tab
+    (sniffed), UTF-8 (BOM ok) or cp1252. Column names are matched loosely (`COLUMNS`: make/merke, model/modell,
+    price/price_nok/pris/totalpris required; year, km, variant, fuel, seller, status, first_price_nok, first_seen,
+    last_seen, finn_code, url optional). Rows without make, model or a price 1 000–99 999 999 are skipped (counted);
+    the same finn code twice in a file counts once. **Each make + model in a file replaces the earlier listings of
+    that make + model** (the user's "future uploads recreate price data"); other models stay; imports left with no
+    listings are deleted. Status containing sold / solgt / removed … = inactive (not in the prices). **Seller names
+    and places are never stored**, only `seller_kind` (private when the seller text starts with "priv" / says
+    "privatperson", else dealer). `DELETE /market/imports/{id}` removes an import and its listings.
+  - **Matching** (`matches`): make and model keys (lower case, letters + digits); the exact model if any, else a model
+    starting with the other ("ZS" ↔ "ZS EV").
+  - **Estimate** (`compare`): least squares price = a + b·year + c·km over the active listings of the model within
+    ± 2 years of the car (all years when fewer than 8), needs 8+ listings with year and km; the car's year = model year,
+    else first registration; km = latest mileage (`LATEST_KM_SQL`, the ad's km counts), else the typical km of that
+    year (shown as assumed). Rounded to 1 000 kr; not shown when outside 0.6 × lowest … 1.4 × highest. **Similar** =
+    year ± 1 and km ± 25 % (at least 20 000 km); the 8 closest are listed on the car page with their ad links.
+  - **Where it shows:** `#/market` "Market prices" (link "📈 Market prices (test)" on Vehicles, nav `vehicles`): import
+    card (admins) with the imports, "Our cars with market data" (cars in stock + off-site cars without a completed
+    arrival inspection = added from their ad, not delivered; `CARS_SQL`) with asking price, estimate, similar listings
+    and "vs. estimate" badge (±5 % plain, above amber, below green), and "Imported models". Car page: "Market price
+    (imported listings)" card under the price card (`GET /vehicles/{id}/market`; null = no card).
 
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
@@ -1475,6 +1508,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.45.1 | Fix: adding a car from its finn.no ad did nothing when Chrome asked about the photos (the question closed Sidekick); Sidekick 1.5.1 adds the car in its background and may read finn.no's photo server without asking |
 | 0.45.2 | Sidekick 1.5.2: each photo of a finn.no ad offered once (the same photo came at several sizes) |
 | 0.45.3 | Cars without an arrival inspection (e.g. added from their finn.no ad): warning banner with "Start arrival inspection" on the car page, the same button in the empty Inspections card, "No arrival inspection" badge in lists; cancelling that inspection keeps the car |
+| 0.46.0 | **Market data (test):** import a CSV of car listings (System → Market data on / off); Market prices page (our cars vs. an estimate for their year + mileage, imported models) and a "Market price" card on the car page (migration 043) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

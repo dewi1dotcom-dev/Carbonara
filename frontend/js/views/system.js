@@ -293,7 +293,7 @@ function moreCard(data) {
 }
 
 // Readable names for settings stored as short keys (others show the value itself).
-const CHOICE_LABEL = { south: 'South and Central Norway', north: 'Nordland, Troms and Finnmark' };
+const CHOICE_LABEL = { south: 'South and Central Norway', north: 'Nordland, Troms and Finnmark', off: 'Off', on: 'On' };
 
 function settingRow(r, done) {
   let input;
