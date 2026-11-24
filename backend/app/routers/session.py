@@ -24,6 +24,8 @@ class SetupIn(BaseModel):
     staff_id: Optional[int] = None          # an existing staff member, or
     name: Optional[str] = Field(None, max_length=100)  # a new one when there is no staff yet
     pin: str = Field(max_length=20)
+    # Modules this install uses (0.48.0): keys of auth.MODULE_ITEMS; None = leave them as they are (all on).
+    modules: Optional[list[str]] = None
 
 
 class PinChangeIn(BaseModel):
@@ -56,6 +58,7 @@ def state(request: Request, conn=Depends(get_conn)):
     if me:
         me["menu_more"] = auth.menu_more(conn)  # top menu items shown under "More"
         me["market_data"] = settings.market_data == "on"  # Market prices page + car page card (System page)
+        me["modules"] = [m for m in auth.MODULE_ITEMS if getattr(settings, m) != "off"]  # System page → Modules
     return {"setup_needed": setup, "staff": staff, "me": me,
             # A delivery kiosk tablet shows the delivery form instead of the login screen.
             "kiosk": auth.kiosk_device(conn, request.cookies.get(auth.KIOSK_COOKIE))}
@@ -116,6 +119,17 @@ def setup(body: SetupIn, request: Request, response: Response, conn=Depends(get_
     conn.execute("UPDATE staff SET pin_hash = %s, is_admin = true, is_superadmin = true, last_login_at = now() "
                  "WHERE id = %s",
                  (auth.hash_pin(body.pin), staff_id))
+    if body.modules is not None:
+        if not set(body.modules) & set(auth.MODULE_ITEMS):
+            raise HTTPException(422, "Choose at least one part of Carbonara to use")
+        for name in auth.MODULE_ITEMS:  # saved like a System page setting (changeable there later)
+            conn.execute(
+                """INSERT INTO app_settings (key, value, updated_by) VALUES (%s, %s, %s)
+                   ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by,
+                                                   updated_at = now()""",
+                (name, "on" if name in body.modules else "off", staff_id))
+        conn.commit()
+        settings.reload()
     _set_cookie(request, response, auth.new_session(conn, staff_id, request.headers.get("user-agent")))
     log.info("first-time setup: staff %s is administrator", staff_id)
     return {"ok": True}

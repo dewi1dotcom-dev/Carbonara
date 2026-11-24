@@ -127,11 +127,32 @@ SETTINGS: tuple[Setting, ...] = (
             help="The address staff type to open Carbonara here, e.g. the server's IP address. The HTTPS "
                  "certificate is made for it. A change takes effect within half a minute; installed "
                  "certificates keep working."),
+    # Modules (0.48.0): which parts of Carbonara this install uses (auth.MODULE_ITEMS). Off = the menu items are gone
+    # for everyone; the data is kept. Also chosen at first-time setup.
+    Setting("module_cars", "Car sales and stock", "Modules", default="on", choices=("on", "off"),
+            help="Arrivals, Vehicles, PDI orders, Storage and Test drive."),
+    Setting("module_workshop", "Workshop customers and parts", "Modules", default="on", choices=("on", "off"),
+            help="Customers (customer register), Parts (parts store and parts orders) and customer car Deliveries."),
+    Setting("module_rental", "Rental cars", "Modules", default="on", choices=("on", "off"),
+            help="The Rental cars page."),
+    # Customer register (routers/customers.py, 0.48.0). Can belong to another company than the car stock (e.g. the
+    # workshop next door): its name is shown on the register and in the consent when a car is copied into it.
+    Setting("customers_company", "Company name", "Customer register",
+            help="The company the customer register belongs to. Empty = the Company details above are used."),
+    Setting("customers_phone", "Phone for customers", "Customer register",
+            help="Shown on the customer register's privacy notice."),
+    Setting("customers_email", "E-mail for customers", "Customer register",
+            help="Shown on the customer register's privacy notice."),
+    Setting("customers_address", "Postal address", "Customer register",
+            help="Shown on the customer register's privacy notice."),
+    Setting("customer_number_start", "First customer number", "Customer register", int, 10000, min=1, max=99999999,
+            help="New customers get the next free number from here (higher than any number in use)."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),
-    Setting("retention_years", "Delete inactive off-site cars after (years)", "Data retention", int, 5, min=0, max=100,
-            help="0 = never."),
+    Setting("retention_years", "Delete inactive off-site cars and customers after (years)", "Data retention", int, 5,
+            min=0, max=100,
+            help="Cars that are off site and customers with no orders or changes in that time. 0 = never."),
 )
 BY_NAME = {s.name: s for s in SETTINGS}
 CACHE_SECONDS = 20

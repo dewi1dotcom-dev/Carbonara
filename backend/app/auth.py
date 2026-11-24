@@ -17,6 +17,7 @@ import secrets
 
 from fastapi import Depends, HTTPException, Request
 
+from .config import settings
 from .db import get_conn
 
 COOKIE = "carbonara_session"
@@ -32,7 +33,21 @@ STAFF_PUBLIC = ("id, name, first_name, last_name, phone, active, is_admin, is_su
 
 # Top menu items a team can be given (keys = data-nav in index.html). Today is
 # always there; System is for system admins only, so neither is listed.
-MENU_ITEMS = ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive", "rental", "deliveries", "parts", "settings")
+MENU_ITEMS = ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive", "rental", "customers", "parts", "deliveries",
+              "settings")
+
+# Modules (System page / first-time setup, 0.48.0): a module switched off takes its menu items away from everyone.
+MODULE_ITEMS = {
+    "module_cars": ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive"),
+    "module_workshop": ("customers", "parts", "deliveries"),
+    "module_rental": ("rental",),
+}
+
+
+def modules_off() -> set[str]:
+    """Menu items of the modules switched off on the System page."""
+    return {item for name, items in MODULE_ITEMS.items() if getattr(settings, name) == "off" for item in items}
+
 
 # Items a system admin can move into the "More" dropdown of the top menu (System page → Top menu).
 # Saved in app_settings under MORE_KEY as a comma-separated list; the same for everyone.
@@ -50,9 +65,10 @@ def menu_for(staff: dict) -> list[str]:
     """The menu items this person sees. System admins: all (they can't lock
     themselves out). Others: Today + their team's items; no team = Today only.
     The frontend hides the rest and blocks their pages (not a server lock)."""
+    off = modules_off()
     if staff.get("is_superadmin"):
-        return ["today", *MENU_ITEMS, "system"]
-    return ["today", *[m for m in MENU_ITEMS if m in (staff.get("team_menu") or [])]]
+        return ["today", *[m for m in MENU_ITEMS if m not in off], "system"]
+    return ["today", *[m for m in MENU_ITEMS if m in (staff.get("team_menu") or []) and m not in off]]
 
 
 def valid_pin(pin: str) -> bool:

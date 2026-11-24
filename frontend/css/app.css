@@ -852,6 +852,20 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .part-title { font-size: 1.1rem; margin: 0 0 .25rem; }
 .part-stock { font-size: 1.05rem; margin: 0 0 .5rem; }
 .pre-line { white-space: pre-line; }
+/* Customer register + parts orders (0.48.0, views/customers.js, views/partsorders.js). */
+.page-head .row-actions { display: flex; flex-wrap: wrap; gap: .5rem; white-space: normal; }
+.card-head { display: flex; justify-content: space-between; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.card-head h2 { margin: 0; }
+.pick-list { max-height: 55vh; overflow-y: auto; margin-top: .5rem; }
+.pick-list button.pick { display: block; width: 100%; text-align: left; padding: .35rem 0; }
+.order-totals { margin-top: .75rem; justify-content: end; text-align: right; }
+.order-totals dd { font-variant-numeric: tabular-nums; }
+.add-line { margin-top: 1rem; }
+.card.inner { box-shadow: none; margin: .5rem 0; }
+.setup-modules { border: 1px solid var(--border); border-radius: var(--radius); padding: .5rem .9rem .25rem; margin: 1rem 0 0; }
+.setup-modules legend { font-weight: 600; padding: 0 .3rem; }
+.setup-modules label.check { align-items: flex-start; margin-top: .5rem; }
+.setup-modules label.check input { flex: none; }
 /* The car's own photos (0.45.0, views/carphotos.js). */
 .car-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .5rem; margin: .5rem 0; }
 .car-photos .thumb { position: relative; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: none; cursor: zoom-in; }

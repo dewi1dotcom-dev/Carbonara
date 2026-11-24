@@ -24,6 +24,13 @@ export function loginView(el, state, onDone) {
     minlength: 4, maxlength: 8, required: true, placeholder: '••••',
   }) : null;
   const submit = h('button', { class: 'btn primary', type: 'submit' }, setup ? 'Set PIN and log in' : 'Log in');
+  // First-time setup: which parts of Carbonara this place uses (System page → Modules later; the server's
+  // auth.MODULE_ITEMS keys).
+  const modules = setup ? [
+    ['module_cars', 'Car sales and stock', 'Arrivals, vehicles, PDI orders, storage, test drives'],
+    ['module_workshop', 'Workshop customers and parts', 'Customer register, parts store and parts orders, customer car deliveries'],
+    ['module_rental', 'Rental cars', 'Your own rental / loan cars'],
+  ].map(([key, label, help]) => ({ key, box: h('input', { type: 'checkbox', checked: true }), label, help })) : [];
 
   const form = h('form', { class: 'card login-card' },
     h('h1', {}, 'Carbonara'),
@@ -37,6 +44,11 @@ export function loginView(el, state, onDone) {
       setup && !state.staff.length ? newName : null),
     h('div', { class: 'field' }, h('label', { for: 'login-pin' }, setup ? 'Choose a PIN (4–8 digits)' : 'PIN'), pin),
     setup ? h('div', { class: 'field' }, h('label', { for: 'login-pin2' }, 'Repeat the PIN'), pin2) : null,
+    setup ? h('fieldset', { class: 'setup-modules' },
+      h('legend', {}, 'What will Carbonara be used for here?'),
+      modules.map((m) => h('label', { class: 'check' }, m.box,
+        h('span', {}, h('span', {}, m.label), h('span', { class: 'muted small block' }, m.help)))),
+      h('p', { class: 'muted small' }, 'Can be changed later on the System page.')) : null,
     !setup && !state.staff.length
       ? h('p', { class: 'notice warn' }, 'Nobody has a PIN yet. Ask an administrator.') : null,
     h('div', { class: 'actions' }, submit),
@@ -50,10 +62,12 @@ export function loginView(el, state, onDone) {
     e.preventDefault();
     if (!/^\d{4,8}$/.test(pin.value)) { showError(new Error('The PIN must be 4–8 digits')); return; }
     if (setup && pin.value !== pin2.value) { showError(new Error('The two PINs are not the same')); return; }
+    const chosen = modules.filter((m) => m.box.checked).map((m) => m.key);
+    if (setup && !chosen.length) { showError(new Error('Choose at least one part of Carbonara to use')); return; }
     busy(submit, async () => {
       if (setup) {
-        await api.post('/auth/setup', who.value ? { staff_id: Number(who.value), pin: pin.value }
-          : { name: newName.value, pin: pin.value });
+        await api.post('/auth/setup', who.value ? { staff_id: Number(who.value), pin: pin.value, modules: chosen }
+          : { name: newName.value, pin: pin.value, modules: chosen });
       } else {
         await api.post('/auth/login', { staff_id: Number(who.value), pin: pin.value });
       }

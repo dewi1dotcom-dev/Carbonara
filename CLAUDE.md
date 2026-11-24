@@ -237,8 +237,9 @@ backend/
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
                         notes (my notes), recalls (recall sources, checks, recalls per car),
-                        market (market data test: CSV import, comparison), parts (parts store)
-  migrations/           001…044
+                        market (market data test: CSV import, comparison), parts (parts store),
+                        customers (customer register, cars, owners, transfer from Vehicles), parts_orders
+  migrations/           001…045
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -259,7 +260,8 @@ frontend/               no build step; plain ES modules
                         + report), messages (Today message board), dm (private messages), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
                         login, settings, system, notifications (👤 menu → Notifications), notes (📝 panel + #/notes),
                         recalls (car page card, check dialog, Settings → Recall sources),
-                        market (#/market Market prices + car page card; market data test), parts (#/parts parts store)
+                        market (#/market Market prices + car page card; market data test), parts (#/parts parts store),
+                        customers (#/customers, customer cars, transfer dialog), partsorders (#/parts-orders)
 ```
 
 **Migrations:**
@@ -310,6 +312,7 @@ frontend/               no build step; plain ES modules
 | 042 | `vehicle_photos` | `vehicle_photos` (the car's own photos: from its finn.no ad or uploaded; `sort`, `source`), `vehicles.listed_km / listed_km_at` (the ad's mileage) |
 | 043 | `market_data` | `market_imports` (file name, rows read / skipped, models), `market_listings` (make / model + match keys, variant, year, km, price, first price, fuel, `seller_kind` private / dealer, status, `active`, first / last seen, finn code, url; no seller names or places) |
 | 044 | `parts` | `parts` (part number + `part_key`, name, make, supplier, location, unit, quantity, minimum, cost / sales price ex VAT, VAT rate, note; soft delete), `part_movements` (created / received / out / count / import / price; change, quantity after, unit cost, reference, note, data), `part_imports` |
+| 045 | `customers` | `customers` (customer no., private / company, contact, `last_activity_at`), `customer_cars`, `car_ownerships` (one current owner per car), `parts_orders`, `parts_order_lines`, `register_events`; `vehicles.customer_first_name / _last_name / _address / _phone / customer_car_id`; `part_movements.order_id`, kinds `order` / `order_return` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -333,6 +336,7 @@ frontend/               no build step; plain ES modules
 - **Customer deliveries:** `#/deliveries` (list + kiosk setup; top menu "Deliveries" since 0.25.1, also from
   Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
 - **Parts store:** `#/parts` (top menu "Parts" / "Delelager"; filters in the hash, e.g. `#/parts?q=…&show=low`).
+- **Customers:** `#/customers` · `#/customers/:id` · `#/customer-cars/:id` (nav `customers`). **Parts orders:** `#/parts-orders` · `#/parts-orders/:id` (nav `parts`).
 - **Private messages:** `#/messages` (people) · `#/messages/:staffId` (conversation); the 💬 button in the top bar, every
   user whatever the team (`canSee` always allows `messages`).
 - **My notes:** the 📝 panel (any page) · `#/notes` (the same as a page; reminder notifications open it); `canSee` always
@@ -698,7 +702,7 @@ the server is LAN-only, so no customer phones / public internet).
 
 **Teams (0.26.0)** (`teams`, `staff.team_id`; System page → Teams; `/system/teams`, `/system/staff/{id}/team`):
 - System admins create teams with a name, tick which **top menu items** each team sees
-  (`auth.MENU_ITEMS`: arrivals, vehicles, pdi_orders, storage, testdrive, rental, deliveries, parts, settings) and place users.
+  (`auth.MENU_ITEMS`: arrivals, vehicles, pdi_orders, storage, testdrive, rental, customers, parts, deliveries, settings) and place users.
   **One team per user.** Today is always shown; System stays system-admin-only.
 - `auth.menu_for()` puts `menu` on the session user (`/auth/state` → `me.menu`): system admins get
   everything; others Today + their team's items; **no team = Today only** (the user's choice). New staff
@@ -731,6 +735,8 @@ the server is LAN-only, so no customer phones / public internet).
   - **HTTPS (0.39.0):** server address (`carbonara_host`), shown inside the HTTPS card, not as its own card
   - **Recalls (0.41.0):** `recall_check_days` (default 30): how often a car in storage is due for a recall check
   - **Market data (0.46.0):** `market_data` off / on (choice labels Off / On); `/auth/state` sends `me.market_data`
+  - **Modules (0.48.0):** `module_cars` / `module_workshop` / `module_rental` (on / off; see *Customer register + parts orders*)
+  - **Customer register (0.48.0):** company name, phone, e-mail, postal address (empty company = Company), first customer number
   - **Wheels (0.29.0):** studded tyre region (`tyre_region` south / north; readable names via `CHOICE_LABEL` in `system.js`)
   - **Data retention**
 - **Where a value comes from:** `settings.<name>` = DB `app_settings`, else env `NAME`, else
@@ -1260,6 +1266,53 @@ sales price, and no link to cars for now):
   prices from a full supplier list only) and "Set the stock of existing parts" (default off; new parts always get the
   file's quantity). Logged in `part_imports` (last 5 shown).
 
+**Customer register + parts orders (0.48.0)** (migration 045; `routers/customers.py`, `routers/parts_orders.py`,
+`views/customers.js`, `views/partsorders.js`; the user's request: "collect parts in an order connected to a car and
+owner, with history; customers have a customer number; owners can change; owners can have several cars; the Vehicles
+database stays separate but can be transferred when a customer allows it; a choice at first setup, for companies working
+together"). The user's choices: stock goes down when an order is handed out, automatic customer numbers, inactive
+customers deleted after `retention_years`, and modules + another company + consent.
+- **Customers** (`#/customers`, `#/customers/:id`; top menu "Customers" / "Kunder", team key `customers`): customer no.
+  (automatic: max + 1, at least System → Customer register → "First customer number" `customer_number_start`, advisory
+  lock), private (first + last name) or company (company name, 9-digit org. no.), phone (`clean_phone`), e-mail, address,
+  postal code, city, note. `customers.name` = display name. Delete (admins) = for good, not with open orders.
+- **Customer cars** (`customer_cars`, `#/customer-cars/:id`): **kept apart from `vehicles`**. Reg. no., VIN (unique),
+  make / model / year / colour / fuel / first registered (Statens vegvesen lookup by reg. no. via `rentals.registry_values`).
+  **Owners over time** (`car_ownerships`, one current per car): "Change owner" ends the current one and starts the new
+  ("No owner now" = sold elsewhere / scrapped); adding a car that is already in the register (reg. no. or VIN) offers to
+  change its owner instead. A customer can own several cars; earlier cars stay listed with their period.
+- **History** (`register_events`, customer / car / order): ids only in `data` (`from_customer_id` …), names looked up
+  when shown (`_names`; a deleted customer shows as "deleted customer"). Never names, phones or addresses in events.
+- **Who:** admins and teams with Customers or Parts (`customers._access`, a server lock: personal data). Orders are changed
+  only by the parts team (`parts._editor`).
+- **Parts orders** (`#/parts-orders`, `#/parts-orders/:id`, nav `parts`; from the Parts page, a customer or a car):
+  order no. (max + 1), customer (required), car (optional, one of the customer's), reference, note. Lines = a part from
+  the store (number, name, unit, sales price and VAT copied; the same part again adds to its line) or free text.
+  Status open → ordered (from the supplier) → arrived → **done = handed out**: every stock line is taken out of the
+  stock (`part_movements` kind `order` with `order_id`; refused when a part has too little: "register as received or
+  count first"); "Undo hand-out" puts them back (`order_return`). Cancelled = final. Parts on orders not done / cancelled
+  are **reserved** (`parts.RESERVED_SQL`: shown on the Parts list, the part dialog and the line picker). Totals ex VAT,
+  VAT, inc VAT. "🖨 Print" prints the page.
+- **The car database (Vehicles):** a "Customer" row on the car page overview (`vehicleCustomerRow`): first + last name,
+  address, phone typed by sales (`vehicles.customer_*`, `PUT /vehicles/{id}/customer`, any staff; event
+  `customer_details_updated` without the values). **"Transfer to the customer register"** (only while the Workshop module
+  is on; `GET /vehicles/{id}/transfer` = the car if already in the register + possible matches by phone / name, name and
+  customer no. only): pick a match or a new customer (prefilled), **tick the customer's consent** (required, server
+  checks), → the car is created or found by VIN / reg. no., gets the customer as owner, `customer_cars.vehicle_id /
+  consent_at / consent_by`, `vehicles.customer_car_id`, events `transferred_from_car_database` /
+  `transferred_to_customer_register`. The car stays in Vehicles unchanged.
+- **Another company:** System → **Customer register** (`customers_company / _phone / _email / _address`) like the kiosk and
+  rental blocks (`customers.company()`, `operator` when it differs from Company). Shown on the Customers page ("Customer
+  register of …") and in `registerPrivacyDialog` (Norwegian, art. 6(1)(b) + (f), consent for transfers, retention).
+- **Retention:** `customers.last_activity_at` is touched by every change, owner change and order; the worker's
+  `housekeeping()` → `purge_inactive` deletes customers older than `retention_years` (none with open orders or orders
+  changed within that time; orders stay without the customer), then register cars with no owners left and no changes.
+- **Modules (System page → Modules, and first-time setup):** `module_cars` (arrivals, vehicles, pdi_orders, storage,
+  testdrive), `module_workshop` (customers, parts, deliveries), `module_rental` (rental); `auth.MODULE_ITEMS`,
+  `modules_off()`: off = those menu items are gone for everyone (system admins too); data is kept; like teams, not a
+  server lock. The setup screen asks "What will Carbonara be used for here?" (`SetupIn.modules` → `app_settings`).
+  `/auth/state` sends `me.modules`.
+
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
 - **How it's chosen:** per user (`staff.language`, default `en` for existing accounts),
@@ -1301,6 +1354,7 @@ sales price, and no link to cars for now):
   | Sub-zone | Undersone |
   | Mudflaps | **Skvettlapper** (not "Sprutlapper") |
   | Parts (store) | **Delelager** (a part = del, part number = delenummer, cost price = innpris) |
+  | Parts order / Customers / Handed out | **Delebestilling** / **Kunder** / **Utlevert** |
 
 **Theme: light / dark (0.20.0):**
 - Per user, under their name at the top: "Same as device" (default `auto`), "Light", "Dark".
@@ -1544,6 +1598,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.45.3 | Cars without an arrival inspection (e.g. added from their finn.no ad): warning banner with "Start arrival inspection" on the car page, the same button in the empty Inspections card, "No arrival inspection" badge in lists; cancelling that inspection keeps the car |
 | 0.46.0 | **Market data (test):** import a CSV of car listings (System → Market data on / off); Market prices page (our cars vs. an estimate for their year + mileage, imported models) and a "Market price" card on the car page (migration 043) |
 | 0.47.0 | **Parts store (delelager):** new top menu page with part numbers, names, locations, stock with a history (received, taken out, counted), cost and sales prices ex / inc VAT, low stock, CSV export and import of price / stock lists (CSV or Excel) (migration 044) |
+| 0.48.0 | **Customer register + parts orders:** customers with customer numbers, their cars with owner history, parts orders (reserved stock, handed out = taken out of stock) with history; customer on cars in Vehicles and transfer to the register with consent; modules chosen at first setup / System page; the register can belong to another company (migration 045) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

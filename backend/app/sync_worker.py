@@ -29,6 +29,7 @@ from .common import (RETENTION_DUE_SQL, TEST_DRIVE_PURGE_DUE_SQL, purge_test_dri
                      soft_delete_vehicle)
 from .config import settings
 from .migrate import run_migrations
+from .routers.customers import purge_inactive as purge_inactive_customers
 from .routers.deliveries import purge_stopped_kiosks
 from .routers.dm import purge_expired as purge_expired_private_messages
 from .routers.messages import DELETE_EXPIRED_SQL as MESSAGES_EXPIRED_SQL
@@ -109,6 +110,13 @@ def housekeeping() -> None:
     # Today page messages older than 24 hours (also deleted whenever someone opens Today).
     with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
         conn.execute(MESSAGES_EXPIRED_SQL)
+
+    # Customers with no activity for RETENTION_YEARS (customer register, 0.48.0).
+    if settings.retention_years > 0:
+        with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+            n = purge_inactive_customers(conn, settings.retention_years)
+        if n:
+            log.info("Retention: deleted %d inactive customer(s)", n)
 
     # My notes ticked off as done more than TRASH_DAYS ago.
     with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:

@@ -77,14 +77,19 @@ def _out(row: dict, editor: bool) -> dict:
 PART_COLS = """p.id, p.part_number, p.part_key, p.name, p.make, p.supplier, p.location, p.unit, p.quantity,
                p.min_quantity, p.cost_price, p.sale_price, p.vat_rate, p.note, p.created_at, p.updated_at"""
 
+# Parts on parts orders that are not handed out or cancelled yet (routers/parts_orders.py).
+RESERVED_SQL = """(SELECT coalesce(sum(l.quantity), 0) FROM parts_order_lines l JOIN parts_orders o ON o.id = l.order_id
+                    WHERE l.part_id = p.id AND o.status IN ('open', 'ordered', 'arrived'))"""
+
 
 def _move(conn, part_id: int, kind: str, change, after, staff_id, *, unit_cost=None, reference=None, note=None,
-          data=None) -> None:
+          data=None, order_id=None) -> None:
     conn.execute(
-        """INSERT INTO part_movements (part_id, kind, change, quantity_after, unit_cost, reference, note, data, created_by)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)""",
+        """INSERT INTO part_movements (part_id, kind, change, quantity_after, unit_cost, reference, note, data,
+                                       created_by, order_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""",
         (part_id, kind, change, after, unit_cost, reference, note,
-         Jsonb(data, dumps=lambda o: json.dumps(o, default=str)) if data else None, staff_id))
+         Jsonb(data, dumps=lambda o: json.dumps(o, default=str)) if data else None, staff_id, order_id))
 
 
 def _price_change(conn, part: dict, new: dict, staff_id) -> None:
@@ -131,7 +136,8 @@ def list_parts(request: Request, q: str = "", show: Literal["all", "stock", "low
     where, params = _where(q, show, make)
     qk = part_key(q.strip()) if len(q.split()) == 1 else ""
     rows = conn.execute(
-        f"""SELECT {PART_COLS}, count(*) OVER () AS total FROM parts p WHERE {' AND '.join(where)}
+        f"""SELECT {PART_COLS}, {RESERVED_SQL} AS reserved, count(*) OVER () AS total
+              FROM parts p WHERE {' AND '.join(where)}
              ORDER BY (p.part_key = %s) DESC, (%s <> '' AND p.part_key LIKE %s) DESC, p.part_key
              LIMIT {LIST_LIMIT}""",
         [*params, qk, qk, qk + "%"]).fetchall()
@@ -215,10 +221,13 @@ def _get(conn, part_id: int, lock: bool = False) -> dict:
 def get_part(part_id: int, request: Request, conn=Depends(get_conn)):
     editor = _editor(request.state.staff)
     part = _out(_get(conn, part_id), editor)
+    part["reserved"] = conn.execute(f"SELECT {RESERVED_SQL} AS n FROM parts p WHERE p.id = %s",
+                                    (part_id,)).fetchone()["n"]
     moves = conn.execute(
         """SELECT m.id, m.kind, m.change, m.quantity_after, m.unit_cost, m.reference, m.note, m.data, m.created_at,
-                  s.name AS staff_name
+                  s.name AS staff_name, m.order_id, po.order_no
              FROM part_movements m LEFT JOIN staff s ON s.id = m.created_by
+             LEFT JOIN parts_orders po ON po.id = m.order_id
             WHERE m.part_id = %s ORDER BY m.created_at DESC, m.id DESC LIMIT 100""", (part_id,)).fetchall()
     if not editor:  # purchase prices are for the parts team only
         moves = [{**m, "unit_cost": None, "data": None} for m in moves if m["kind"] != "price"]

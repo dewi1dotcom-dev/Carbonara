@@ -7,26 +7,27 @@ const UNITS = ['pcs', 'set', 'l', 'm', 'kg'];
 const UNIT_NAME = { pcs: 'Pieces (pcs)', set: 'Sets (set)', l: 'Litres (l)', m: 'Metres (m)', kg: 'Kilograms (kg)' };
 const KIND = {
   created: 'Added', received: 'Received', out: 'Taken out', count: 'Stock counted', import: 'Imported', price: 'Price changed',
+  order: 'Handed out on parts order', order_return: 'Hand-out undone',
 };
 
-const money2 = (n) => Number(n).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const fmtMoney = (n) => (n == null ? '–' : `${money2(n)} kr`);
-const fmtQty = (n) => (n == null ? '–' : Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 }));
+export const money2 = (n) => Number(n).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+export const fmtMoney = (n) => (n == null ? '–' : `${money2(n)} kr`);
+export const fmtQty = (n) => (n == null ? '–' : Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 }));
 const signed = (n) => (Number(n) > 0 ? `+${fmtQty(n)}` : Number(n) < 0 ? `−${fmtQty(Math.abs(n))}` : '0');
-const qtyText = (n, unit) => h('span', { class: 'nowrap' }, fmtQty(n), ' ', h('span', {}, unit || 'pcs'));
+export const qtyText = (n, unit) => h('span', { class: 'nowrap' }, fmtQty(n), ' ', h('span', {}, unit || 'pcs'));
 
 /** A typed number: "1 234,50", "1234.5", "249,-" → 1234.5; '' → null; not a number → NaN. */
-function parseNum(text) {
+export function parseNum(text) {
   let t = String(text ?? '').replace(/[\s  ]|kr|,-$/gi, '');
   if (!t) return null;
   if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
   return /^-?\d+(\.\d+)?$/.test(t) ? Number(t) : NaN;
 }
-const numInput = (value, { qty = false, ...attrs } = {}) => h('input', {
+export const numInput = (value, { qty = false, ...attrs } = {}) => h('input', {
   type: 'text', inputmode: 'decimal', autocomplete: 'off', ...attrs,
   value: value != null ? (qty ? fmtQty(value) : money2(value)) : '',
 });
-const field = (label, input, hint) => h('div', { class: 'field' }, h('label', {}, label), input,
+export const field = (label, input, hint) => h('div', { class: 'field' }, h('label', {}, label), input,
   hint ? h('div', { class: 'muted small' }, hint) : null);
 
 function stockBadge(p) {
@@ -86,7 +87,9 @@ export async function partsView(el) {
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Parts'),
         h('div', { class: 'muted' }, 'The parts store: part numbers, prices, locations and stock.')),
-      editor ? h('button', { class: 'btn primary', type: 'button', onClick: () => partForm(null, data, safeReload) }, '+ New part') : null),
+      h('div', { class: 'row-actions' },
+        h('a', { class: 'btn', href: '#/parts-orders' }, '📋 Parts orders'),
+        editor ? h('button', { class: 'btn primary', type: 'button', onClick: () => partForm(null, data, safeReload) }, '+ New part') : null)),
     statsSlot,
     h('div', { class: 'toolbar' }, search, showSel, makeSel, exportLink),
     listSlot,
@@ -113,7 +116,8 @@ function partsTable(data, open) {
       h('td', {}, h('span', { translate: 'no' }, p.name),
         p.make || p.supplier ? h('span', { class: 'muted small block', translate: 'no' }, [p.make, p.supplier].filter(Boolean).join(' · ')) : null),
       h('td', { translate: 'no' }, p.location || '–'),
-      h('td', { class: 'num' }, qtyText(p.quantity, p.unit), stockBadge(p) ? h('span', { class: 'block' }, stockBadge(p)) : null),
+      h('td', { class: 'num' }, qtyText(p.quantity, p.unit), stockBadge(p) ? h('span', { class: 'block' }, stockBadge(p)) : null,
+        Number(p.reserved) > 0 ? h('span', { class: 'muted small block' }, `${fmtQty(p.reserved)} reserved`) : null),
       h('td', { class: 'num col-ex' }, fmtMoney(p.sale_price)),
       h('td', { class: 'num' }, fmtMoney(p.sale_price_inc)));
     tr.addEventListener('click', () => open(p.id));
@@ -134,6 +138,7 @@ function partsTable(data, open) {
 async function partDialog(id, data, changed) {
   const body = h('div', {}, h('div', { class: 'loading' }, 'Loading…'));
   const { close } = openDialog('Part', body, { wide: true });
+  body.addEventListener('click', (e) => { if (e.target.closest('a[href^="#/"]')) close(); }); // a link to an order
   const after = async () => { await draw(); await changed(); };
   const draw = async () => {
     const p = await api.get(`/parts/${id}`);
@@ -157,6 +162,8 @@ function partDetails(p, data, after, close, changed) {
     h('p', { class: 'part-title' }, h('strong', { class: 'mono', translate: 'no' }, p.part_number), ' ',
       h('span', { translate: 'no' }, p.name)),
     h('p', { class: 'part-stock' }, h('span', {}, 'In stock:'), ' ', h('strong', {}, qtyText(p.quantity, p.unit)), ' ', stockBadge(p)),
+    Number(p.reserved) > 0 ? h('p', { class: 'muted small' },
+      `${fmtQty(p.reserved)} reserved on parts orders · ${fmtQty(p.quantity - p.reserved)} available`) : null,
     editor ? h('div', { class: 'actions left' },
       h('button', { class: 'btn primary', type: 'button', onClick: () => moveDialog(p, 'received', after) }, '＋ Received'),
       h('button', { class: 'btn', type: 'button', onClick: () => moveDialog(p, 'out', after) }, '－ Taken out'),
@@ -196,7 +203,8 @@ function historyRow(m, unit) {
     h('span', {},
       h('span', {}, KIND[m.kind] ?? m.kind), what,
       m.unit_cost != null ? h('span', { class: 'muted small block' }, `Purchase price ${fmtMoney(m.unit_cost)} per unit`) : null,
-      m.reference ? h('span', { class: 'muted small block' }, h('span', {}, 'Ref.:'), ' ', h('span', { translate: 'no' }, m.reference)) : null,
+      m.order_id ? h('span', { class: 'muted small block' }, h('a', { href: `#/parts-orders/${m.order_id}` }, `Parts order #${m.order_no}`))
+        : m.reference ? h('span', { class: 'muted small block' }, h('span', {}, 'Ref.:'), ' ', h('span', { translate: 'no' }, m.reference)) : null,
       m.note ? h('span', { class: 'muted small block', translate: 'no' }, m.note) : null,
       h('span', { class: 'muted small block', translate: 'no' }, meta)));
 }

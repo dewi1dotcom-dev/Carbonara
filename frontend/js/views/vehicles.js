@@ -1,5 +1,6 @@
 import { PANEL_LABELS } from '../diagram.js';
 import { tr as trText } from '../i18n.js';
+import { vehicleCustomerRow } from './customers.js';
 import { documentDialog, documentsCard } from './documents.js';
 import { editDialog as pdiEditDialog, pdiBanner, pdiCard } from './pdi.js';
 import { photosCard } from './carphotos.js';
@@ -142,6 +143,8 @@ export const EVENT_LABELS = {
   recall_closed: 'Recall closed',
   recall_reopened: 'Recall reopened',
   recall_deleted: 'Recall deleted',
+  customer_details_updated: 'Customer details changed',
+  transferred_to_customer_register: 'Transferred to the customer register (the customer agreed)',
 };
 const RECALL_RESULT = { none: 'No open recalls', found: 'Recalls found', error: 'Could not check' };
 const RECALL_STATUS = { done: 'Done', not_applicable: 'Doesn’t apply' };
@@ -653,6 +656,7 @@ function overviewCard(v, rerender) {
           v.finn_search_url ? h('a', { class: 'small', href: v.finn_search_url, target: '_blank', rel: 'noopener noreferrer' },
             '🔎 Find on finn.no ↗') : null)],
       ['Asking price', priceValue(v, rerender)], // views/prices.js; compared in priceCard()
+      ['Customer', vehicleCustomerRow(v, rerender)], // views/customers.js; copied to the customer register on consent
       ['Service', serviceRow(v)],
       ['Mileage', mileageRow(v.mileage)],
       ['Condition', v.condition ? CONDITION[v.condition] : null],
