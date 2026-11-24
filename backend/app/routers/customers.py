@@ -105,7 +105,7 @@ def _customer_fields(body: CustomerIn) -> dict:
         "kind": body.kind,
         "first_name": cap_name(_text(body.first_name, 60) or "") or None,
         "last_name": cap_name(_text(body.last_name, 60) or "") or None,
-        "company_name": _text(body.company_name, 120),
+        "company_name": cap_name(_text(body.company_name, 120) or "") or None,
         "org_no": re.sub(r"\D", "", body.org_no or "") or None,
         "phone": clean_phone(body.phone) if (body.phone or "").strip() else None,
         "email": _text(body.email, 120),

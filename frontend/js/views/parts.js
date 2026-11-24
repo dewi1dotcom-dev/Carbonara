@@ -1,7 +1,7 @@
 // Parts store (delelager, 0.47.0): part numbers, names, prices ex / inc VAT, shelf locations and stock, with every
 // stock change in the part's history. Cost price, margin and stock value only for admins and the parts team (the team
 // with the "Parts" menu item; the server decides: `editor`). Server: routers/parts.py.
-import { api, append, busy, debounce, fmtDate, h, openDialog, showError, toast } from '../ui.js';
+import { api, append, busy, debounce, fmtDate, h, nameInput, openDialog, showError, toast, upperInput } from '../ui.js';
 
 const UNITS = ['pcs', 'set', 'l', 'm', 'kg'];
 const UNIT_NAME = { pcs: 'Pieces (pcs)', set: 'Sets (set)', l: 'Litres (l)', m: 'Metres (m)', kg: 'Kilograms (kg)' };
@@ -250,8 +250,8 @@ function moveDialog(p, kind, done) {
 function partForm(p, data, done) {
   const v = p || { unit: 'pcs', vat_rate: 25 };
   const text = (value, max, attrs = {}) => h('input', { type: 'text', maxlength: max, autocomplete: 'off', value: value || '', ...attrs });
-  const number = text(v.part_number, 60, { required: true, class: 'mono' });
-  const name = text(v.name, 200, { required: true });
+  const number = upperInput({ maxlength: 60, required: true, class: 'mono', value: v.part_number || '' });
+  const name = nameInput({ maxlength: 200, required: true, value: v.name || '' });
   const makes = h('datalist', { id: 'parts-makes' }, data.makes.map((m) => h('option', { value: m })));
   const make = text(v.make, 60, { list: 'parts-makes' });
   const supplier = text(v.supplier, 100);

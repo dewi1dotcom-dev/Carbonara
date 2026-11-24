@@ -132,7 +132,7 @@ function customerFields(c = {}) {
   const text = (value, max, attrs = {}) => h('input', { type: 'text', maxlength: max, autocomplete: 'off', value: value || '', ...attrs });
   const first = nameInput({ maxlength: 60, value: c.first_name || '' });
   const last = nameInput({ maxlength: 60, value: c.last_name || '' });
-  const companyName = text(c.company_name, 120);
+  const companyName = nameInput({ maxlength: 120, value: c.company_name || '' });
   const orgNo = text(c.org_no, 20, { inputmode: 'numeric' });
   const phone = text(c.phone, 30, { type: 'tel' });
   const email = text(c.email, 120, { type: 'email' });

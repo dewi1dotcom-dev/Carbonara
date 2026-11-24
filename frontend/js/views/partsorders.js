@@ -1,6 +1,6 @@
 // Parts orders (0.48.0): parts collected for a customer's car. Open → ordered from the supplier → arrived → handed out
 // (the stock goes down then), or cancelled; with history. Server: routers/parts_orders.py.
-import { api, append, busy, canOpen, debounce, fmtDate, h, openDialog, showError, toast } from '../ui.js';
+import { api, append, busy, canOpen, debounce, fmtDate, h, nameInput, openDialog, showError, toast, upperInput } from '../ui.js';
 import {
   ORDER_STATUS, canEditOrders, carTitle, historyList, newOrderDialog, orderBadge, pickCustomer,
 } from './customers.js';
@@ -208,8 +208,8 @@ function lineDialog(o, l, done) {
   const part = l.part;
   const qty = numInput(isNew ? 1 : l.quantity, { qty: true });
   const price = numInput(isNew ? (part ? part.sale_price : null) : l.unit_price);
-  const name = l.free ? h('input', { type: 'text', maxlength: 200, autocomplete: 'off' }) : null;
-  const number = l.free ? h('input', { type: 'text', maxlength: 60, autocomplete: 'off', class: 'mono' }) : null;
+  const name = l.free ? nameInput({ maxlength: 200 }) : null;
+  const number = l.free ? upperInput({ maxlength: 60, class: 'mono' }) : null;
   const vat = l.free ? numInput(25, { qty: true }) : null;
   const ok = h('button', { class: 'btn primary', type: 'submit' }, isNew ? 'Add' : 'Save');
   const title = part ? [h('strong', { class: 'mono', translate: 'no' }, part.part_number), ' ', h('span', { translate: 'no' }, part.name)]

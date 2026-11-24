@@ -245,7 +245,7 @@ backend/
                         notes (my notes), recalls (recall sources, checks, recalls per car),
                         market (market data test: CSV import, comparison), parts (parts store),
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders
-  migrations/           001…045
+  migrations/           001…046
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -319,6 +319,7 @@ frontend/               no build step; plain ES modules
 | 043 | `market_data` | `market_imports` (file name, rows read / skipped, models), `market_listings` (make / model + match keys, variant, year, km, price, first price, fuel, `seller_kind` private / dealer, status, `active`, first / last seen, finn code, url; no seller names or places) |
 | 044 | `parts` | `parts` (part number + `part_key`, name, make, supplier, location, unit, quantity, minimum, cost / sales price ex VAT, VAT rate, note; soft delete), `part_movements` (created / received / out / count / import / price; change, quantity after, unit cost, reference, note, data), `part_imports` |
 | 045 | `customers` | `customers` (customer no., private / company, contact, `last_activity_at`), `customer_cars`, `car_ownerships` (one current owner per car), `parts_orders`, `parts_order_lines`, `register_events`; `vehicles.customer_first_name / _last_name / _address / _phone / customer_car_id`; `part_movements.order_id`, kinds `order` / `order_return` |
+| 046 | `part_numbers_upper` | existing part numbers (parts, order lines) in capital letters |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -689,6 +690,9 @@ the server is LAN-only, so no customer phones / public internet).
 - **Auto-capitalize:** `common.cap_name` (server) and `capName` / `nameInput()` (`ui.js`,
   while typing) uppercase the first letter and the letter after a space or "-"; the rest is
   kept as typed ("McDonald"). Use `nameInput()` for any new person-name field.
+- **Part numbers and names (0.48.2, the user's rule):** part numbers are in capital letters (`upperInput()` in `ui.js`
+  while typing; `.upper()` on the server, also on import and free-text order lines). Part names, free-text line names,
+  company names and customer names use `nameInput()` / `cap_name` (capital after a space or "-").
 - Phone numbers go through `common.clean_phone` (shared with test drives): 8–15 digits,
   optional +.
 - **Delete** (admins, only after deactivating, never yourself; a system admin only by a system
@@ -1606,6 +1610,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.47.0 | **Parts store (delelager):** new top menu page with part numbers, names, locations, stock with a history (received, taken out, counted), cost and sales prices ex / inc VAT, low stock, CSV export and import of price / stock lists (CSV or Excel) (migration 044) |
 | 0.48.0 | **Customer register + parts orders:** customers with customer numbers, their cars with owner history, parts orders (reserved stock, handed out = taken out of stock) with history; customer on cars in Vehicles and transfer to the register with consent; modules chosen at first setup / System page; the register can belong to another company (migration 045) |
 | 0.48.1 | Fix: blank page in 0.48.0 (an extra bracket in the customer and parts order pages) |
+| 0.48.2 | Part numbers in capital letters; part names, company and customer names with a capital first letter, also after a space or "-" (migration 046) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

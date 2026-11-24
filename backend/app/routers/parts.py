@@ -24,7 +24,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from ..auth import require_staff
-from ..common import bad_request, conflict, not_found, patch_fields, update_row
+from ..common import bad_request, cap_name, conflict, not_found, patch_fields, update_row
 from ..db import get_conn
 
 router = APIRouter(tags=["parts"])
@@ -277,6 +277,11 @@ def _tidy(fields: dict) -> dict:
     for f, n in TEXT_LIMITS.items():
         if f in fields:
             fields[f] = _clean(fields[f], n) if f != "note" else (str(fields[f] or "").strip()[:n] or None)
+    # Part numbers in capital letters; names with a capital first letter, also after a space or "-".
+    if fields.get("part_number"):
+        fields["part_number"] = fields["part_number"].upper()
+    if fields.get("name"):
+        fields["name"] = cap_name(fields["name"])
     for f in ("min_quantity", "cost_price", "sale_price", "vat_rate"):
         if fields.get(f) is not None:
             fields[f] = Decimal(fields[f]).quantize(CENT)
@@ -502,7 +507,7 @@ async def import_parts(file: UploadFile = File(...), add_new: bool = Form(True),
     parsed, skipped, seen = [], 0, set()
     for raw in body:
         get = lambda f: raw[index[f]] if f in index and index[f] < len(raw) else None  # noqa: E731
-        number = _clean(get("part_number"), 60)
+        number = (_clean(get("part_number"), 60) or "").upper() or None
         key = part_key(number)
         if not key:
             if any(c not in (None, "") for c in raw):
@@ -520,7 +525,8 @@ async def import_parts(file: UploadFile = File(...), add_new: bool = Form(True),
         if sale is None and inc is not None:
             sale = (inc / (1 + (vat if vat is not None else Decimal(25)) / 100)).quantize(CENT)
         parsed.append({
-            "key": key, "part_number": number, "name": _clean(get("name"), 200), "make": _clean(get("make"), 60),
+            "key": key, "part_number": number, "name": cap_name(_clean(get("name"), 200) or "") or None,
+            "make": _clean(get("make"), 60),
             "supplier": _clean(get("supplier"), 100), "location": _clean(get("location"), 60),
             "unit": _unit(get("unit")), "quantity": _num(get("quantity"), lo=Decimal(-MAX_QTY), hi=MAX_QTY),
             "min_quantity": _num(get("min_quantity"), hi=MAX_QTY), "cost_price": _num(get("cost_price")),

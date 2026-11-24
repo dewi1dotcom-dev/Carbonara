@@ -483,6 +483,23 @@ export function nameInput(attrs = {}) {
   return input;
 }
 
+/** A text input that turns what is typed into capital letters (part numbers), like nameInput above. */
+export function upperInput(attrs = {}) {
+  const input = h('input', { type: 'text', autocapitalize: 'characters', autocomplete: 'off', spellcheck: 'false', ...attrs });
+  const fix = () => {
+    const fixed = input.value.toUpperCase();
+    if (fixed === input.value) return;
+    const focused = document.activeElement === input;
+    const pos = input.selectionStart;
+    input.value = fixed;
+    if (focused && pos != null) input.setSelectionRange(pos, pos);
+  };
+  input.addEventListener('input', (e) => { if (!e.isComposing) fix(); });
+  input.addEventListener('compositionend', () => setTimeout(fix, 0));
+  input.addEventListener('blur', fix);
+  return input;
+}
+
 /** "MG ZS EV (2020) · EB82655" */
 export const carText = (c) => [vehicleTitle(c), c.registration_number].filter(Boolean).join(' · ');
 

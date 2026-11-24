@@ -12,7 +12,7 @@ from typing import Literal, Optional
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, Field
 
-from ..common import bad_request, conflict, not_found
+from ..common import bad_request, cap_name, conflict, not_found
 from ..db import get_conn
 from .customers import ORDERS_SELECT, EVENTS_SELECT, _names, event, require_register, touch
 from .parts import CENT, MAX_PRICE, MAX_QTY, _clean, _fmt_qty, _move, require_parts_editor
@@ -183,10 +183,10 @@ def add_line(order_id: int, body: LineIn, conn=Depends(get_conn), staff=Depends(
                  body.vat_rate if body.vat_rate is not None else part["vat_rate"], staff["id"])).fetchone()["id"]
         number = part["part_number"]
     else:
-        name = _clean(body.name, 200)
+        name = cap_name(_clean(body.name, 200) or "") or None
         if not name:
             raise bad_request("A line needs a part from the store or a name")
-        number = _clean(body.part_number, 60)
+        number = (_clean(body.part_number, 60) or "").upper() or None
         line_id = conn.execute(
             """INSERT INTO parts_order_lines (order_id, part_number, name, quantity, unit_price, vat_rate, created_by)
                VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
