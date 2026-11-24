@@ -735,6 +735,11 @@ the server is LAN-only, so no customer phones / public internet).
   nothing is ticked or none of the ticked items is open to the user; it looks active while one of its pages is open.
 
 **System page (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`, `views/system.js`):
+- **Folding cards (0.48.5, the user's request):** on `#/settings` and `#/system` every `section.card` with an `h2` (directly
+  or in `.card-head`) is closed until its heading is clicked (`initFoldCards` in `ui.js`, started once in `app.js` after
+  the translator; a MutationObserver on `#app` also covers cards drawn later and pages that redraw). Open cards are kept
+  in `localStorage` `carbonara.open.<page>` by the heading's letters (counts ignored). Cards without an h2 (notices)
+  always show. Another page = add it to `FOLD_PAGES`.
 - **Organisation numbers (0.48.4):** `privacy_org_no`, `delivery_org_no`, `rental_org_no`, `customers_org_no` (9 digits,
   `ORG_NO_PATTERN`), sent as `org_no` in each `_privacy()` / `company()` block (`common.org_no` formats "123 456 789") and
   shown after the company name: privacy notices "(org.nr. …)", storage report, PDI order sheet and e-mail signature.
@@ -1616,6 +1621,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.48.2 | Part numbers in capital letters; part names, company and customer names with a capital first letter, also after a space or "-" (migration 046) |
 | 0.48.3 | Fix: the new customer form showed both the private person and the company fields (a global `[hidden]` rule in `app.css`) |
 | 0.48.4 | Organisation number for each company on the System page (Company, kiosk, Rental cars, Customer register), shown with the company name on the privacy notices, the storage report and PDI orders |
+| 0.48.5 | Settings and System: every card folds (closed by default, the heading opens it; open cards remembered per browser) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

@@ -10,6 +10,15 @@
    form showed the company fields for a private person, because .grid overrode [hidden]). */
 [hidden] { display: none !important; }
 
+/* Folding cards on Settings and System (0.48.5, ui.js initFoldCards): closed until the heading is clicked. */
+body.fold-page section.card.foldable:not(.open) > :not(h2):not(.card-head) { display: none; }
+body.fold-page section.card.foldable:not(.open) > h2, body.fold-page section.card.foldable:not(.open) > .card-head { margin-bottom: 0; }
+body.fold-page section.card.foldable > h2, body.fold-page section.card.foldable > .card-head h2 { cursor: pointer; user-select: none; }
+body.fold-page section.card.foldable > h2::before, body.fold-page section.card.foldable > .card-head h2::before {
+  content: "▸"; display: inline-block; width: 1.1em; color: var(--muted); transition: transform .15s;
+}
+body.fold-page section.card.foldable.open > h2::before, body.fold-page section.card.foldable.open > .card-head h2::before { transform: rotate(90deg); }
+
 /* Brand colours (carbonara-colors.txt). Light: background #FBF7EC, secondary surface
    #EFE8D4, text #1C1B19, muted #4A4538, accent #F5B800. The accent is too pale for text on
    the light background, so links use --link (a dark gold) and yellow is kept for fills. */

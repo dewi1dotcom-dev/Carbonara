@@ -1,5 +1,5 @@
 import {
-  api, append, applyTheme, canSee, carText, fmtDate, h, openDialog, osloTodayIso, pdiCarHref, session, setInspectorId, setRouteCheck, showError, startClock,
+  api, append, applyTheme, canSee, carText, fmtDate, h, initFoldCards, openDialog, osloTodayIso, pdiCarHref, session, setInspectorId, setRouteCheck, showError, startClock,
   theme, toast,
 } from './ui.js';
 import { lang, setLang, startTranslator } from './i18n.js';
@@ -357,6 +357,7 @@ async function moveToHttps() {
 }
 
 startTranslator();
+initFoldCards(); // after the translator: Settings and System cards fold (keys are read in the user's language)
 moveToHttps().then((moved) => { if (!moved) boot(); });
 startClock(document.getElementById('clock'));
 

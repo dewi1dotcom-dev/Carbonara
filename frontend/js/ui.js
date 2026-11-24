@@ -581,3 +581,53 @@ export function debounce(fn, ms) {
   let t;
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
+
+// ---------------------------------------------------------------- folding cards (Settings, System)
+
+/** Pages whose cards fold (0.48.5, the user's request): every card is closed until its heading is clicked, and the
+ *  open ones are remembered per page in this browser, so a card stays open when the page redraws after a save.
+ *  Cards without an h2 (notices) always show. Started once (app.js, after the translator), so it also covers cards
+ *  drawn later and pages that redraw themselves. */
+const FOLD_PAGES = ['#/settings', '#/system'];
+const foldPage = () => {
+  const page = (location.hash || '#/').split('?')[0];
+  return FOLD_PAGES.includes(page) ? page : null;
+};
+const foldHead = (card) => card.querySelector(':scope > h2, :scope > .card-head h2');
+// The heading's letters only ("Staff (5)" and "Staff (6)" are one card). The text is read after the translator,
+// so the key is in the user's language.
+const foldKey = (card) => (foldHead(card)?.textContent || '').replace(/[^\p{L} ]/gu, '').trim();
+const openCards = (page) => {
+  try { return new Set(JSON.parse(localStorage.getItem(`carbonara.open.${page}`) || '[]')); } catch { return new Set(); }
+};
+
+export function initFoldCards() {
+  const root = document.getElementById('app');
+  if (!root) return;
+  const apply = () => {
+    const page = foldPage();
+    document.body.classList.toggle('fold-page', !!page);
+    if (!page) return;
+    const open = openCards(page);
+    root.querySelectorAll('section.card').forEach((card) => {
+      const key = foldKey(card);
+      card.classList.toggle('foldable', !!key);
+      card.classList.toggle('open', !key || open.has(key));
+    });
+  };
+  root.addEventListener('click', (e) => {
+    const page = foldPage();
+    const head = page && e.target.closest('section.card > h2, section.card > .card-head h2');
+    if (!head) return;
+    const card = head.closest('section.card');
+    const key = foldKey(card);
+    if (!key) return;
+    const open = openCards(page);
+    if (open.has(key)) open.delete(key); else open.add(key);
+    try { localStorage.setItem(`carbonara.open.${page}`, JSON.stringify([...open])); } catch { /* private mode */ }
+    card.classList.toggle('open', open.has(key));
+  });
+  new MutationObserver(apply).observe(root, { childList: true, subtree: true });
+  window.addEventListener('hashchange', apply);
+  apply();
+}
