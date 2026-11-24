@@ -163,6 +163,12 @@ Dockerfile notes. These were learned the hard way, so don't undo them:
 There is no automated test suite. Verification has two parts:
 1. **Careful reading before handing over.** Nothing can be run locally. Re-read edited JS
    for the `append` pitfall, quote balance and imports.
+   - **Syntax check in headless Edge (0.48.1):** Edge and Chrome are installed. Write a scratch HTML page with one
+     `<script type="module">import('file:///c:/Users/Dewil/Carbonara/frontend/js/…')` per module (log OK / FAIL), run
+     `msedge.exe --headless=new --allow-file-access-from-files --virtual-time-budget=5000 --enable-logging=stderr
+     --dump-dom file:///…/check.html 2>log.txt` and look for `FAIL` in the log (`app.js` alone fails at run time on
+     the empty page; that is fine). A module loaded with `<script type="module" src>` gives the line number
+     (`CONSOLE:<line>`). 0.48.0 shipped with an extra `)` in two files and showed only the top menu.
 2. **Live checks after the user redeploys.**
    - Every `/api` route except `/api/health`, `/api/version` and `/api/auth/*` needs a login
      cookie.
@@ -1599,6 +1605,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.46.0 | **Market data (test):** import a CSV of car listings (System → Market data on / off); Market prices page (our cars vs. an estimate for their year + mileage, imported models) and a "Market price" card on the car page (migration 043) |
 | 0.47.0 | **Parts store (delelager):** new top menu page with part numbers, names, locations, stock with a history (received, taken out, counted), cost and sales prices ex / inc VAT, low stock, CSV export and import of price / stock lists (CSV or Excel) (migration 044) |
 | 0.48.0 | **Customer register + parts orders:** customers with customer numbers, their cars with owner history, parts orders (reserved stock, handed out = taken out of stock) with history; customer on cars in Vehicles and transfer to the register with consent; modules chosen at first setup / System page; the register can belong to another company (migration 045) |
+| 0.48.1 | Fix: blank page in 0.48.0 (an extra bracket in the customer and parts order pages) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

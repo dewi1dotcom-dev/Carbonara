@@ -189,7 +189,7 @@ export function pickCustomer(title, onPick, { extra = null } = {}) {
       h('button', { class: 'link pick', type: 'button', onClick: () => { close(); onPick(c); } },
         h('strong', { translate: 'no' }, c.name), ' ', h('span', { class: 'muted' }, `(${c.customer_no})`),
         h('span', { class: 'muted small block', translate: 'no' },
-          [c.phone, c.city, ...c.cars.map((car) => car.registration_number)].filter(Boolean).join(' · ')))))))
+          [c.phone, c.city, ...c.cars.map((car) => car.registration_number)].filter(Boolean).join(' · '))))))
       : h('p', { class: 'empty' }, 'No customers found.'));
   };
   search.addEventListener('input', debounce(() => load().catch(showError), 250));

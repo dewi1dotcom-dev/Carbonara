@@ -191,7 +191,7 @@ function addLine(o, rerender) {
           h('span', { class: 'mono', translate: 'no' }, p.part_number), ' ', h('span', { translate: 'no' }, p.name),
           h('span', { class: 'muted small block' }, h('span', {}, 'In stock:'), ' ', qtyText(p.quantity, p.unit),
             Number(p.reserved) > 0 ? ` (${fmtQty(p.reserved)} reserved)` : '',
-            p.location ? [' · ', h('span', { translate: 'no' }, p.location)] : null, ` · ${fmtMoney(p.sale_price)}`))))))
+            p.location ? [' · ', h('span', { translate: 'no' }, p.location)] : null, ` · ${fmtMoney(p.sale_price)}`)))))
         : h('p', { class: 'empty' }, 'No parts match.'));
     } catch (e) { showError(e); }
   }, 250));
