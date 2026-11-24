@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from .. import storagecare as sc
 from ..auth import require_admin
-from ..common import bad_request, conflict, log_event, not_found
+from ..common import bad_request, conflict, log_event, not_found, org_no
 from ..config import settings
 from ..db import get_conn
 
@@ -214,6 +214,7 @@ def report(vehicle_id: int, conn=Depends(get_conn)):
     return {
         **_public(p),
         "company": settings.privacy_company, "dealer_number": settings.dealer_number or None,
+        "org_no": org_no(settings.privacy_org_no),
         "vehicle": {k: v[k] for k in ("id", "vin", "make", "model", "variant", "model_year", "color",
                                       "registration_number", "first_registered", "condition", "status")},
         "spot": spot["code"] if spot else None,

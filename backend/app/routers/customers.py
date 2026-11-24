@@ -17,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from .. import vegvesen
 from ..auth import require_admin, require_staff
-from ..common import bad_request, cap_name, clean_phone, conflict, log_event, not_found
+from ..common import bad_request, cap_name, clean_phone, conflict, log_event, not_found, org_no
 from ..config import settings
 from ..db import get_conn
 from .rentals import registry_values
@@ -57,10 +57,11 @@ def company() -> dict:
     if settings.customers_company:
         return {"company": settings.customers_company, "phone": settings.customers_phone or None,
                 "email": settings.customers_email or None, "address": settings.customers_address or None,
-                "source": "customers",
+                "source": "customers", "org_no": org_no(settings.customers_org_no),
                 "operator": settings.privacy_company if settings.privacy_company != settings.customers_company else None}
     return {"company": settings.privacy_company, "phone": settings.privacy_contact or None,
-            "email": settings.privacy_email or None, "address": settings.privacy_address or None, "source": "company"}
+            "email": settings.privacy_email or None, "address": settings.privacy_address or None, "source": "company",
+            "org_no": org_no(settings.privacy_org_no)}
 
 
 def _text(value: Optional[str], n: int) -> Optional[str]:

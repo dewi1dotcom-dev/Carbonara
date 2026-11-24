@@ -345,6 +345,16 @@ const NO = {
   "A cancelled order can't be changed": 'En avbrutt bestilling kan ikke endres', 'The order has no lines': 'Bestillingen har ingen linjer',
   'Undo the hand-out first': 'Angre utleveringen først',
 
+  // Organisation numbers (0.48.4)
+  'Shown with the company name on the privacy notices, PDI orders and storage reports.':
+    'Vises sammen med firmanavnet på personvernerklæringene, bestillinger av nybilklargjøring og lagerrapporter.',
+  "Shown with the company name on the kiosk's privacy notice.": 'Vises sammen med firmanavnet på personvernerklæringen i kiosken.',
+  'Shown with the company name on the rental privacy notice.': 'Vises sammen med firmanavnet på personvernerklæringen for leiebiler.',
+  'Shown with the company name on the customer register and its privacy notice.':
+    'Vises sammen med firmanavnet på kunderegisteret og personvernerklæringen for det.',
+  '9 digits, e.g. 123 456 789': '9 sifre, f.eks. 123 456 789',
+  'Organisation number: 9 digits, e.g. 123 456 789': 'Organisasjonsnummer: 9 sifre, f.eks. 123 456 789',
+
   // Market data (test, 0.46.0)
   'Market prices': 'Markedspriser', 'Market prices (test)': 'Markedspriser (test)', 'Market price (imported listings)': 'Markedspris (importerte annonser)',
   'Estimate for this car': 'Anslag for denne bilen', 'Similar listings': 'Lignende annonser', 'All listings of the model': 'Alle annonser for modellen',

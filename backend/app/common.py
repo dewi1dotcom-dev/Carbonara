@@ -433,3 +433,9 @@ def add_tyre_warnings(rows: list[dict], only_here: bool = True) -> list[dict]:
         here = not only_here or row.get("status") != "off_site"
         row["tyre_warning"] = tyre_warning(row.get("wheels"), season) if here else None
     return rows
+
+
+def org_no(value: Optional[str]) -> Optional[str]:
+    """An organisation number as printed: "123 456 789" (None when not set / not 9 digits)."""
+    digits = re.sub(r"\D", "", value or "")
+    return f"{digits[:3]} {digits[3:6]} {digits[6:]}" if len(digits) == 9 else None

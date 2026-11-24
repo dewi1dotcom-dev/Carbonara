@@ -53,7 +53,7 @@ export function rentalPrivacyDialog(privacy, trashDays) {
     : h('p', {}, 'Bare våre ansatte, som logger inn med personlig kode. Opplysningene lagres på vår egen server og deles ikke, '
       + 'med mindre det er nødvendig for å håndtere et krav (for eksempel overfor politi, bompengeselskap eller forsikringsselskap).');
   const body = h('div', { class: 'privacy-text', translate: 'no' }, // a Norwegian document
-    h('p', {}, h('strong', {}, company), ' er behandlingsansvarlig for opplysningene vi registrerer når du leier eller låner en bil av oss.'),
+    h('p', {}, h('strong', {}, company), privacy?.org_no ? ` (org.nr. ${privacy.org_no})` : '', ' er behandlingsansvarlig for opplysningene vi registrerer når du leier eller låner en bil av oss.'),
     h('h3', {}, 'Hva vi registrerer'),
     h('p', {}, 'Navn, telefonnummer og et bilde av førerkortet ditt (hele kortet, også fødselsnummer), hvilken bil du har, '
       + 'når den ble hentet, når du regnet med å levere den, og når den ble levert.'),

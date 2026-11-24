@@ -272,7 +272,7 @@ export async function storageReportView(el, [id]) {
   const body = h('div', { class: 'report', translate: 'no' }); // a Norwegian document
 
   const head = () => h('table', { class: 'rep-head' }, h('tbody', {},
-    h('tr', {}, h('th', {}, 'Forhandler'), h('td', {}, r.company), h('th', {}, 'Forh. nr.'), h('td', {}, r.dealer_number ?? '')),
+    h('tr', {}, h('th', {}, 'Forhandler'), h('td', {}, r.company, r.org_no ? ` (org.nr. ${r.org_no})` : ''), h('th', {}, 'Forh. nr.'), h('td', {}, r.dealer_number ?? '')),
     h('tr', {}, h('th', {}, 'VIN'), h('td', { class: 'mono' }, v.vin), h('th', {}, 'Modell'),
       h('td', {}, [v.make, v.model, v.variant, v.model_year].filter(Boolean).join(' '))),
     h('tr', {}, h('th', {}, 'Ankomstdato'), h('td', {}, r.start ? fmtDate(r.start, false) : ''), h('th', {}, 'Farge'), h('td', {}, v.color ?? '')),

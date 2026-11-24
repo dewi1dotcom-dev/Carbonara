@@ -77,7 +77,7 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
       + `Opplysningene lagres på en server som ${operator} drifter på vegne av ${company} (databehandler), og deles ikke med andre.`)
     : h('p', {}, 'Bare våre ansatte, som logger inn med personlig kode. Opplysningene lagres på vår egen server og deles ikke med andre.');
   const body = h('div', { class: 'privacy-text', translate: 'no' }, // a Norwegian document
-    h('p', {}, h('strong', {}, company), ' er behandlingsansvarlig for opplysningene du registrerer når du leverer bilen din til oss.'),
+    h('p', {}, h('strong', {}, company), privacy?.org_no ? ` (org.nr. ${privacy.org_no})` : '', ' er behandlingsansvarlig for opplysningene du registrerer når du leverer bilen din til oss.'),
     h('h3', {}, 'Hva vi registrerer'),
     h('p', {}, 'Registreringsnummer, navn og telefonnummer, hvor bilen står og hvor nøkkelen ligger, hva du krysser av for, og meldingen du skriver.'),
     h('h3', {}, 'Hvorfor'),

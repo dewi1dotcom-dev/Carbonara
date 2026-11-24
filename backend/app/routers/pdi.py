@@ -13,6 +13,7 @@ from .. import mailer, pdisheet, push
 from ..auth import require_admin
 from ..common import (RIGHT_PHOTO_SQL, bad_request, conflict, log_event, not_found, place_in_location, tyre_season,
                       tyre_warning)
+from ..common import org_no
 from ..config import settings
 from ..db import get_conn
 from . import pdi_sheets, recalls
@@ -199,6 +200,7 @@ def compose(order: dict) -> tuple[str, str]:
         "Med vennlig hilsen",
         order.get("sender_name") or settings.privacy_company or "",
         settings.privacy_company or "",
+        f"Org.nr. {org_no(settings.privacy_org_no)}" if org_no(settings.privacy_org_no) else "",
     ]
     return subject, "\n".join(lines)
 
@@ -225,6 +227,7 @@ def options(conn=Depends(get_conn)):
         "tyre_modes": TYRE_MODES,
         "smtp_configured": mailer.is_configured(),
         "company": settings.privacy_company,  # printed on the order sheet
+        "company_org_no": org_no(settings.privacy_org_no),
     }
 
 

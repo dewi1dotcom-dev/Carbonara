@@ -20,7 +20,8 @@ from psycopg.errors import UniqueViolation
 from pydantic import BaseModel, Field
 
 from .. import photostore, vegvesen
-from ..common import add_tyre_warnings, bad_request, check_staff, clean_phone, conflict, insert_row, not_found
+from ..common import (add_tyre_warnings, bad_request, check_staff, clean_phone, conflict, insert_row, not_found,
+                      org_no)
 from ..config import settings
 from ..db import get_conn
 from ..schemas import TestDriveReturnIn
@@ -93,11 +94,11 @@ def _privacy() -> dict:
     if settings.rental_company:
         return {"company": settings.rental_company, "phone": settings.rental_phone or None,
                 "email": settings.rental_email or None, "address": settings.rental_address or None,
-                "source": "rental",
+                "source": "rental", "org_no": org_no(settings.rental_org_no),
                 "operator": settings.privacy_company if settings.privacy_company != settings.rental_company else None}
     return {"company": settings.privacy_company, "phone": settings.privacy_contact or None,
             "email": settings.privacy_email or None, "address": settings.privacy_address or None,
-            "source": "company"}
+            "source": "company", "org_no": org_no(settings.privacy_org_no)}
 
 
 def _clean_car(values: dict) -> dict:

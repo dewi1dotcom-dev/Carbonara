@@ -23,6 +23,7 @@ from .. import auth, photostore, vegvesen
 from ..auth import require_admin, require_kiosk_or_staff, require_superadmin
 from ..common import (bad_request, cap_name, clean_phone, conflict, log_event, name_match, not_found,
                       tidy_name, update_row)
+from ..common import org_no
 from ..config import settings
 from ..db import get_conn, pool
 
@@ -130,12 +131,12 @@ def _privacy() -> dict:
     if settings.delivery_company:
         return {"company": settings.delivery_company, "phone": settings.delivery_phone or None,
                 "email": settings.delivery_email or None, "address": settings.delivery_address or None,
-                "source": "delivery",
+                "source": "delivery", "org_no": org_no(settings.delivery_org_no),
                 # The company running Carbonara stores the data for the other company.
                 "operator": settings.privacy_company if settings.privacy_company != settings.delivery_company else None}
     return {"company": settings.privacy_company, "phone": settings.privacy_contact or None,
             "email": settings.privacy_email or None, "address": settings.privacy_address or None,
-            "source": "company"}
+            "source": "company", "org_no": org_no(settings.privacy_org_no)}
 
 
 # --------------------------------------------------------------------------- #

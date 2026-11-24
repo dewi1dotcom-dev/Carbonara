@@ -209,7 +209,7 @@ function pdiSheet(o, opts) {
   return h('div', { class: 'report pdi-sheet', translate: 'no' }, // a Norwegian document
     h('div', { class: 'rep-title' },
       h('h1', {}, 'Bestilling av nybilklargjøring'),
-      h('div', { class: 'small' }, [opts.company, fmtDate(new Date(), false)].filter(Boolean).join(' · '))),
+      h('div', { class: 'small' }, [opts.company, opts.company_org_no && `Org.nr. ${opts.company_org_no}`, fmtDate(new Date(), false)].filter(Boolean).join(' · '))),
     h('h2', {}, 'Bil'),
     rows([['Bil', car], ['Understellsnr. (VIN)', h('span', { class: 'mono' }, o.vin)],
       ['Reg.nr.', o.registration_number || 'ikke registrert ennå'], ['Farge', o.color], ['Står på', o.location_code]]),

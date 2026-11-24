@@ -15,6 +15,7 @@ from .. import licenselib, photostore
 from ..auth import require_admin
 from ..common import (bad_request, check_staff, clean_phone, conflict, insert_row, log_event, not_found,
                       purge_test_drive_customer)
+from ..common import org_no
 from ..config import settings
 from ..db import get_conn
 from ..schemas import TestDriveReturnIn
@@ -102,7 +103,8 @@ def list_test_drives(conn=Depends(get_conn)):
                                             ORDER BY t.returned_at DESC""", params).fetchall()
     return {"active": active, "trash": trash, "trash_days": settings.trash_days,
             "privacy": {"company": settings.privacy_company, "phone": settings.privacy_contact or None,
-                        "email": settings.privacy_email or None, "address": settings.privacy_address or None}}
+                        "email": settings.privacy_email or None, "address": settings.privacy_address or None,
+                        "org_no": org_no(settings.privacy_org_no)}}
 
 
 @router.post("/test-drives/read-license")

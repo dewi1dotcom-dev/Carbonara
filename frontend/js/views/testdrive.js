@@ -40,7 +40,7 @@ export function privacyDialog(privacy, trashDays) {
     : h('p', {}, h('strong', { class: 'td-items' }, '[kontaktinfo mangler – legges inn under System → Firma]'));
   const company = privacy?.company || 'Forhandleren';
   const body = h('div', { class: 'privacy-text', translate: 'no' }, // a Norwegian document
-    h('p', {}, h('strong', {}, company), ' er behandlingsansvarlig for opplysningene vi registrerer når du prøvekjører en bil.'),
+    h('p', {}, h('strong', {}, company), privacy?.org_no ? ` (org.nr. ${privacy.org_no})` : '', ' er behandlingsansvarlig for opplysningene vi registrerer når du prøvekjører en bil.'),
     h('h3', {}, 'Hva vi registrerer'),
     h('p', {}, 'Navn, telefonnummer og et bilde av førerkortet ditt (hele kortet, også fødselsnummer), hvilken bil du kjører, og når den ble hentet og levert.'),
     h('h3', {}, 'Hvorfor'),

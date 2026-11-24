@@ -48,6 +48,9 @@ class Setting:
 
 # An IPv4 address or a host name (letters, digits, hyphens, dots); no scheme, port or path.
 HOST_PATTERN = r"(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*"
+# A Norwegian organisation number: 9 digits, spaces allowed ("123 456 789").
+ORG_NO_PATTERN = r"[0-9]{3} ?[0-9]{3} ?[0-9]{3}"
+ORG_NO_ERROR = "9 digits, e.g. 123 456 789"
 
 SETTINGS: tuple[Setting, ...] = (
     # Statens vegvesen – "Enkeltoppslag kjøretøydata"
@@ -72,6 +75,9 @@ SETTINGS: tuple[Setting, ...] = (
     # Company (privacy notice, PDI e-mails, storage reports)
     Setting("privacy_company", "Company name", "Company",
             help="Shown on the privacy notice, PDI e-mails and storage reports."),
+    Setting("privacy_org_no", "Organisation number", "Company",
+            pattern=ORG_NO_PATTERN, pattern_error=ORG_NO_ERROR,
+            help="Shown with the company name on the privacy notices, PDI orders and storage reports."),
     Setting("dealer_number", "Dealer number (Forh. nr.)", "Company",
             help="Printed on the storage maintenance report."),
     # finn.no: the dealer's ads, for the car page's "Find on finn.no" (opens finn.no in the person's own browser;
@@ -91,6 +97,9 @@ SETTINGS: tuple[Setting, ...] = (
     # Used only when delivery_company is set; otherwise the Company group above applies.
     Setting("delivery_company", "Company name", "Customer deliveries (kiosk)",
             help="Responsible for the data on the kiosk's privacy notice. Empty = the Company details above are used."),
+    Setting("delivery_org_no", "Organisation number", "Customer deliveries (kiosk)",
+            pattern=ORG_NO_PATTERN, pattern_error=ORG_NO_ERROR,
+            help="Shown with the company name on the kiosk's privacy notice."),
     Setting("delivery_phone", "Phone for customers", "Customer deliveries (kiosk)",
             help="Shown on the kiosk's privacy notice."),
     Setting("delivery_email", "E-mail for customers", "Customer deliveries (kiosk)",
@@ -100,6 +109,9 @@ SETTINGS: tuple[Setting, ...] = (
     # Same for the rental cars' privacy notice (the rental business can be another company).
     Setting("rental_company", "Company name", "Rental cars",
             help="Responsible for the data on the rental privacy notice. Empty = the Company details above are used."),
+    Setting("rental_org_no", "Organisation number", "Rental cars",
+            pattern=ORG_NO_PATTERN, pattern_error=ORG_NO_ERROR,
+            help="Shown with the company name on the rental privacy notice."),
     Setting("rental_phone", "Phone for customers", "Rental cars",
             help="Shown on the rental privacy notice."),
     Setting("rental_email", "E-mail for customers", "Rental cars",
@@ -139,6 +151,9 @@ SETTINGS: tuple[Setting, ...] = (
     # workshop next door): its name is shown on the register and in the consent when a car is copied into it.
     Setting("customers_company", "Company name", "Customer register",
             help="The company the customer register belongs to. Empty = the Company details above are used."),
+    Setting("customers_org_no", "Organisation number", "Customer register",
+            pattern=ORG_NO_PATTERN, pattern_error=ORG_NO_ERROR,
+            help="Shown with the company name on the customer register and its privacy notice."),
     Setting("customers_phone", "Phone for customers", "Customer register",
             help="Shown on the customer register's privacy notice."),
     Setting("customers_email", "E-mail for customers", "Customer register",

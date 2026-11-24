@@ -95,7 +95,7 @@ export function registerPrivacyDialog(company, years) {
       + 'Regnskapsbilag oppbevares i regnskapssystemet etter bokføringsloven.'
     : 'Opplysningene beholdes til du ber oss slette dem. Regnskapsbilag oppbevares i regnskapssystemet etter bokføringsloven.';
   const body = h('div', { class: 'privacy-text', translate: 'no' }, // a Norwegian document
-    h('p', {}, h('strong', {}, name), ' er behandlingsansvarlig for opplysningene i kunderegisteret.'),
+    h('p', {}, h('strong', {}, name), c.org_no ? ` (org.nr. ${c.org_no})` : '', ' er behandlingsansvarlig for opplysningene i kunderegisteret.'),
     h('h3', {}, 'Hva vi registrerer'),
     h('p', {}, 'Navn, kundenummer, telefon, e-post og adresse (for bedrifter også organisasjonsnummer), hvilke biler du eier eller har eid, '
       + 'og hvilke deler som er bestilt og utlevert til deg.'),

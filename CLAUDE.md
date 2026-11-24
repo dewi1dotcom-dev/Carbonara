@@ -735,10 +735,13 @@ the server is LAN-only, so no customer phones / public internet).
   nothing is ticked or none of the ticked items is open to the user; it looks active while one of its pages is open.
 
 **System page (0.12.0)** (`config.py` `SETTINGS`, `routers/system.py`, `views/system.js`):
+- **Organisation numbers (0.48.4):** `privacy_org_no`, `delivery_org_no`, `rental_org_no`, `customers_org_no` (9 digits,
+  `ORG_NO_PATTERN`), sent as `org_no` in each `_privacy()` / `company()` block (`common.org_no` formats "123 456 789") and
+  shown after the company name: privacy notices "(org.nr. …)", storage report, PDI order sheet and e-mail signature.
 - **Groups:**
   - **Statens vegvesen:** key 🔒, sync days, URL, auth header/scheme, call pause
   - **E-mail (SMTP):** password 🔒
-  - **Company:** company name, dealer number, customer phone, e-mail, postal address
+  - **Company:** company name, organisation number (0.48.4), dealer number, customer phone, e-mail, postal address
   - **Customer deliveries (kiosk):** company name, phone, e-mail, postal address for the kiosk
     privacy notice (empty company name = Company is used)
   - **Rental cars (0.28.1):** the same four fields for the rental privacy notice
@@ -1311,7 +1314,7 @@ customers deleted after `retention_years`, and modules + another company + conse
   checks), → the car is created or found by VIN / reg. no., gets the customer as owner, `customer_cars.vehicle_id /
   consent_at / consent_by`, `vehicles.customer_car_id`, events `transferred_from_car_database` /
   `transferred_to_customer_register`. The car stays in Vehicles unchanged.
-- **Another company:** System → **Customer register** (`customers_company / _phone / _email / _address`) like the kiosk and
+- **Another company:** System → **Customer register** (`customers_company / _phone / _email / _address`) (+ `customers_org_no`, 0.48.4) like the kiosk and
   rental blocks (`customers.company()`, `operator` when it differs from Company). Shown on the Customers page ("Customer
   register of …") and in `registerPrivacyDialog` (Norwegian, art. 6(1)(b) + (f), consent for transfers, retention).
 - **Retention:** `customers.last_activity_at` is touched by every change, owner change and order; the worker's
@@ -1612,6 +1615,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.48.1 | Fix: blank page in 0.48.0 (an extra bracket in the customer and parts order pages) |
 | 0.48.2 | Part numbers in capital letters; part names, company and customer names with a capital first letter, also after a space or "-" (migration 046) |
 | 0.48.3 | Fix: the new customer form showed both the private person and the company fields (a global `[hidden]` rule in `app.css`) |
+| 0.48.4 | Organisation number for each company on the System page (Company, kiosk, Rental cars, Customer register), shown with the company name on the privacy notices, the storage report and PDI orders |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
