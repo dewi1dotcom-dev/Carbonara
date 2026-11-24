@@ -13,6 +13,7 @@ import { intakeView } from './views/intake.js';
 import { notesView, toggleNotesPanel } from './views/notes.js';
 import { pricesView } from './views/prices.js';
 import { marketView } from './views/market.js';
+import { partsView } from './views/parts.js';
 import { notificationsDialog, pushLogout, syncPush } from './views/notifications.js';
 import { pdiListView, prepDialog } from './views/pdi.js';
 import { pdiOrdersView } from './views/pdiorders.js';
@@ -44,6 +45,7 @@ const routes = [
   [/^#\/rental$/, rentalView, 'rental'], // rental cars: their own fleet, not in the car database
   [/^#\/deliveries$/, deliveriesView, 'deliveries'],
   [/^#\/kiosk$/, kioskView, 'deliveries'], // staff preview of the delivery kiosk form
+  [/^#\/parts$/, partsView, 'parts'], // parts store (delelager): part numbers, prices, locations, stock
   [/^#\/messages$/, dmListView, 'messages'], // private messages: every user, whatever the team
   [/^#\/messages\/(\d+)$/, dmChatView, 'messages'],
   [/^#\/notes$/, notesView, 'notes'], // my notes as a page (a reminder notification opens it); usually the 📝 panel

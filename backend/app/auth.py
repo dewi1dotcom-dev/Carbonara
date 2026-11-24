@@ -32,7 +32,7 @@ STAFF_PUBLIC = ("id, name, first_name, last_name, phone, active, is_admin, is_su
 
 # Top menu items a team can be given (keys = data-nav in index.html). Today is
 # always there; System is for system admins only, so neither is listed.
-MENU_ITEMS = ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive", "rental", "deliveries", "settings")
+MENU_ITEMS = ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive", "rental", "deliveries", "parts", "settings")
 
 # Items a system admin can move into the "More" dropdown of the top menu (System page → Top menu).
 # Saved in app_settings under MORE_KEY as a comma-separated list; the same for everyone.

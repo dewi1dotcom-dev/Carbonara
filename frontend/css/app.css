@@ -842,6 +842,16 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .price-table th, .price-table td { text-align: left; padding: .35rem .5rem; border-bottom: 1px solid var(--border); vertical-align: top; }
 .price-table th { font-weight: 600; color: var(--muted); font-size: .82rem; }
 .price-table tr.this-car td { background: rgba(245, 184, 0, .14); }
+/* Parts store (0.47.0, views/parts.js). */
+.parts-table td.num, .parts-table th.num { text-align: right; white-space: nowrap; }
+.parts-table tr.click-row { cursor: pointer; }
+.parts-table tr.click-row:hover td, .parts-table tr.click-row:focus td { background: rgba(245, 184, 0, .10); }
+@media (max-width: 600px) { .parts-table .col-ex { display: none; } }
+.badge.as-link { cursor: pointer; font: inherit; font-size: .8rem; }
+.actions.left { justify-content: flex-start; margin-top: .5rem; }
+.part-title { font-size: 1.1rem; margin: 0 0 .25rem; }
+.part-stock { font-size: 1.05rem; margin: 0 0 .5rem; }
+.pre-line { white-space: pre-line; }
 /* The car's own photos (0.45.0, views/carphotos.js). */
 .car-photos { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: .5rem; margin: .5rem 0; }
 .car-photos .thumb { position: relative; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: none; cursor: zoom-in; }

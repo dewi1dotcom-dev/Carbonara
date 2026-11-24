@@ -147,6 +147,7 @@ Dockerfile notes. These were learned the hard way, so don't undo them:
 - PDI sheets need `pypdf`, `reportlab`, `pypdfium2` (pip wheels, no system packages).
 - Notifications need `pywebpush==2.0.3` (pulls cryptography, aiohttp, py-vapid, http-ece); the import check covers it
   and that numpy stayed below 2.
+- The parts import reads Excel with `openpyxl` (pure Python, no system packages).
 - `BUILD_TIME` is stamped in ISO UTC at build time; `VERSION` is copied in. Both are served at
   `/api/version`.
 
@@ -236,8 +237,8 @@ backend/
                         deliveries (kiosk form + staff list + kiosk setup), pdi_sheets (templates, stamps, my signature,
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
                         notes (my notes), recalls (recall sources, checks, recalls per car),
-                        market (market data test: CSV import, comparison)
-  migrations/           001…043
+                        market (market data test: CSV import, comparison), parts (parts store)
+  migrations/           001…044
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -258,7 +259,7 @@ frontend/               no build step; plain ES modules
                         + report), messages (Today message board), dm (private messages), storage, testdrive, rental (rental cars), deliveries (kiosk form + Customer deliveries),
                         login, settings, system, notifications (👤 menu → Notifications), notes (📝 panel + #/notes),
                         recalls (car page card, check dialog, Settings → Recall sources),
-                        market (#/market Market prices + car page card; market data test)
+                        market (#/market Market prices + car page card; market data test), parts (#/parts parts store)
 ```
 
 **Migrations:**
@@ -308,6 +309,7 @@ frontend/               no build step; plain ES modules
 | 041 | `asking_price` | `vehicles.asking_price` (kr), `asking_price_at`, `asking_price_source` ('manual' / 'finn') |
 | 042 | `vehicle_photos` | `vehicle_photos` (the car's own photos: from its finn.no ad or uploaded; `sort`, `source`), `vehicles.listed_km / listed_km_at` (the ad's mileage) |
 | 043 | `market_data` | `market_imports` (file name, rows read / skipped, models), `market_listings` (make / model + match keys, variant, year, km, price, first price, fuel, `seller_kind` private / dealer, status, `active`, first / last seen, finn code, url; no seller names or places) |
+| 044 | `parts` | `parts` (part number + `part_key`, name, make, supplier, location, unit, quantity, minimum, cost / sales price ex VAT, VAT rate, note; soft delete), `part_movements` (created / received / out / count / import / price; change, quantity after, unit cost, reference, note, data), `part_imports` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -330,6 +332,7 @@ frontend/               no build step; plain ES modules
 - **Rental cars:** `#/rental` (fleet, rent out, cars out, trash; top menu "Rental cars").
 - **Customer deliveries:** `#/deliveries` (list + kiosk setup; top menu "Deliveries" since 0.25.1, also from
   Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
+- **Parts store:** `#/parts` (top menu "Parts" / "Delelager"; filters in the hash, e.g. `#/parts?q=…&show=low`).
 - **Private messages:** `#/messages` (people) · `#/messages/:staffId` (conversation); the 💬 button in the top bar, every
   user whatever the team (`canSee` always allows `messages`).
 - **My notes:** the 📝 panel (any page) · `#/notes` (the same as a page; reminder notifications open it); `canSee` always
@@ -695,7 +698,7 @@ the server is LAN-only, so no customer phones / public internet).
 
 **Teams (0.26.0)** (`teams`, `staff.team_id`; System page → Teams; `/system/teams`, `/system/staff/{id}/team`):
 - System admins create teams with a name, tick which **top menu items** each team sees
-  (`auth.MENU_ITEMS`: arrivals, vehicles, pdi_orders, storage, testdrive, rental, deliveries, settings) and place users.
+  (`auth.MENU_ITEMS`: arrivals, vehicles, pdi_orders, storage, testdrive, rental, deliveries, parts, settings) and place users.
   **One team per user.** Today is always shown; System stays system-admin-only.
 - `auth.menu_for()` puts `menu` on the session user (`/auth/state` → `me.menu`): system admins get
   everything; others Today + their team's items; **no team = Today only** (the user's choice). New staff
@@ -1227,6 +1230,36 @@ to take notes, pin cars and other things to remember, quick and easy"):
     and "vs. estimate" badge (±5 % plain, above amber, below green), and "Imported models". Car page: "Market price
     (imported listings)" card under the price card (`GET /vehicles/{id}/market`; null = no card).
 
+**Parts store / delelager (0.47.0)** (migration 044; `routers/parts.py`, `views/parts.js`; the user's request: "part
+numbers, prices, ex vat, inc vat, locations and so on"; the user chose stock counting, manual entry + file import, cost +
+sales price, and no link to cars for now):
+- **Top menu "Parts" / "Delelager"** (`#/parts`, team menu key `parts`; no team got it automatically, a system admin
+  ticks it on System → Teams).
+- **A part:** part number (`part_key` = upper case letters + digits, one active part per key; search and import match on
+  it), name, make (free text, data), supplier, location (shelf), unit (`pcs` / `set` / `l` / `m` / `kg`; "stk" / "sett"
+  in Norwegian), quantity, minimum stock ("Low stock" at or below it), **cost price and sales price per unit ex VAT**,
+  VAT rate (default 25 %; the price inc VAT is worked out, never stored), note. The edit form keeps ex / inc VAT in step
+  and shows the margin. Delete = hidden (`deleted_at`), history kept, the number can be used again.
+- **Stock only changes through movements** (`part_movements`: created / received / out / count / import, with change and
+  quantity after; `price` rows log price changes `{sale_from, sale_to, cost_from, cost_to}`). "＋ Received" (purchase
+  price per unit, updates the cost price; delivery note / invoice no.), "－ Taken out" (work order / receipt no.; never
+  below 0: "count the stock first"), "Count stock" (sets the counted number). Shown as the part's History.
+- **Parts team = admins + users whose team has `parts`** (`_editor`, checked on the server): only they see cost prices,
+  margin, stock value and purchase prices in the history, and only they can add / edit / delete / move / import.
+- **The page:** search (part number ignoring spaces / dashes, name, make, supplier, location, note; an exact or starting
+  part number first), filters All / In stock / Low stock / Out of stock + make; at most 200 rows shown ("search to
+  narrow it down"); the search is kept in the hash (`#/parts?q=…&show=…&make=…`, `history.replaceState`). Counts, and
+  for the parts team the stock value at cost. "⬇ Export (CSV)" (`GET /parts/export`, the same filter; semicolons,
+  decimal commas, BOM, for Excel). The ex VAT column is hidden on phones.
+- **Import** (`POST /parts/import`, multipart `file`, `add_new`, `set_stock`; ≤ 20 MB / 100 000 rows): CSV (`;` `,` or
+  tab, UTF-8 or cp1252) or **.xlsx** (first sheet, `openpyxl`); old .xls is refused. The header row may be any of the
+  first 15 rows; columns are matched by name in English or Norwegian (`COLUMNS`: delenummer, varenummer, beskrivelse,
+  hylle, beholdning, innpris, pris inkl. mva … ; a bare "price" / "pris" is ex VAT; only inc VAT → ex worked out).
+  Numbers like "1 234,50", "1.234,50", "249,-". Only cells with a value change a part (price changes logged); a
+  repeated part number in a file counts once. "Add parts that are not in Carbonara yet" (default on; off = update
+  prices from a full supplier list only) and "Set the stock of existing parts" (default off; new parts always get the
+  file's quantity). Logged in `part_imports` (last 5 shown).
+
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
 - **How it's chosen:** per user (`staff.language`, default `en` for existing accounts),
@@ -1267,6 +1300,7 @@ to take notes, pin cars and other things to remember, quick and easy"):
   | System admin | **Systemadministrator** |
   | Sub-zone | Undersone |
   | Mudflaps | **Skvettlapper** (not "Sprutlapper") |
+  | Parts (store) | **Delelager** (a part = del, part number = delenummer, cost price = innpris) |
 
 **Theme: light / dark (0.20.0):**
 - Per user, under their name at the top: "Same as device" (default `auto`), "Light", "Dark".
@@ -1509,6 +1543,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.45.2 | Sidekick 1.5.2: each photo of a finn.no ad offered once (the same photo came at several sizes) |
 | 0.45.3 | Cars without an arrival inspection (e.g. added from their finn.no ad): warning banner with "Start arrival inspection" on the car page, the same button in the empty Inspections card, "No arrival inspection" badge in lists; cancelling that inspection keeps the car |
 | 0.46.0 | **Market data (test):** import a CSV of car listings (System → Market data on / off); Market prices page (our cars vs. an estimate for their year + mileage, imported models) and a "Market price" card on the car page (migration 043) |
+| 0.47.0 | **Parts store (delelager):** new top menu page with part numbers, names, locations, stock with a history (received, taken out, counted), cost and sales prices ex / inc VAT, low stock, CSV export and import of price / stock lists (CSV or Excel) (migration 044) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
