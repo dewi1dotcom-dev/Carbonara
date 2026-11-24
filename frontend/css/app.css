@@ -6,6 +6,10 @@
   font-weight: 300 700; font-display: swap;
 }
 
+/* Anything marked hidden is never shown, even when a class gives it display: grid / flex (0.48.3: the customer
+   form showed the company fields for a private person, because .grid overrode [hidden]). */
+[hidden] { display: none !important; }
+
 /* Brand colours (carbonara-colors.txt). Light: background #FBF7EC, secondary surface
    #EFE8D4, text #1C1B19, muted #4A4538, accent #F5B800. The accent is too pale for text on
    the light background, so links use --link (a dark gold) and yellow is kept for fills. */

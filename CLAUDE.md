@@ -1611,6 +1611,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.48.0 | **Customer register + parts orders:** customers with customer numbers, their cars with owner history, parts orders (reserved stock, handed out = taken out of stock) with history; customer on cars in Vehicles and transfer to the register with consent; modules chosen at first setup / System page; the register can belong to another company (migration 045) |
 | 0.48.1 | Fix: blank page in 0.48.0 (an extra bracket in the customer and parts order pages) |
 | 0.48.2 | Part numbers in capital letters; part names, company and customer names with a capital first letter, also after a space or "-" (migration 046) |
+| 0.48.3 | Fix: the new customer form showed both the private person and the company fields (a global `[hidden]` rule in `app.css`) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
