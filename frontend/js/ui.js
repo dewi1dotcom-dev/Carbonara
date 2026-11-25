@@ -427,8 +427,7 @@ export function startClock(el) {
     const now = new Date();
     el.replaceChildren(
       h('span', { class: 'clock-time' }, fmtTime.format(now)),
-      h('span', { class: 'clock-date' }, capFirst(fmtWeekday.format(now))),
-      h('span', { class: 'clock-date' }, fmtLongDate.format(now)));
+      h('span', { class: 'clock-date' }, `${capFirst(fmtWeekday.format(now))} ${fmtLongDate.format(now)}`));
     setTimeout(tick, 60000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
   };
   tick();

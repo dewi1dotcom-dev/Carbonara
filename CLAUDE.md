@@ -1762,6 +1762,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.50.0 | **Invoices:** parts and labour (hours × rate) and other charges on the work order; "Make invoice" issues a Norwegian invoice (unbroken number series, all required details, never changed or deleted; parts leave the stock), credit notes, mark as paid, invoice list + CSV export for the accountant; Invoicing settings on the System page (migration 048) |
 | 0.51.0 | **Planner:** a calendar per team with a line per person, work orders laid out over the working day (breaks, evenings, weekends skipped), drag to move / change mechanic / stretch, "Not planned" list, absences (holiday / away / course / other), planned vs. available hours; working day start / end on the System page (migration 049) |
 | 0.52.0 | Delivery kiosk: today's booked cars (reg. no. + first name) to tap; the delivery is tied to the work order and the planner shows the car as arrived (also set by hand) (migration 050) |
+| 0.52.1 | Top bar: time and date on one line, with the buttons (⏱ 📝 💬 👤) under it (`.topbar-side`) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

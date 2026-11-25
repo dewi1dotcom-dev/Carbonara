@@ -153,7 +153,8 @@ section { margin-bottom: 1rem; }
 .nav-more-panel a:hover, .nav-more-panel a.active { background: var(--topbar-active); }
 .nav-more-panel a.active { box-shadow: inset 3px 0 0 var(--primary); }
 @media print { .nav-more-panel { display: none !important; } }
-.clock { display: flex; flex-direction: column; align-items: flex-end; line-height: 1.1; white-space: nowrap; }
+.topbar-side { display: flex; flex-direction: column; align-items: flex-end; gap: .3rem; flex: none; }
+.clock { display: flex; align-items: baseline; gap: .45rem; line-height: 1.1; white-space: nowrap; }
 .clock-time { font-weight: 700; font-variant-numeric: tabular-nums; }
 .clock-date { font-size: .78rem; color: var(--topbar-muted); }
 /* Wide screens: the clock's right edge lines up with the content column of <main> (max 980px incl.
@@ -548,7 +549,7 @@ button.list-card:disabled { opacity: .55; cursor: not-allowed; }
 body.logged-out .topbar nav, body.logged-out .user-menu { display: none; }
 /* Logged in, the nav (margin-left: auto) pushes the account button and clock right; without it,
    the clock does it. */
-body.logged-out .clock { margin-left: auto; }
+body.logged-out .topbar-side { margin-left: auto; }
 .login-card { max-width: 420px; margin: 2rem auto; }
 .login-card h1 { margin-top: 0; }
 .login-card input[type=password] { font-size: 1.4rem; letter-spacing: .3em; }
