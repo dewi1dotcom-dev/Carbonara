@@ -907,3 +907,29 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .hours-table tr.open-day td { background: var(--warn-bg); }
 .print-only { display: none; }
 @media print { .print-only { display: block; } }
+
+/* Invoices (0.50.0): the Norwegian A4 invoice / credit note */
+.invoice-doc { background: var(--paper); color: #111; max-width: 210mm; margin: 0 auto 1rem; padding: 15mm; border-radius: var(--radius); font-size: .92rem; }
+.invoice-doc .inv-head { display: flex; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
+.invoice-doc .inv-company { font-size: 1.3rem; font-weight: 700; margin-bottom: .25rem; }
+.invoice-doc .inv-kind { font-size: 1.6rem; font-weight: 700; letter-spacing: .05em; text-align: right; margin-bottom: .4rem; }
+.invoice-doc .inv-meta th { text-align: left; font-weight: 600; padding: .1rem .75rem .1rem 0; }
+.invoice-doc .inv-meta td { text-align: right; padding: .1rem 0; }
+.invoice-doc .inv-buyer { margin-bottom: 1.25rem; min-height: 5rem; }
+.invoice-doc .inv-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: #555; }
+.invoice-doc .inv-buyer-name { font-weight: 700; }
+.invoice-doc table.inv-lines { width: 100%; border-collapse: collapse; margin: .75rem 0; }
+.invoice-doc table.inv-lines th { text-align: left; border-bottom: 2px solid #111; padding: .3rem .4rem; font-size: .8rem; }
+.invoice-doc table.inv-lines td { border-bottom: 1px solid #ccc; padding: .3rem .4rem; vertical-align: top; }
+.invoice-doc .num { text-align: right; white-space: nowrap; }
+.invoice-doc table.inv-totals { margin-left: auto; min-width: 55%; border-collapse: collapse; }
+.invoice-doc table.inv-totals th { text-align: left; font-weight: 400; padding: .2rem .5rem .2rem 0; }
+.invoice-doc table.inv-totals td { padding: .2rem 0; }
+.invoice-doc tr.inv-sum th, .invoice-doc tr.inv-sum td { font-weight: 700; font-size: 1.05rem; border-top: 2px solid #111; padding-top: .35rem; }
+.invoice-doc .inv-pay { margin-top: 1.25rem; padding: .6rem .75rem; border: 1px solid #111; }
+.invoice-doc .inv-credit { font-weight: 600; }
+.invoice-doc .inv-footer { margin-top: 1.5rem; font-size: .8rem; color: #444; }
+.extra-line input[type=text] { width: auto; flex: 1; min-width: 7rem; }
+.extra-line input.num-input { flex: 0 1 6rem; min-width: 4.5rem; }
+@media (max-width: 640px) { .invoice-doc { padding: 1rem; font-size: .85rem; } .invoice-doc .inv-kind { text-align: left; } }
+@media print { .invoice-doc { padding: 0; max-width: none; border-radius: 0; margin: 0; } }

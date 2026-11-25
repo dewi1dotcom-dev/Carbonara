@@ -246,8 +246,9 @@ backend/
                         notes (my notes), recalls (recall sources, checks, recalls per car),
                         market (market data test: CSV import, comparison), parts (parts store),
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
-                        work_orders (work orders), hours (work hours: start / end of day, clock, admin list)
-  migrations/           001…047
+                        work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
+                        invoices (invoices + credit notes from work orders)
+  migrations/           001…048
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -270,7 +271,7 @@ frontend/               no build step; plain ES modules
                         recalls (car page card, check dialog, Settings → Recall sources),
                         market (#/market Market prices + car page card; market data test), parts (#/parts parts store),
                         customers (#/customers, customer cars, transfer dialog), partsorders (#/parts-orders),
-                        workorders (#/work-orders), hours (⏱ panel + #/hours)
+                        workorders (#/work-orders), hours (⏱ panel + #/hours), invoices (#/invoices)
 ```
 
 **Migrations:**
@@ -324,6 +325,7 @@ frontend/               no build step; plain ES modules
 | 045 | `customers` | `customers` (customer no., private / company, contact, `last_activity_at`), `customer_cars`, `car_ownerships` (one current owner per car), `parts_orders`, `parts_order_lines`, `register_events`; `vehicles.customer_first_name / _last_name / _address / _phone / customer_car_id`; `part_movements.order_id`, kinds `order` / `order_return` |
 | 046 | `part_numbers_upper` | existing part numbers (parts, order lines) in capital letters |
 | 047 | `work_orders_hours` | `work_orders` (number, status open / in_progress / done / cancelled, `vehicle_id` or `customer_car_id` + `customer_id`, title, description, `tasks` jsonb, `mechanic_note`, `estimated_minutes`, `planned_at`, `assigned_to`, `pdi_order_id`), `work_order_events`, `work_days` (staff, day, start, end, `breaks` jsonb), `work_time` (clock on a work order; one running per person); `parts_orders.work_order_id`, `pdi_orders.work_order_id`; teams with Parts or Customers get `work_orders` |
+| 048 | `invoices` | `invoices` (number, kind invoice / credit_note, `credits_invoice_id`, work order, customer, issue / delivery / due date, snapshots `seller` / `buyer` / `car` / `lines` / `vat_lines`, totals, `kid`, `note`, `parts_order_ids`, `paid_at / paid_by`; trigger `invoices_locked`: never changed or deleted except the payment and links set to NULL); `work_orders.labour_rate / billed_minutes / extra_lines / km / invoice_id`, status `invoiced` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -348,7 +350,7 @@ frontend/               no build step; plain ES modules
   Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
 - **Parts store:** `#/parts` (top menu "Parts" / "Delelager"; filters in the hash, e.g. `#/parts?q=…&show=low`).
 - **Customers:** `#/customers` · `#/customers/:id` · `#/customer-cars/:id` (nav `customers`). **Parts orders:** `#/parts-orders` · `#/parts-orders/:id` (nav `parts`).
-- **Work orders:** `#/work-orders` · `#/work-orders/:id` (nav `work_orders`). **Work hours:** the ⏱ button (every user) · `#/hours` (admins only: `canSee('hours')`).
+- **Work orders:** `#/work-orders` · `#/work-orders/:id` (nav `work_orders`). **Invoices:** `#/invoices` · `#/invoices/:id` (nav `work_orders`). **Work hours:** the ⏱ button (every user) · `#/hours` (admins only: `canSee('hours')`).
 - **Private messages:** `#/messages` (people) · `#/messages/:staffId` (conversation); the 💬 button in the top bar, every
   user whatever the team (`canSee` always allows `messages`).
 - **My notes:** the 📝 panel (any page) · `#/notes` (the same as a page; reminder notifications open it); `canSee` always
@@ -1390,6 +1392,43 @@ adjust the time, auto-subtracted from the work: a 2 hour job set from 11 goes to
   - **Retention:** the worker deletes `work_days` older than `retention_years` (`hours.purge_old_days`); `work_time` stays
     with the work order.
 
+**Invoices (0.50.0)** (migration 048; `routers/invoices.py`, `views/invoices.js`; the user's request: "labour (+ labour
+price) and parts should be in the same work order and finish with a bill / faktura with the Norwegian requirements"; the
+user's choices: Carbonara issues the invoice; labour = clocked time rounded up to a quarter hour, editable, one hourly rate
+on the System page changeable per work order; parts leave the stock when the invoice is issued; the seller is the
+Customer register company):
+- **On the work order:** parts are added right there (search the store / "+ Part not in the store", change / remove;
+  kept in the work order's parts order, made on the first part; anyone with work order access may change the lines of a
+  work order's parts order: `parts_orders._line_editor`); "Invoice basis" card: labour (clocked, suggested, **hours to
+  invoice** `billed_minutes`, **hourly rate** `labour_rate`, "Use the clocked time" / "Use the rate from the System page"
+  reset to NULL), **other charges** (`extra_lines`, `PUT …/extra-lines`), the lines as they will be invoiced, VAT per
+  rate, totals, and what is missing (`invoices.billing`). The customer can be chosen / changed on the work order (needed
+  for a car from Vehicles). Mileage (`km`) in Edit.
+- **"🧾 Make invoice"** (status done) → `POST /work-orders/{id}/invoice`: refused while something is missing (company
+  name, org. no., postal address, customer, hourly rate when there is labour, any line); hands out the work order's parts
+  orders (`parts_orders.change_status`, refused when a part has too little stock: nothing saved); next number (max + 1
+  under a lock, at least `invoice_number_start`; invoices and credit notes share one series, no gaps); invoice date =
+  today, delivery date = when the work was marked done, due = + `invoice_due_days`; snapshots of seller
+  (`customers.company()` + VAT / Foretaksregisteret flags, bank account, footer text), buyer (name, customer no., org. no.
+  for companies, address), car (reg. no., make / model, VIN, km, work order no.) and lines. Work order → `invoiced`
+  (locked: `_not_locked`; its parts orders can't change status either).
+- **The document** (`#/invoices/:id`, Norwegian, `translate="no"`, "🖨 Print or PDF"): FAKTURA / KREDITNOTA, seller with
+  "Org.nr. … MVA" and "Foretaksregisteret", invoice no., invoice / delivery / due date, customer no., work order, KID;
+  buyer; car; lines (Varenr., Beskrivelse, Antall, Enhet, Pris eks. mva, Mva, Beløp eks. mva); "Sum eks. mva", "Mva 25 % av
+  …", "Å betale (NOK)"; payment (account, KID, due); not registered for VAT → no VAT + the sentence about
+  Merverdiavgiftsregisteret; the note; the footer (`invoice_note`).
+- **Afterwards:** only the payment changes (`PUT /invoices/{id}/paid`, date or null). **Credit note** (`POST
+  /invoices/{id}/credit`, reason): a new number, negative copies of the lines, "Krediterer faktura nr. … datert …"; the
+  parts orders the invoice handed out go back to "arrived" (stock back); the work order back to `done`, so it can be
+  changed and invoiced again. One credit note per invoice.
+- **#/invoices:** list (all / not paid / paid, search), unpaid sum and overdue count, "Export for the accountant" (CSV of
+  invoices + credit notes between two dates). "🧾 Invoices" button on the Work orders page.
+- **Never deleted by Carbonara** (bokføringsloven § 13: at least 5 years); customer retention deleting a customer only
+  sets `customer_id` NULL (the buyer snapshot stays).
+- System → **Invoicing**: `labour_rate`, `invoice_due_days` (14), `invoice_bank_account` (`BANK_ACCOUNT_PATTERN`),
+  `invoice_vat_registered` (on), `invoice_foretaksregisteret` (on), `invoice_kid` (off; MOD10), `invoice_number_start`
+  (10000), `invoice_note`.
+
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
 - **How it's chosen:** per user (`staff.language`, default `en` for existing accounts),
@@ -1684,6 +1723,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.48.5 | Settings and System: every card folds (closed by default, the heading opens it; open cards remembered per browser) |
 | 0.48.6 | Parts import reads importers' fixed-width text price lists (.txt), with a make for the file and sales / cost price choice; replaced parts get "Replaced by …" |
 | 0.49.0 | **Work orders + work hours:** work orders (car from Vehicles or the customer register, work as text and / or a task list, mechanic's reply, labour clock, parts orders tied to it; PDIs get a number from here when the date is confirmed); ⏱ start / end of the working day and one running clock per person; fixed breaks taken off; #/hours for admins with corrections and CSV export (migration 047) |
+| 0.50.0 | **Invoices:** parts and labour (hours × rate) and other charges on the work order; "Make invoice" issues a Norwegian invoice (unbroken number series, all required details, never changed or deleted; parts leave the stock), credit notes, mark as paid, invoice list + CSV export for the accountant; Invoicing settings on the System page (migration 048) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

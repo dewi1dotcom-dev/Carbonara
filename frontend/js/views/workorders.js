@@ -2,12 +2,13 @@
 // labour time (the clock on the order; breaks taken off) + parts (parts orders tied to it). Who worked when is shown to
 // admins only. Server: routers/work_orders.py.
 import { api, append, busy, canOpen, canSee, dateInput, debounce, fmtDate, h, openDialog, session, showError, timeInput, toast } from '../ui.js';
-import { carTitle, orderBadge } from './customers.js';
+import { carTitle, orderBadge, pickCustomer } from './customers.js';
 import { entryDialog, fmtDuration, fmtLocal } from './hours.js';
-import { field, fmtMoney, qtyText } from './parts.js';
+import { field, fmtMoney, fmtQty, money2, parseNum, qtyText } from './parts.js';
+import { lineDialog } from './partsorders.js';
 
-export const WO_STATUS = { open: 'Open', in_progress: 'In progress', done: 'Done', cancelled: 'Cancelled' };
-const WO_CLS = { open: '', in_progress: 'warn', done: 'good', cancelled: 'bad' };
+export const WO_STATUS = { open: 'Open', in_progress: 'In progress', done: 'Done', invoiced: 'Invoiced', cancelled: 'Cancelled' };
+const WO_CLS = { open: '', in_progress: 'warn', done: 'good', invoiced: '', cancelled: 'bad' };
 export const woBadge = (status) => h('span', { class: `badge ${WO_CLS[status] ?? ''}` }, WO_STATUS[status] ?? status);
 const ACTIVE = ['open', 'in_progress'];
 const clockChanged = () => window.dispatchEvent(new Event('carbonara:clock-changed'));
@@ -30,7 +31,7 @@ export async function workOrdersView(el) {
   const state = { show: saved.get('show') || 'active', q: saved.get('q') || '' };
   const query = () => new URLSearchParams(Object.entries(state).filter(([k, v]) => v && !(k === 'show' && v === 'active'))).toString();
   const showSel = h('select', { 'aria-label': 'Show' },
-    [['active', 'Not done yet'], ['done', 'Done'], ['cancelled', 'Cancelled'], ['all', 'All work orders']]
+    [['active', 'Not done yet'], ['done', 'Done'], ['invoiced', 'Invoiced'], ['cancelled', 'Cancelled'], ['all', 'All work orders']]
       .map(([v, t]) => h('option', { value: v, selected: v === state.show }, t)));
   const search = h('input', { type: 'search', value: state.q, placeholder: 'Work order no., reg. no., customer, text…', 'aria-label': 'Search work orders' });
   const listSlot = h('div');
@@ -49,7 +50,9 @@ export async function workOrdersView(el) {
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Work orders'),
         h('div', { class: 'muted' }, 'The car, the work to perform, the mechanic’s reply, labour time and parts.')),
-      h('button', { class: 'btn primary', type: 'button', onClick: () => newWorkOrderDialog() }, '+ New work order')),
+      h('div', { class: 'row-actions' },
+        h('a', { class: 'btn', href: '#/invoices' }, '🧾 Invoices'),
+        h('button', { class: 'btn primary', type: 'button', onClick: () => newWorkOrderDialog() }, '+ New work order'))),
     h('div', { class: 'toolbar' }, search, showSel),
     listSlot);
   await load();
@@ -190,11 +193,16 @@ export async function newWorkOrderDialog(car = null) {
 
 const EVENT = {
   created: 'Work order created', updated: 'Details changed', tasks: 'Tasks changed', status: 'Status changed',
-  parts_order: 'Parts order made',
+  parts_order: 'Parts order made', extra_lines: 'Other charges changed', invoiced: 'Invoiced', credited: 'Invoice credited',
 };
 
 function eventDetail(e) {
   const d = e.data || {};
+  if (e.kind === 'invoiced') return h('a', { href: `#/invoices/${d.invoice_id}` }, `Invoice no. ${d.number}`);
+  if (e.kind === 'credited') {
+    return [h('a', { href: `#/invoices/${d.invoice_id}` }, `Invoice no. ${d.number}`), ' → ',
+      h('a', { href: `#/invoices/${d.credit_note_id}` }, `Credit note no. ${d.credit_note_number}`)];
+  }
   if (e.kind === 'status') return [h('span', {}, WO_STATUS[d.from] ?? d.from), ' → ', h('span', {}, WO_STATUS[d.to] ?? d.to)];
   if (e.kind === 'tasks') return h('span', {}, `${d.done}/${d.count}`);
   if (e.kind === 'parts_order') return h('a', { href: `#/parts-orders/${d.order_id}` }, `Parts order #${d.order_no}`);
@@ -214,7 +222,7 @@ export async function workOrderView(el, [id], host = el) {
     } catch (e) { showError(e); }
   };
   const active = ACTIVE.includes(o.status);
-  const editable = o.status !== 'cancelled';
+  const editable = !['cancelled', 'invoiced'].includes(o.status);
   const isAdmin = !!session.me?.is_admin;
   const status = (to, label, cls = 'btn', ask = null) => {
     const b = h('button', { class: cls, type: 'button' }, label);
@@ -231,9 +239,11 @@ export async function workOrderView(el, [id], host = el) {
     open: [status('done', '✓ Work done', 'btn primary'), status('cancelled', 'Cancel work order', 'link danger', 'Cancel this work order?')],
     in_progress: [status('done', '✓ Work done', 'btn primary'), status('open', 'Back to open', 'link'),
       status('cancelled', 'Cancel work order', 'link danger', 'Cancel this work order?')],
-    done: [status('open', 'Open again', 'link')],
+    done: [h('button', { class: 'btn primary', type: 'button', onClick: () => invoiceDialog(o) }, '🧾 Make invoice'),
+      status('open', 'Open again', 'link')],
+    invoiced: [o.invoice_id ? h('a', { class: 'btn primary', href: `#/invoices/${o.invoice_id}` }, '🧾 Open the invoice') : null].filter(Boolean),
     cancelled: [status('open', 'Open again', 'link')],
-  }[o.status];
+  }[o.status] ?? [];
 
   // The clock: one running per person; starting here stops any other and starts the working day.
   const clockBtn = !active ? null : o.my_clock
@@ -253,11 +263,20 @@ export async function workOrderView(el, [id], host = el) {
       ' ', h('span', { class: 'mono' }, o.registration_number || ''), o.vin ? h('span', { class: 'muted small block mono' }, o.vin) : null,
       o.vehicle_id ? h('span', { class: 'muted small block' }, o.vehicle_deleted ? 'Car deleted from Vehicles' : 'Car in stock (Vehicles)') : null)
     : h('span', { class: 'muted' }, 'Car deleted');
+  // The customer is the one invoiced: chosen here when the car is from Vehicles (or to bill someone else).
+  const chooseCustomer = () => pickCustomer('Customer for the work order', async (c) => {
+    try {
+      await api.patch(`/work-orders/${o.id}`, { customer_id: c.id });
+      toast('Saved', 'success');
+      await rerender();
+    } catch (e) { showError(e); }
+  });
   const custValue = o.customer_id
     ? h('span', {}, canOpen(`#/customers/${o.customer_id}`) ? h('a', { href: `#/customers/${o.customer_id}`, translate: 'no' }, o.customer_name)
       : h('span', { translate: 'no' }, o.customer_name), ' ', h('span', { class: 'muted' }, `(${o.customer_no})`),
+    editable ? [' ', h('button', { class: 'link small no-print', type: 'button', onClick: chooseCustomer }, 'change')] : null,
     o.customer_phone ? h('span', { class: 'muted small block', translate: 'no' }, o.customer_phone) : null)
-    : null;
+    : editable ? h('button', { class: 'link', type: 'button', onClick: chooseCustomer }, 'Choose the customer') : h('span', { class: 'muted' }, '–');
 
   append(el,
     h('p', { class: 'small no-print' }, h('a', { href: '#/work-orders' }, '← Work orders')),
@@ -282,6 +301,7 @@ export async function workOrderView(el, [id], host = el) {
       h('dl', { class: 'kv' },
         row('Car', carValue),
         row('Customer', custValue),
+        row('Mileage', o.km != null && `${Number(o.km).toLocaleString('nb-NO')} km`),
         row('Mechanic', o.assigned_name && h('span', { translate: 'no' }, o.assigned_name)),
         row('Planned', o.planned_local && fmtLocal(o.planned_local)),
         row('Estimated hours', o.estimated_minutes && fmtDuration(o.estimated_minutes * 60)),
@@ -296,7 +316,9 @@ export async function workOrderView(el, [id], host = el) {
       !o.description && !o.tasks.length ? h('p', { class: 'empty' }, 'Nothing written yet. Use Edit to describe the work.') : null),
     replyCard(o, editable, rerender),
     isAdmin ? labourCard(o, rerender) : null,
-    partsCard(o, rerender),
+    partsCard(o, editable, rerender),
+    billingCard(o, editable, rerender),
+    invoicesCard(o),
     h('section', { class: 'card no-print' }, h('h2', {}, 'History'),
       o.events.length ? h('ul', { class: 'rows' }, o.events.map((e) => {
         const detail = eventDetail(e);
@@ -389,31 +411,201 @@ function labourCard(o, rerender) {
     h('p', { class: 'muted small' }, 'Only administrators see who worked when. Breaks are taken off.'));
 }
 
-/** Parts: the lines of the parts orders tied to this work order. */
-function partsCard(o, rerender) {
-  const editParts = !!session.me?.is_admin || canSee('parts');
-  const add = editParts && o.status !== 'cancelled' ? h('button', { class: 'btn small', type: 'button' }, '+ Add parts') : null;
-  add?.addEventListener('click', () => busy(add, async () => {
-    const r = await api.post(`/work-orders/${o.id}/parts-order`);
-    location.hash = `#/parts-orders/${r.id}`;
-  }));
+const OPEN_PARTS = ['open', 'ordered', 'arrived'];
+
+/** Parts, added right here (kept in the work order's parts order: reserved now, out of the stock on the invoice). */
+function partsCard(o, editable, rerender) {
   const lines = o.parts_lines;
+  const orderId = async () => (await api.post(`/work-orders/${o.id}/parts-order`)).id;
+  const search = h('input', { type: 'search', placeholder: 'Find a part: number or name…', 'aria-label': 'Find a part' });
+  const results = h('div');
+  let seq = 0;
+  search.addEventListener('input', debounce(async () => {
+    const q = search.value.trim();
+    const my = ++seq;
+    if (!q) { results.replaceChildren(); return; }
+    try {
+      const data = await api.get(`/parts?q=${encodeURIComponent(q)}`);
+      if (my !== seq) return;
+      results.replaceChildren(data.parts.length ? h('ul', { class: 'rows pick-list' }, data.parts.slice(0, 12).map((p) => h('li', {},
+        h('button', {
+          class: 'link pick', type: 'button',
+          onClick: async () => { try { lineDialog({ id: await orderId() }, { part: p }, rerender); } catch (e) { showError(e); } },
+        },
+        h('span', { class: 'mono', translate: 'no' }, p.part_number), ' ', h('span', { translate: 'no' }, p.name),
+        h('span', { class: 'muted small block' }, h('span', {}, 'In stock:'), ' ', qtyText(p.quantity, p.unit),
+          Number(p.reserved) > 0 ? ` (${fmtQty(p.reserved)} reserved)` : '',
+          p.location ? [' · ', h('span', { translate: 'no' }, p.location)] : null, ` · ${fmtMoney(p.sale_price)}`)))))
+        : h('p', { class: 'empty' }, 'No parts match.'));
+    } catch (e) { showError(e); }
+  }, 250));
+  const free = h('button', { class: 'btn', type: 'button' }, '+ Part not in the store');
+  free.addEventListener('click', () => busy(free, async () => lineDialog({ id: await orderId() }, { free: true }, rerender)));
+  const rows = lines.map((l) => {
+    const canChange = editable && OPEN_PARTS.includes(l.order_status);
+    return h('tr', {},
+      h('td', {}, h('span', { class: 'mono', translate: 'no' }, l.part_number || '–')),
+      h('td', {}, h('span', { translate: 'no' }, l.name),
+        l.part_id && l.order_status !== 'done' ? h('span', { class: 'muted small block no-print' },
+          l.part_deleted ? h('span', {}, 'Deleted from the parts store')
+            : [h('span', {}, 'In stock:'), ' ', qtyText(l.stock, l.unit), l.location ? [' · ', h('span', { translate: 'no' }, l.location)] : null])
+          : null),
+      h('td', { class: 'num' }, qtyText(l.quantity, l.unit)),
+      h('td', { class: 'num' }, fmtMoney(l.unit_price)),
+      h('td', { class: 'no-print nowrap' }, canChange ? [
+        h('button', { class: 'link small', type: 'button', onClick: () => lineDialog({ id: l.order_id }, l, rerender) }, 'change'), ' ',
+        h('button', {
+          class: 'link danger small', type: 'button',
+          onClick: async () => {
+            if (!confirm('Remove this line?')) return;
+            try { await api.del(`/parts-orders/${l.order_id}/lines/${l.id}`); await rerender(); } catch (e) { showError(e); }
+          },
+        }, 'remove')] : null));
+  });
   return h('section', { class: 'card' },
-    h('div', { class: 'card-head' }, h('h2', {}, 'Parts on the work order'), add ? h('span', { class: 'no-print' }, add) : null),
+    h('h2', {}, 'Parts on the work order'),
     lines.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Part number'), h('th', {}, 'Name'), h('th', { class: 'num' }, 'Quantity'),
-        h('th', { class: 'num' }, 'Price ex VAT'))),
-      h('tbody', {}, lines.map((l) => h('tr', {},
-        h('td', {}, h('span', { class: 'mono', translate: 'no' }, l.part_number || '–')),
-        h('td', {}, h('span', { translate: 'no' }, l.name)),
-        h('td', { class: 'num' }, qtyText(l.quantity, l.unit)),
-        h('td', { class: 'num' }, fmtMoney(l.unit_price)))))))
+        h('th', { class: 'num' }, 'Price ex VAT'), h('th', { class: 'no-print' }))),
+      h('tbody', {}, rows)))
       : h('p', { class: 'empty' }, 'No parts on this work order.'),
-    lines.length ? h('p', {}, h('span', {}, 'Parts total ex VAT:'), ' ', h('strong', {}, fmtMoney(o.parts_total_ex))) : null,
-    o.parts_orders.length ? h('ul', { class: 'rows no-print' }, o.parts_orders.map((p) => h('li', {},
-      h('span', {}, canOpen('#/parts-orders') ? h('a', { href: `#/parts-orders/${p.id}` }, `Parts order #${p.order_no}`)
-        : h('span', {}, `Parts order #${p.order_no}`), ' ', orderBadge(p.status)),
-      h('span', { class: 'nowrap' }, fmtMoney(p.total_inc))))) : null);
+    editable ? h('div', { class: 'add-line no-print' },
+      h('div', { class: 'toolbar' }, search, free), results,
+      h('p', { class: 'muted small' }, 'The parts are reserved now and taken out of the stock when the invoice is made.')) : null,
+    o.parts_orders.length && canOpen('#/parts-orders') ? h('p', { class: 'muted small no-print' },
+      o.parts_orders.map((p, i) => [i ? ' · ' : '', h('a', { href: `#/parts-orders/${p.id}` }, `Parts order #${p.order_no}`), ' ', orderBadge(p.status)])) : null);
+}
+
+/** "2,5" → 150 minutes; "0" → 0; '' → null; NaN when not a number. */
+function parseHoursOrZero(text) {
+  const s = String(text ?? '').trim().replace(',', '.');
+  if (!s) return null;
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 ? Math.round(n * 60) : NaN;
+}
+const kr = (n) => `${money2(n)} kr`;
+const pct = (n) => `${Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 })} %`;
+
+/** What will be invoiced: labour (hours × rate), parts, other charges, VAT and the total; "Make invoice". */
+function billingCard(o, editable, rerender) {
+  const b = o.billing;
+  const hours = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', value: hoursText(b.minutes) || '0', disabled: !editable });
+  const rate = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', value: String(b.rate).replace('.', ','), disabled: !editable });
+  const save = h('button', { class: 'btn', type: 'button' }, 'Save labour');
+  save.addEventListener('click', () => busy(save, async () => {
+    const minutes = parseHoursOrZero(hours.value);
+    const r = parseNum(rate.value);
+    if (minutes == null || Number.isNaN(minutes)) { toast('Check the hours', 'error'); hours.focus(); return; }
+    if (r == null || Number.isNaN(r) || r < 0) { toast('Check the hourly rate', 'error'); rate.focus(); return; }
+    await api.patch(`/work-orders/${o.id}`, {
+      billed_minutes: minutes === b.suggested_minutes && b.billed_minutes == null ? null : minutes,
+      labour_rate: !b.own_rate && r === Number(b.default_rate) ? null : r,
+    });
+    toast('Saved', 'success');
+    await rerender();
+  }));
+  const reset = (field, label) => h('button', {
+    class: 'link small no-print', type: 'button',
+    onClick: async () => { try { await api.patch(`/work-orders/${o.id}`, { [field]: null }); await rerender(); } catch (e) { showError(e); } },
+  }, label);
+
+  const linesTable = b.lines.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
+    h('thead', {}, h('tr', {}, h('th', {}, 'Description'), h('th', { class: 'num' }, 'Quantity'), h('th', { class: 'num' }, 'Price ex VAT'),
+      h('th', { class: 'num' }, 'VAT'), h('th', { class: 'num' }, 'Total ex VAT'))),
+    h('tbody', {}, b.lines.map((l) => h('tr', {},
+      h('td', {}, l.part_number ? [h('span', { class: 'mono', translate: 'no' }, l.part_number), ' '] : null, h('span', { translate: 'no' }, l.text)),
+      h('td', { class: 'num nowrap', translate: 'no' }, `${fmtQty(l.quantity)} ${l.unit}`),
+      h('td', { class: 'num' }, kr(l.unit_price)),
+      h('td', { class: 'num' }, pct(l.vat_rate)),
+      h('td', { class: 'num' }, kr(l.total_ex))))))) : h('p', { class: 'empty' }, 'Nothing to invoice yet.');
+
+  return h('section', { class: 'card' },
+    h('h2', {}, 'Invoice basis'),
+    h('h3', {}, 'Labour'),
+    h('p', { class: 'muted small' }, h('span', {}, 'Clocked:'), ` ${fmtDuration(b.clocked_seconds)} · `,
+      h('span', {}, 'rounded up to a quarter hour:'), ` ${hoursText(b.suggested_minutes) || '0'} h`),
+    h('div', { class: 'grid' },
+      field('Hours to invoice', hours, b.billed_minutes != null && editable ? reset('billed_minutes', 'Use the clocked time') : null),
+      field('Hourly rate ex VAT (kr)', rate, b.own_rate && editable ? reset('labour_rate', 'Use the rate from the System page') : null)),
+    editable ? h('div', { class: 'actions left no-print' }, save) : null,
+    h('h3', {}, 'Other charges'),
+    extraLines(o, editable, rerender),
+    h('h3', {}, 'On the invoice'),
+    linesTable,
+    h('dl', { class: 'kv order-totals' },
+      h('dt', {}, 'Total ex VAT'), h('dd', {}, kr(b.total_ex)),
+      ...b.vat_lines.map((v) => [h('dt', {}, `VAT ${pct(v.rate)}`), h('dd', {}, kr(v.vat))]).flat(),
+      h('dt', {}, 'Total inc VAT'), h('dd', {}, h('strong', {}, kr(b.total_inc)))),
+    !b.vat_registered ? h('p', { class: 'muted small' }, 'Not registered for VAT (System page): no VAT is added.') : null,
+    b.missing.length && o.status !== 'invoiced' ? h('div', { class: 'notice warn' }, h('strong', {}, 'Missing before invoicing:'),
+      h('ul', {}, b.missing.map((m) => h('li', {}, m)))) : null);
+}
+
+/** Other charges (e.g. an environmental fee, consumables): text, quantity, price ex VAT, VAT %. */
+function extraLines(o, editable, rerender) {
+  const list = (o.extra_lines || []).map((x) => ({ ...x }));
+  const save = async () => {
+    await api.put(`/work-orders/${o.id}/extra-lines`, { lines: list });
+    await rerender();
+  };
+  const text = h('input', { type: 'text', maxlength: 200, placeholder: 'e.g. Environmental fee', autocomplete: 'off' });
+  const qty = h('input', { type: 'text', inputmode: 'decimal', value: '1', 'aria-label': 'Quantity', class: 'num-input' });
+  const price = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'kr ex VAT', 'aria-label': 'Price ex VAT', class: 'num-input' });
+  const vat = h('input', { type: 'text', inputmode: 'decimal', value: '25', 'aria-label': 'VAT (%)', class: 'num-input' });
+  const add = h('button', { class: 'btn small', type: 'button' }, '+ Add');
+  add.addEventListener('click', () => busy(add, async () => {
+    const q = parseNum(qty.value); const p = parseNum(price.value); const v = parseNum(vat.value);
+    if (!text.value.trim()) { toast('Write what the charge is for', 'error'); text.focus(); return; }
+    if (q == null || Number.isNaN(q) || q <= 0) { toast('Enter the quantity', 'error'); qty.focus(); return; }
+    if (p == null || Number.isNaN(p) || p < 0) { toast('Check the price', 'error'); price.focus(); return; }
+    list.push({ text: text.value.trim(), quantity: q, unit_price: p, vat_rate: v == null || Number.isNaN(v) ? 25 : v });
+    await save();
+  }));
+  return h('div', {},
+    list.length ? h('ul', { class: 'rows' }, list.map((x, i) => h('li', {},
+      h('span', { translate: 'no' }, `${x.text} · ${fmtQty(x.quantity)} × ${kr(x.unit_price)} · ${pct(x.vat_rate)}`),
+      editable ? h('button', {
+        class: 'link danger small no-print', type: 'button',
+        onClick: async () => { list.splice(i, 1); try { await save(); } catch (e) { showError(e); } },
+      }, 'remove') : null))) : h('p', { class: 'empty' }, 'None.'),
+    editable ? h('div', { class: 'toolbar extra-line no-print' }, text, qty, price, vat, add) : null);
+}
+
+/** Invoices and credit notes of this work order. */
+function invoicesCard(o) {
+  if (!o.invoices.length) return null;
+  return h('section', { class: 'card' }, h('h2', {}, 'Invoices'),
+    h('ul', { class: 'rows' }, o.invoices.map((i) => h('li', {},
+      h('span', {}, h('a', { href: `#/invoices/${i.id}` }, `${i.kind === 'credit_note' ? 'Credit note' : 'Invoice'} no. ${i.number}`),
+        h('span', { class: 'muted small block' }, fmtDate(i.issue_date))),
+      h('span', { class: 'nowrap' }, kr(i.total_inc))))));
+}
+
+/** Issue the invoice: final, can't be changed or deleted afterwards (a credit note corrects it). */
+function invoiceDialog(o) {
+  const b = o.billing;
+  const note = h('textarea', { rows: 2, maxlength: 1000, placeholder: 'Printed on the invoice (optional)' });
+  const ok = h('button', { class: 'btn primary', type: 'submit', disabled: b.missing.length > 0 }, 'Issue invoice');
+  const form = h('form', {},
+    h('dl', { class: 'kv' },
+      h('dt', {}, 'Customer'), h('dd', { translate: 'no' }, o.customer_name ? `${o.customer_name} (${o.customer_no})` : '–'),
+      h('dt', {}, 'Total inc VAT'), h('dd', {}, h('strong', {}, kr(b.total_inc)))),
+    b.missing.length ? h('div', { class: 'notice warn' }, h('strong', {}, 'Missing before invoicing:'),
+      h('ul', {}, b.missing.map((m) => h('li', {}, m)))) : null,
+    h('div', { class: 'notice' }, 'An issued invoice can never be changed or deleted. A mistake is corrected with a credit note. '
+      + 'The parts are taken out of the stock now.'),
+    field('Note on the invoice', note),
+    h('div', { class: 'actions' }, ok));
+  form.addEventListener('submit', (e) => {
+    e.preventDefault();
+    busy(ok, async () => {
+      const r = await api.post(`/work-orders/${o.id}/invoice`, { note: note.value.trim() || null });
+      close();
+      toast(`Invoice no. ${r.number} issued`, 'success');
+      location.hash = `#/invoices/${r.id}`;
+    });
+  });
+  const { close } = openDialog(`Invoice for work order #${o.number}`, form);
 }
 
 /** Edit title, work to perform, estimate, planned start and mechanic. */
@@ -423,6 +615,7 @@ async function editDialog(o, done) {
   const est = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', value: hoursText(o.estimated_minutes) });
   const pDay = dateInput({ value: o.planned_local ? o.planned_local.slice(0, 10) : '' });
   const pTime = timeInput({ value: o.planned_local ? o.planned_local.slice(11, 16) : '' });
+  const km = h('input', { type: 'text', inputmode: 'numeric', autocomplete: 'off', value: o.km ?? '' });
   const who = h('select', {}, h('option', { value: '' }, 'Nobody yet'));
   try {
     (await staffList()).forEach((s) => who.append(h('option', { value: s.id, selected: s.id === o.assigned_to, translate: 'no' }, s.name)));
@@ -432,17 +625,19 @@ async function editDialog(o, done) {
     field('Title', title),
     field('Work to perform', desc),
     h('div', { class: 'grid' }, field('Estimated hours', est), field('Planned date', pDay), field('Planned time', pTime)),
-    field('Mechanic', who),
+    h('div', { class: 'grid' }, field('Mechanic', who), field('Mileage (km)', km)),
     h('div', { class: 'actions' }, ok));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const minutes = parseHours(est.value);
     if (Number.isNaN(minutes)) { toast('Check the estimated hours', 'error'); est.focus(); return; }
+    const kmDigits = km.value.replace(/\D/g, '');
+    const kmVal = kmDigits ? Number(kmDigits) : null;
     busy(ok, async () => {
       await api.patch(`/work-orders/${o.id}`, {
         title: title.value.trim() || null, description: desc.value.trim() || null, estimated_minutes: minutes,
         planned_at: pDay.value ? `${pDay.value}T${pTime.value || '08:00'}` : null,
-        assigned_to: who.value ? Number(who.value) : null,
+        assigned_to: who.value ? Number(who.value) : null, km: kmVal,
       });
       close();
       toast('Saved', 'success');

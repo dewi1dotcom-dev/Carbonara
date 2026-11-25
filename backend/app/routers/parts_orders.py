@@ -9,13 +9,14 @@ free text (a part that is not in the store). Only the parts team (`parts._editor
 from decimal import Decimal
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from ..common import bad_request, cap_name, conflict, not_found
 from ..db import get_conn
 from .customers import ORDERS_SELECT, EVENTS_SELECT, _names, event, require_register, touch
-from .parts import CENT, MAX_PRICE, MAX_QTY, _clean, _fmt_qty, _move, require_parts_editor
+from ..auth import require_staff
+from .parts import CENT, MAX_PRICE, MAX_QTY, _clean, _editor as _parts_editor, _fmt_qty, _move, require_parts_editor
 
 router = APIRouter(tags=["parts orders"])
 
@@ -29,6 +30,15 @@ def _order(conn, order_id: int, lock: bool = False) -> dict:
     if not row:
         raise not_found("Parts order")
     return row
+
+
+def _line_editor(staff: dict, order: dict) -> None:
+    """Lines are changed by the parts team, or (on a work order's parts order) by anyone working on work orders."""
+    if _parts_editor(staff):
+        return
+    if order["work_order_id"] and (staff.get("is_admin") or {"work_orders", "customers", "parts"} & set(staff.get("menu") or [])):
+        return
+    raise HTTPException(403, "Only the parts team or an administrator can do this")
 
 
 def _editable(order: dict) -> None:
@@ -170,8 +180,9 @@ class LineIn(BaseModel):
 
 
 @router.post("/parts-orders/{order_id}/lines", status_code=201)
-def add_line(order_id: int, body: LineIn, conn=Depends(get_conn), staff=Depends(require_parts_editor)):
+def add_line(order_id: int, body: LineIn, conn=Depends(get_conn), staff=Depends(require_staff)):
     order = _order(conn, order_id, lock=True)
+    _line_editor(staff, order)
     _editable(order)
     qty = body.quantity.quantize(CENT)
     if body.part_id:
@@ -224,8 +235,9 @@ def _line(conn, order_id: int, line_id: int) -> dict:
 
 @router.patch("/parts-orders/{order_id}/lines/{line_id}")
 def edit_line(order_id: int, line_id: int, body: LinePatch, conn=Depends(get_conn),
-              staff=Depends(require_parts_editor)):
+              staff=Depends(require_staff)):
     order = _order(conn, order_id, lock=True)
+    _line_editor(staff, order)
     _editable(order)
     line = _line(conn, order_id, line_id)
     sent = body.model_dump(exclude_unset=True)
@@ -241,8 +253,9 @@ def edit_line(order_id: int, line_id: int, body: LinePatch, conn=Depends(get_con
 
 
 @router.delete("/parts-orders/{order_id}/lines/{line_id}", status_code=204)
-def delete_line(order_id: int, line_id: int, conn=Depends(get_conn), staff=Depends(require_parts_editor)):
+def delete_line(order_id: int, line_id: int, conn=Depends(get_conn), staff=Depends(require_staff)):
     order = _order(conn, order_id, lock=True)
+    _line_editor(staff, order)
     _editable(order)
     line = _line(conn, order_id, line_id)
     conn.execute("DELETE FROM parts_order_lines WHERE id = %s", (line_id,))
@@ -257,10 +270,21 @@ class StatusIn(BaseModel):
 
 @router.post("/parts-orders/{order_id}/status")
 def set_status(order_id: int, body: StatusIn, conn=Depends(get_conn), staff=Depends(require_parts_editor)):
+    order = _order(conn, order_id)
+    if order["work_order_id"] and conn.execute(
+            "SELECT 1 FROM work_orders WHERE id = %s AND status = 'invoiced'", (order["work_order_id"],)).fetchone():
+        raise conflict("The work order is invoiced: make a credit note first")
+    change_status(conn, order_id, body.status, staff["id"])
+    return {"ok": True}
+
+
+def change_status(conn, order_id: int, new: str, sid: int) -> None:
+    """Change a parts order's status; "done" = hand out (stock goes down), from "done" = undo (stock back).
+    Also used by invoices (routers/invoices.py): issuing hands the parts out, a credit note puts them back."""
     order = _order(conn, order_id, lock=True)
-    old, new, sid = order["status"], body.status, staff["id"]
+    old = order["status"]
     if old == new:
-        return {"ok": True}
+        return
     if old == "cancelled":
         raise conflict("A cancelled order can't be changed")
     lines = conn.execute("SELECT * FROM parts_order_lines WHERE order_id = %s AND part_id IS NOT NULL ORDER BY id",
@@ -305,4 +329,3 @@ def set_status(order_id: int, body: StatusIn, conn=Depends(get_conn), staff=Depe
         conn.execute("UPDATE parts_orders SET status = %s, updated_at = now() WHERE id = %s", (new, order_id))
     event(conn, "order_status", sid, order_id=order_id, data={"from": old, "to": new})
     touch(conn, order["customer_id"])
-    return {"ok": True}

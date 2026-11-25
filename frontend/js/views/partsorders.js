@@ -206,7 +206,7 @@ function addLine(o, rerender) {
 }
 
 /** New line (from a part or free text) or a change of an existing line (quantity, price). */
-function lineDialog(o, l, done) {
+export function lineDialog(o, l, done) {
   const isNew = !l.id;
   const part = l.part;
   const qty = numInput(isNew ? 1 : l.quantity, { qty: true });

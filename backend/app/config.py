@@ -50,6 +50,8 @@ class Setting:
 HOST_PATTERN = r"(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*"
 # A Norwegian organisation number: 9 digits, spaces allowed ("123 456 789").
 ORG_NO_PATTERN = r"[0-9]{3} ?[0-9]{3} ?[0-9]{3}"
+# Norwegian bank account: 11 digits, written 1234.56.78901 or with spaces / without.
+BANK_ACCOUNT_PATTERN = r"[0-9]{4}[ .]?[0-9]{2}[ .]?[0-9]{5}"
 # Breaks: "11:30-12:00" or several separated by commas (worktime.parse_breaks checks the times themselves).
 BREAKS_PATTERN = r"\s*[0-2]?\d[:.][0-5]\d\s*-\s*[0-2]?\d[:.][0-5]\d\s*(,\s*[0-2]?\d[:.][0-5]\d\s*-\s*[0-2]?\d[:.][0-5]\d\s*)*"
 ORG_NO_ERROR = "9 digits, e.g. 123 456 789"
@@ -176,6 +178,27 @@ SETTINGS: tuple[Setting, ...] = (
                  "11:30-12:00). An admin can change them for one person's day."),
     Setting("work_order_number_start", "First work order number", "Work hours", int, 1000, min=1, max=99999999,
             help="New work orders get the next free number from here (higher than any number in use)."),
+    # Invoicing (routers/invoices.py, 0.50.0). The seller is the Customer register company (else Company above).
+    Setting("labour_rate", "Hourly rate for labour (kr ex VAT)", "Invoicing", float, 0, min=0, max=100000,
+            help="Used for the labour on work orders unless a work order has its own rate."),
+    Setting("invoice_due_days", "Days to pay", "Invoicing", int, 14, min=0, max=120,
+            help="The due date is the invoice date plus this many days."),
+    Setting("invoice_bank_account", "Bank account number", "Invoicing", pattern=BANK_ACCOUNT_PATTERN,
+            pattern_error="11 digits, e.g. 1234.56.78901",
+            help="Printed on the invoices for payment."),
+    Setting("invoice_vat_registered", "Registered for VAT (MVA)", "Invoicing", default="on", choices=("on", "off"),
+            help="On: the invoices add VAT and show \"MVA\" after the organisation number. Off: no VAT is charged."),
+    Setting("invoice_foretaksregisteret", "Registered in Foretaksregisteret", "Invoicing", default="on",
+            choices=("on", "off"),
+            help="On: \"Foretaksregisteret\" is printed after the organisation number (required for e.g. AS)."),
+    Setting("invoice_kid", "KID number on invoices", "Invoicing", default="off", choices=("on", "off"),
+            help="On: each invoice gets a KID (the invoice number + a MOD10 check digit). Needs a KID agreement with "
+                 "the bank."),
+    Setting("invoice_number_start", "First invoice number", "Invoicing", int, 10000, min=1, max=99999999,
+            help="The first invoice gets this number; then they follow one by one without gaps."),
+    Setting("invoice_note", "Text at the bottom of invoices", "Invoicing",
+            help="E.g. \"Ved for sen betaling beregnes forsinkelsesrente etter forsinkelsesrenteloven.\" "
+                 "Printed as written (invoices are in Norwegian)."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),

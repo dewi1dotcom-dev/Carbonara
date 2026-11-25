@@ -28,7 +28,7 @@ from ..db import get_conn
 from ..worktime import OSLO, local
 from .customers import ORDERS_SELECT, touch
 from .hours import enabled as hours_enabled, start_day, stop_running
-from .parts import CENT, require_parts_editor
+from .parts import CENT
 
 router = APIRouter(tags=["work orders"])
 
@@ -150,7 +150,7 @@ def _labour(conn, order_ids: list[int]) -> dict[int, int]:
 
 
 @router.get("/work-orders")
-def list_orders(show: Literal["active", "done", "cancelled", "all"] = "active", q: str = "",
+def list_orders(show: Literal["active", "done", "invoiced", "cancelled", "all"] = "active", q: str = "",
                 vehicle_id: Optional[int] = None, customer_car_id: Optional[int] = None,
                 customer_id: Optional[int] = None, conn=Depends(get_conn), _staff=Depends(require_work_orders)):
     where, params = [], []
@@ -262,6 +262,7 @@ def _expected_done(conn, o: dict, labour: int) -> Optional[str]:
 
 @router.get("/work-orders/{wo_id}")
 def get_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_orders)):
+    from . import invoices  # invoices imports this module
     o = _order(conn, wo_id)
     out = conn.execute(WO_SELECT + " WHERE w.id = %s", (wo_id,)).fetchone()
     extra = conn.execute(
@@ -288,8 +289,9 @@ def get_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_ord
                         "AND ended_at IS NULL", (wo_id, staff["id"])).fetchone()
     parts = conn.execute(ORDERS_SELECT + " WHERE o.work_order_id = %s ORDER BY o.created_at", (wo_id,)).fetchall()
     lines = conn.execute(
-        """SELECT l.*, o.order_no, o.status AS order_status FROM parts_order_lines l
-             JOIN parts_orders o ON o.id = l.order_id
+        """SELECT l.*, o.order_no, o.status AS order_status, p.quantity AS stock, p.location,
+                  p.deleted_at IS NOT NULL AS part_deleted
+             FROM parts_order_lines l JOIN parts_orders o ON o.id = l.order_id LEFT JOIN parts p ON p.id = l.part_id
             WHERE o.work_order_id = %s AND o.status <> 'cancelled' ORDER BY o.order_no, l.id""", (wo_id,)).fetchall()
     parts_total = sum((l["quantity"] * (l["unit_price"] or 0) for l in lines), Decimal(0)).quantize(CENT)
     events = conn.execute(
@@ -300,7 +302,9 @@ def get_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_ord
             "planned_local": local(o["planned_at"]), "labour_seconds": labour, "entries": entries,
             "my_clock": local(mine["started_at"]) if mine else None,
             "expected_done": _expected_done(conn, o, labour), "parts_orders": parts, "parts_lines": lines,
-            "parts_total_ex": parts_total, "events": events, "hours_enabled": hours_enabled()}
+            "parts_total_ex": parts_total, "events": events, "hours_enabled": hours_enabled(),
+            "km": o["km"], "extra_lines": o["extra_lines"], "billing": invoices.billing(conn, o),
+            "invoices": invoices.work_order_invoices(conn, wo_id)}
 
 
 class WorkOrderPatch(BaseModel):
@@ -310,15 +314,34 @@ class WorkOrderPatch(BaseModel):
     estimated_minutes: Optional[int] = Field(None, gt=0, le=100_000)
     planned_at: Optional[str] = None
     assigned_to: Optional[int] = None
+    labour_rate: Optional[Decimal] = Field(None, ge=0, le=100_000)   # null = the System page rate
+    billed_minutes: Optional[int] = Field(None, ge=0, le=100_000)    # null = the clocked time, rounded up
+    km: Optional[int] = Field(None, ge=0, le=5_000_000)
+    customer_id: Optional[int] = None
+
+
+def _not_locked(o: dict) -> None:
+    """Cancelled and invoiced work orders can't be changed (an invoiced one: credit the invoice first)."""
+    if o["status"] == "cancelled":
+        raise conflict("The work order is cancelled")
+    if o["status"] == "invoiced":
+        raise conflict("The work order is invoiced: make a credit note first")
 
 
 @router.patch("/work-orders/{wo_id}")
 def edit_order(wo_id: int, body: WorkOrderPatch, conn=Depends(get_conn), staff=Depends(require_work_orders)):
     o = _order(conn, wo_id, lock=True)
-    if o["status"] == "cancelled":
-        raise conflict("The work order is cancelled")
+    _not_locked(o)
     sent = body.model_dump(exclude_unset=True)
     new = {}
+    for f in ("labour_rate", "billed_minutes", "km"):
+        if f in sent:
+            new[f] = sent[f]
+    if "customer_id" in sent:
+        if sent["customer_id"] and not conn.execute("SELECT 1 FROM customers WHERE id = %s",
+                                                    (sent["customer_id"],)).fetchone():
+            raise not_found("Customer")
+        new["customer_id"] = sent["customer_id"]
     for f, n in (("title", 120), ("description", 5000), ("mechanic_note", 5000)):
         if f in sent:
             new[f] = _text(sent[f], n)
@@ -336,7 +359,8 @@ def edit_order(wo_id: int, body: WorkOrderPatch, conn=Depends(get_conn), staff=D
     conn.execute(f"UPDATE work_orders SET {sets}, updated_at = now(), updated_by = %s WHERE id = %s",
                  (*[new[f] for f in changed], staff["id"], wo_id))
     data = {"fields": changed}
-    for f in ("estimated_minutes", "planned_at", "assigned_to"):  # short values; texts are never logged
+    for f in ("estimated_minutes", "planned_at", "assigned_to", "labour_rate", "billed_minutes", "km",
+              "customer_id"):  # short values and ids; texts are never logged
         if f in changed:
             data[f] = {"from": o[f], "to": new[f]}
     _event(conn, wo_id, "updated", staff["id"], data)
@@ -358,8 +382,7 @@ class TasksIn(BaseModel):
 def save_tasks(wo_id: int, body: TasksIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
     """The whole list (add, tick, untick, remove, reorder). Who ticked a task and when is kept."""
     o = _order(conn, wo_id, lock=True)
-    if o["status"] == "cancelled":
-        raise conflict("The work order is cancelled")
+    _not_locked(o)
     old = {t.get("id"): t for t in o["tasks"] or []}
     out, ticked = [], 0
     for t in body.tasks:
@@ -389,6 +412,8 @@ class StatusIn(BaseModel):
 @router.post("/work-orders/{wo_id}/status")
 def set_status(wo_id: int, body: StatusIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
     o = _order(conn, wo_id, lock=True)
+    if o["status"] == "invoiced":
+        raise conflict("The work order is invoiced: make a credit note first")
     if o["status"] == body.status:
         return {"id": wo_id}
     if body.status in ("done", "cancelled"):  # nobody keeps clocking on a finished order
@@ -428,12 +453,11 @@ def clock_start(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_o
 
 
 @router.post("/work-orders/{wo_id}/parts-order", status_code=201)
-def parts_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_parts_editor)):
+def parts_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_orders)):
     """The work order's parts order (one not handed out yet), made now if there is none."""
     from .parts_orders import new_order as new_parts_order  # parts_orders imports nothing from here
     o = _order(conn, wo_id)
-    if o["status"] == "cancelled":
-        raise conflict("The work order is cancelled")
+    _not_locked(o)
     row = conn.execute("SELECT id FROM parts_orders WHERE work_order_id = %s AND status IN ('open', 'ordered', "
                        "'arrived') ORDER BY created_at LIMIT 1", (wo_id,)).fetchone()
     if row:
@@ -442,3 +466,27 @@ def parts_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_parts_
                            reference=f"#{o['number']}", note=None, work_order_id=wo_id)
     _event(conn, wo_id, "parts_order", staff["id"], {"order_id": made["id"], "order_no": made["order_no"]})
     return made
+
+
+class ExtraLine(BaseModel):
+    text: str = Field(max_length=200)
+    quantity: Decimal = Field(default=Decimal(1), gt=0, le=100_000)
+    unit_price: Decimal = Field(ge=0, le=10_000_000)   # ex VAT
+    vat_rate: Decimal = Field(default=Decimal(25), ge=0, le=100)
+
+
+class ExtraLinesIn(BaseModel):
+    lines: list[ExtraLine] = Field(max_length=50)
+
+
+@router.put("/work-orders/{wo_id}/extra-lines")
+def save_extra_lines(wo_id: int, body: ExtraLinesIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
+    """Other charges on the invoice (e.g. an environmental fee, consumables): text, quantity, price ex VAT, VAT."""
+    o = _order(conn, wo_id, lock=True)
+    _not_locked(o)
+    lines = [{"text": " ".join(x.text.split()), "quantity": x.quantity, "unit_price": x.unit_price,
+              "vat_rate": x.vat_rate} for x in body.lines if x.text.strip()]
+    conn.execute("UPDATE work_orders SET extra_lines = %s, updated_at = now(), updated_by = %s WHERE id = %s",
+                 (Jsonb(lines, dumps=lambda v: json.dumps(v, default=str)), staff["id"], wo_id))
+    _event(conn, wo_id, "extra_lines", staff["id"], {"count": len(lines)})
+    return {"lines": lines}
