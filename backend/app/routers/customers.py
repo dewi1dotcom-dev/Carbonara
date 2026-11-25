@@ -15,7 +15,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
-from .. import vegvesen
+from .. import vegvesen, vinlib
 from ..auth import require_admin, require_staff
 from ..common import bad_request, cap_name, clean_phone, conflict, log_event, not_found, org_no
 from ..config import settings
@@ -266,7 +266,7 @@ def delete_customer(customer_id: int, conn=Depends(get_conn), _admin=Depends(req
 
 class CarIn(BaseModel):
     registration_number: Optional[str] = Field(None, max_length=12)
-    vin: Optional[str] = Field(None, max_length=20)
+    vin: Optional[str] = Field(None, max_length=40)
     make: Optional[str] = Field(None, max_length=60)
     model: Optional[str] = Field(None, max_length=80)
     color: Optional[str] = Field(None, max_length=40)
@@ -274,11 +274,31 @@ class CarIn(BaseModel):
     model_year: Optional[int] = Field(None, ge=1900, le=2100)
     first_registered: Optional[str] = Field(None, max_length=10)
     note: Optional[str] = Field(None, max_length=1000)
+    chassis_checked: bool = False   # an older chassis number (not the 17-character VIN) was checked on the car
 
 
-def _car_fields(body: CarIn) -> dict:
+def _vin_or_chassis(body: CarIn, reg: Optional[str], keep: Optional[str] = None) -> tuple[Optional[str], bool]:
+    """(VIN, older): a 17-character VIN, or an older car's chassis number that Statens vegvesen has for this reg. no.
+    and a person checked on the car (0.54.0)."""
+    raw = re.sub(r"[\s\-.]", "", body.vin or "").upper()
+    if not raw or re.fullmatch(r"[A-HJ-NPR-Z0-9]{17}", raw):
+        return raw or None, False
+    if keep and raw == keep:  # an older chassis number already checked when it was saved
+        return raw, True
+    if not (vinlib.is_chassis_format(raw) and body.chassis_checked):
+        return _vin(raw), False  # raises the usual VIN message
+    try:
+        vegvesen.verify_chassis(raw, reg or "")
+    except ValueError as exc:
+        raise bad_request(str(exc))
+    return raw, True
+
+
+def _car_fields(body: CarIn, keep: Optional[str] = None) -> dict:
+    reg = _reg(body.registration_number)
+    vin, older = _vin_or_chassis(body, reg, keep)
     f = {
-        "registration_number": _reg(body.registration_number), "vin": _vin(body.vin),
+        "registration_number": reg, "vin": vin, "vin_nonstandard": older,
         "make": _text(body.make, 60), "model": _text(body.model, 80), "color": _text(body.color, 40),
         "fuel_type": _text(body.fuel_type, 40), "model_year": body.model_year,
         "first_registered": body.first_registered if re.fullmatch(r"\d{4}-\d{2}-\d{2}", body.first_registered or "")
@@ -331,7 +351,8 @@ def lookup(reg: str, _staff=Depends(require_register)):
 
 def _find(conn, reg: str, vin: str) -> Optional[dict]:
     """A car already in the register with this reg. no or VIN, with its current owner."""
-    reg, vin = _reg(reg) if reg.strip() else None, _vin(vin) if vin.strip() else None
+    reg = _reg(reg) if reg.strip() else None
+    vin = re.sub(r"[\s\-.]", "", vin).upper() or None  # any chassis number (older cars too) is looked for as typed
     if not (reg or vin):
         return None
     return conn.execute(
@@ -418,8 +439,8 @@ def get_car(car_id: int, conn=Depends(get_conn), _staff=Depends(require_register
 
 @router.put("/customer-cars/{car_id}")
 def edit_car(car_id: int, body: CarIn, conn=Depends(get_conn), staff=Depends(require_register)):
-    _car(conn, car_id)
-    f = _car_fields(body)
+    old = _car(conn, car_id)
+    f = _car_fields(body, keep=old["vin"] if old["vin_nonstandard"] else None)
     _check_vin(conn, f["vin"], exclude=car_id)
     conn.execute(f"UPDATE customer_cars SET {', '.join(f'{k} = %s' for k in f)}, updated_at = now() WHERE id = %s",
                  (*f.values(), car_id))
@@ -529,11 +550,11 @@ def transfer(vehicle_id: int, body: TransferIn, conn=Depends(get_conn), staff=De
                                updated_at = now() WHERE id = %s""", (vehicle_id, sid, car_id))
     else:
         car_id = conn.execute(
-            """INSERT INTO customer_cars (registration_number, vin, make, model, color, fuel_type, model_year,
-                                          vehicle_id, consent_at, consent_by, created_by)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), %s, %s) RETURNING id""",
-            (v["registration_number"], v["vin"], v["make"], v["model"], v["color"], v["fuel_type"], v["model_year"],
-             vehicle_id, sid, sid)).fetchone()["id"]
+            """INSERT INTO customer_cars (registration_number, vin, vin_nonstandard, make, model, color, fuel_type,
+                                          model_year, vehicle_id, consent_at, consent_by, created_by)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, now(), %s, %s) RETURNING id""",
+            (v["registration_number"], v["vin"], v.get("vin_nonstandard", False), v["make"], v["model"], v["color"],
+             v["fuel_type"], v["model_year"], vehicle_id, sid, sid)).fetchone()["id"]
         event(conn, "car_created", sid, car_id=car_id)
     set_owner(conn, car_id, customer["id"], sid)
     event(conn, "transferred_from_car_database", sid, car_id=car_id, data={"vehicle_id": vehicle_id, "consent": True})

@@ -123,6 +123,10 @@ class IntakeIn(BaseModel):
     # differences the inspector confirmed on the arrival screen (registry wins).
     use_registry: bool = False
     accept_fields: list[str] = []
+    # An older chassis number (not the 17-character VIN, 0.54.0): accepted only when Statens vegvesen has it for this
+    # registration number and the inspector ticked that it was checked on the car.
+    registration_number: Optional[str] = Field(None, max_length=20)
+    chassis_checked: bool = False
 
 
 class ResolveMismatchIn(BaseModel):

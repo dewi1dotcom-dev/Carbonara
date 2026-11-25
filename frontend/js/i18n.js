@@ -246,6 +246,18 @@ const NO = {
   'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
   'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
   'Sales price ex VAT': 'Utsalgspris eks. mva.',
+  // Older chassis numbers (0.54.0)
+  'Older chassis number.': 'Eldre understellsnummer.',
+  'This car is from before the 17-character VIN, so Carbonara can’t check the number itself. It is taken as Statens vegvesen has it. Compare it with the number on the car before you start.': 'Denne bilen er fra før det 17-tegns understellsnummeret, så Carbonara kan ikke sjekke nummeret selv. Det tas slik Statens vegvesen har det. Sammenlign det med nummeret på bilen før du starter.',
+  'I have checked the chassis number on the car': 'Jeg har sjekket understellsnummeret på bilen',
+  'Older chassis number from Statens vegvesen (not the 17-character VIN).': 'Eldre understellsnummer fra Statens vegvesen (ikke det 17-tegns understellsnummeret).',
+  'Older chassis number (not the 17-character VIN). It is accepted as Statens vegvesen has it for this registration number. Compare it with the car.': 'Eldre understellsnummer (ikke det 17-tegns understellsnummeret). Det godtas slik Statens vegvesen har det for dette registreringsnummeret. Sammenlign det med bilen.',
+  'Tick that you have checked the chassis number on the car': 'Kryss av for at du har sjekket understellsnummeret på bilen',
+  'An older chassis number can only be checked with Statens vegvesen, which is not set up': 'Et eldre understellsnummer kan bare sjekkes mot Statens vegvesen, som ikke er satt opp',
+  'Find the car by its registration number first (Statens vegvesen gives the chassis number)': 'Finn bilen med registreringsnummeret først (Statens vegvesen gir understellsnummeret)',
+  'Statens vegvesen does not know this registration number': 'Statens vegvesen kjenner ikke dette registreringsnummeret',
+  'The chassis number differs from the one Statens vegvesen has for this registration number': 'Understellsnummeret er forskjellig fra det Statens vegvesen har for dette registreringsnummeret',
+  'The registration number now belongs to another chassis number': 'Registreringsnummeret tilhører nå et annet understellsnummer',
   // Customer register: cars tab (0.53.0)
   'Search cars': 'Søk i biler',
   'Reg. no., VIN, make, model, owner': 'Reg.nr., VIN, merke, modell, eier',

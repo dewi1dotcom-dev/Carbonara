@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…051
+  migrations/           001…052
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -329,6 +329,7 @@ frontend/               no build step; plain ES modules
 | 049 | `planner` | `planner_rows` (team, staff, sort, hidden: the lines of a team's planner), `absences` (staff, kind holiday / away / course / other, start, end, note); teams with Work orders get `planner` |
 | 050 | `work_order_arrival` | `work_orders.arrived_at`, `car_deliveries.work_order_id` |
 | 051 | `delivery_customer_car` | `car_deliveries.customer_car_id` (kiosk deliveries link to the workshop's register, not the car stock) |
+| 052 | `older_chassis_numbers` | `vehicles.vin_nonstandard` (the VIN check now allows 4–30 letters / digits when it is set), `customer_cars.vin_nonstandard` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -376,6 +377,15 @@ plates exist and are offered as "custom".
 - Check-digit repair (a single look-alike swap) is only attempted where the check digit is
   mandatory.
 - Make comes from the WMI table and model year from position 10 (`describe()`).
+- **Older chassis numbers (0.54.0, the user's request: veteran cars):** cars from before the 17-character VIN have
+  chassis numbers of other lengths (and may use I / O / Q). They are accepted **only as Statens vegvesen has them, after a
+  check**: the arrival screen ("Find VIN" by reg. no.) and the customer register's car form (lookup by reg. no.) show
+  "Older chassis number" with a required "I have checked the chassis number on the car"; the server
+  (`vegvesen.verify_chassis`) looks the reg. no. up again and accepts the number only if it equals SVV's chassis number
+  (spaces / dashes / dots ignored, `chassis_key`); then `vin_nonstandard` = true (4–30 A–Z / 0–9, `vinlib.CHASSIS_RE`),
+  and no VIN rules, check digit or make decoding apply. Such a car is re-synced by its reg. no. (checked against the
+  chassis number). Saving an unchanged older chassis number again needs no new check. Registration numbers already
+  accept any 2–8 letters / digits (Æ Ø Å included), so older plates work.
 
 **OCR pipeline** (`vinlib.recognize_all`):
 - **Order:** barcodes first (zbar, then libdmtx). Then RapidOCR passes: normal → label-line
@@ -1776,6 +1786,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.52.2 | Top bar clock: weekday and date as dd.mm.yyyy, the time to the right of it |
 | 0.53.0 | Workshop and sales kept apart: Customers page gets a **Cars** tab (the workshop's customer cars, searchable, owner, open work orders); kiosk deliveries link to the customer register instead of the car stock (migration 051) |
 | 0.53.1 | Kiosk: booked cars show from 07:00 the working day before the appointment (Monday: from Friday); a typed reg. no. of a booked car also marks it as arrived, without tapping it in the list |
+| 0.54.0 | Veteran cars: older chassis numbers (not the 17-character VIN) accepted as Statens vegvesen has them, after a "checked on the car" tick, at arrival and in the customer register (migration 052) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

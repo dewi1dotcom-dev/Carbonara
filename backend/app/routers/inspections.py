@@ -159,8 +159,16 @@ def _first_arrival(conn, vehicle_id: int, inspection_id: int) -> bool:
 @router.post("/intake", status_code=201)
 def start_intake(body: IntakeIn, conn=Depends(get_conn)):
     vin = vinlib.normalize(body.vin)
+    older = False
     if not vinlib.is_valid_format(vin):
-        raise bad_request("VIN must be 17 characters: A–Z and 0–9, without I, O or Q")
+        # An older car's chassis number (0.54.0): only as Statens vegvesen has it, after a check on the car.
+        if not (vinlib.is_chassis_format(vin) and body.chassis_checked):
+            raise bad_request("VIN must be 17 characters: A–Z and 0–9, without I, O or Q")
+        try:
+            vegvesen.verify_chassis(vin, body.registration_number or "")
+        except ValueError as exc:
+            raise bad_request(str(exc))
+        older = True
     _check_staff(conn, body.inspector_id)
 
     vehicle = conn.execute("SELECT * FROM vehicles WHERE vin = %s FOR UPDATE", (vin,)).fetchone()
@@ -174,6 +182,8 @@ def start_intake(body: IntakeIn, conn=Depends(get_conn)):
         vehicle = None
     if vehicle is None:
         details = body.vehicle.model_dump(exclude_none=True) if body.vehicle else {}
+        if older:  # no VIN rules apply; the reg. no. is how Statens vegvesen finds it later
+            details.update(vin_nonstandard=True, registration_number=vegvesen.normalize_regnr(body.registration_number))
         try:
             vehicle = insert_row(conn, "vehicles", {"vin": vin, "status": "intake", **details})
         except errors.UniqueViolation:

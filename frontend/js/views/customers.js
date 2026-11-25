@@ -214,7 +214,7 @@ function carForm(customerId, car, done) {
   const text = (value, max, attrs = {}) => h('input', { type: 'text', maxlength: max, autocomplete: 'off', value: value ?? '', ...attrs });
   const inputs = {
     registration_number: text(c.registration_number, 12, { class: 'mono' }),
-    vin: text(c.vin, 20, { class: 'mono' }),
+    vin: text(c.vin, 40, { class: 'mono' }),
     make: text(c.make, 60), model: text(c.model, 80),
     model_year: text(c.model_year, 4, { inputmode: 'numeric' }),
     color: text(c.color, 40), fuel_type: text(c.fuel_type, 40),
@@ -228,12 +228,26 @@ function carForm(customerId, car, done) {
     const r = await api.get(`/customer-cars/lookup?reg=${encodeURIComponent(reg)}`);
     for (const k of CAR_FIELDS) if (r[k] != null && k in inputs && k !== 'note') inputs[k].value = r[k];
     toast('Filled in from Statens vegvesen', 'success');
+    syncChassis();
   }));
+  // An older car's chassis number (0.54.0): not the 17-character VIN. Saved only as Statens vegvesen has it for the
+  // reg. no., after someone ticks that it was checked on the car (the server checks Statens vegvesen again).
+  const chassisCheck = h('input', { type: 'checkbox' });
+  const chassisBox = h('div', { class: 'notice warn', hidden: true },
+    h('span', {}, 'Older chassis number (not the 17-character VIN). It is accepted as Statens vegvesen has it for this registration number. Compare it with the car.'),
+    h('label', { class: 'check' }, chassisCheck, h('span', {}, 'I have checked the chassis number on the car')));
+  const syncChassis = () => {
+    const v = inputs.vin.value.toUpperCase().replace(/[\s\-.]/g, '');
+    chassisBox.hidden = !v || /^[A-HJ-NPR-Z0-9]{17}$/.test(v) || !!c.vin_nonstandard && v === c.vin;
+  };
+  inputs.vin.addEventListener('input', syncChassis);
+  syncChassis();
   const ok = h('button', { class: 'btn primary', type: 'submit' }, car ? 'Save' : 'Add car');
   const form = h('form', {},
     h('div', { class: 'field' }, h('label', {}, 'Registration number'),
       h('div', { class: 'toolbar' }, inputs.registration_number, lookupBtn)),
-    field('VIN', inputs.vin),
+    field('VIN (chassis number)', inputs.vin),
+    chassisBox,
     h('div', { class: 'grid' }, field('Make', inputs.make), field('Model', inputs.model), field('Model year', inputs.model_year),
       field('Colour', inputs.color), field('Fuel', inputs.fuel_type), field('First registered', inputs.first_registered)),
     field('Note', inputs.note),
@@ -243,6 +257,9 @@ function carForm(customerId, car, done) {
     const body = Object.fromEntries(CAR_FIELDS.map((k) => [k, inputs[k].value?.trim?.() ?? inputs[k].value]));
     body.model_year = body.model_year ? Number(body.model_year) : null;
     for (const k of Object.keys(body)) if (body[k] === '') body[k] = null;
+    // An unchanged older chassis number was checked when it was saved.
+    body.chassis_checked = chassisCheck.checked || (!!c.vin_nonstandard && (body.vin || '').toUpperCase().replace(/[\s\-.]/g, '') === c.vin);
+    if (!chassisBox.hidden && !chassisCheck.checked) { toast('Tick that you have checked the chassis number on the car', 'error'); return; }
     busy(ok, async () => {
       if (car) {
         await api.put(`/customer-cars/${car.id}`, body);

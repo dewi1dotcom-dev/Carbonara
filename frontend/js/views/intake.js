@@ -22,7 +22,15 @@ export async function intakeView(el) {
 
   // registry: Statens vegvesen lookup for the current VIN; accept: checkboxes
   // for differences the inspector confirms (take the registry value).
-  const state = { vinSource: 'manual', vinPhoto: null, lookup: null, registry: null, accept: {} };
+  const state = { vinSource: 'manual', vinPhoto: null, lookup: null, registry: null, accept: {}, chassis: null, chassisChecked: false };
+  // An older car's chassis number (0.54.0): not the 17-character VIN. Accepted only as Statens vegvesen has it for the
+  // reg. no. (state.chassis = { vin, regnr }) and after the inspector ticks that it was checked on the car.
+  const chassisCase = () => !!state.chassis && state.chassis.vin === currentVin() && !vinFormatOk(currentVin());
+  const chassisCheck = h('input', { type: 'checkbox', id: 'chassis-checked' });
+  const chassisBox = h('div', { class: 'card notice warn', hidden: true },
+    h('strong', {}, 'Older chassis number. '),
+    h('span', {}, 'This car is from before the 17-character VIN, so Carbonara can’t check the number itself. It is taken as Statens vegvesen has it. Compare it with the number on the car before you start.'),
+    h('label', { class: 'check' }, chassisCheck, h('span', {}, 'I have checked the chassis number on the car')));
 
   const inspectorSel = h('select', { id: 'inspector', required: true },
     h('option', { value: '' }, 'Select inspector…'),
@@ -55,7 +63,13 @@ export async function intakeView(el) {
     const vin = currentVin();
     vinStatus.replaceChildren();
     vinStatus.className = 'vin-status';
+    chassisBox.hidden = !chassisCase();
     if (!vin) return;
+    if (chassisCase()) {
+      vinStatus.classList.add('warn');
+      vinStatus.append('Older chassis number from Statens vegvesen (not the 17-character VIN).');
+      return;
+    }
     const bad = vin.match(/[IOQ]/g);
     if (bad) {
       vinStatus.classList.add('bad');
@@ -81,14 +95,15 @@ export async function intakeView(el) {
   function updateStart() {
     const lk = state.lookup;
     const blocked = lk?.existing_vehicle?.status === 'in_storage' && !lk.open_inspection_id;
-    startBtn.disabled = !(vinFormatOk(currentVin()) && inspectorSel.value && lk && lk.vin === currentVin() && !blocked);
+    const vinOk = vinFormatOk(currentVin()) || (chassisCase() && state.chassisChecked);
+    startBtn.disabled = !(vinOk && inspectorSel.value && lk && lk.vin === currentVin() && !blocked);
     startBtn.textContent = lk?.open_inspection_id ? 'Continue inspection' : 'Start inspection';
   }
 
   const doLookup = debounce(async () => {
     const vin = currentVin();
-    if (!vinFormatOk(vin)) return;
-    if (state.registry?.vin !== vin) fetchRegistry({ vin });
+    if (!vinFormatOk(vin) && !chassisCase()) return;
+    if (state.registry?.vin !== vin && !chassisCase()) fetchRegistry({ vin });
     try {
       const res = await api.get(`/vin/${vin}`);
       if (res.vin !== currentVin()) return; // input changed meanwhile
@@ -189,9 +204,13 @@ export async function intakeView(el) {
       } else {
         regStatusLine.classList.add('good');
         regStatusLine.textContent = `✓ Found — VIN filled in from Statens vegvesen`;
-        state.registry.key = res.vin; // the registry result belongs to this VIN now
-        state.registry.vin = res.vin;
-        vinInput.value = res.vin;
+        const found = normalizeVin(res.vin);
+        state.registry.key = found; // the registry result belongs to this VIN now
+        state.registry.vin = found;
+        state.chassis = vinFormatOk(found) ? null : { vin: found, regnr };
+        state.chassisChecked = false;
+        chassisCheck.checked = false;
+        vinInput.value = found;
         onVinChanged();
         state.vinSource = 'registry';
       }
@@ -256,6 +275,7 @@ export async function intakeView(el) {
     onVinChanged();
   });
   inspectorSel.addEventListener('change', () => { setInspectorId(inspectorSel.value); updateStart(); });
+  chassisCheck.addEventListener('change', () => { state.chassisChecked = chassisCheck.checked; updateStart(); });
 
   async function scanPhoto(file) {
     state.vinPhoto = file;
@@ -333,6 +353,8 @@ export async function intakeView(el) {
       vehicle: state.lookup?.vin === currentVin() && (state.lookup.make || state.lookup.model_year)
         ? { make: state.lookup.make || null, model_year: state.lookup.model_year || null } : null,
       use_registry: true, // the server pulls Statens vegvesen data if the API key is configured
+      registration_number: chassisCase() ? state.chassis.regnr : null,
+      chassis_checked: chassisCase() && state.chassisChecked,
       accept_fields: reg?.found && reg.vin === currentVin()
         ? Object.entries(state.accept).filter(([, on]) => on).map(([f]) => f) : [],
     });
@@ -357,6 +379,7 @@ export async function intakeView(el) {
       h('label', { for: 'vin' }, 'VIN (chassis number)'),
       vinInput,
       vinStatus,
+      chassisBox,
       h('div', { class: 'row' }, scanBtn),
       h('p', { class: 'muted small' },
         'Tip: photograph the registration plate, the VIN plate at the bottom of the windscreen, the label in the driver door frame (barcode), or the registration document. The photo does not need to be level.'),

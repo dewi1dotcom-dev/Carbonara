@@ -27,11 +27,12 @@ def lookup_vin(vin: str, conn=Depends(get_conn)):
     registered (see vehicles router)."""
     vin = vinlib.normalize(vin)
     result = vinlib.describe(vin)
-    result.update(existing_vehicle=None, open_inspection_id=None, similar=[])
-    if not result["valid_format"]:
+    result.update(existing_vehicle=None, open_inspection_id=None, similar=[],
+                  chassis=not result["valid_format"] and vinlib.is_chassis_format(vin))
+    if not result["valid_format"] and not result["chassis"]:
         return result
-    # A car with a VIN one character away is probably this car with a typo.
-    result["similar"] = [s for s in similar_vehicles(conn, vin) if s["reason"] == "similar_vin"]
+    if result["valid_format"]:  # a car with a VIN one character away is probably this car with a typo
+        result["similar"] = [s for s in similar_vehicles(conn, vin) if s["reason"] == "similar_vin"]
 
     vehicle = conn.execute(
         """SELECT id, vin, make, model, model_year, color, registration_number, status

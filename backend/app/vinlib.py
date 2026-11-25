@@ -46,6 +46,15 @@ def is_valid_format(vin: str) -> bool:
     return bool(VIN_RE.match(vin))
 
 
+# Older cars (veteran cars; before the 17-character VIN of 1981) have chassis numbers of other lengths, and may use
+# I, O and Q. Accepted only as Statens vegvesen has them, after a person checked them on the car (0.54.0).
+CHASSIS_RE = re.compile(r"^[A-Z0-9]{4,30}$")
+
+
+def is_chassis_format(value: str) -> bool:
+    return bool(CHASSIS_RE.match(value))
+
+
 def check_digit(vin: str) -> str:
     total = sum(_TRANSLIT[c] * w for c, w in zip(vin, _WEIGHTS))
     r = total % 11

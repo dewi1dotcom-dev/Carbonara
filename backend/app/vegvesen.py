@@ -11,6 +11,7 @@ import datetime as dt
 import hashlib
 import json
 import logging
+import re
 from decimal import Decimal
 
 import httpx
@@ -90,10 +91,32 @@ def fetch_by_regnr(regnr: str) -> dict:
     return items[0]
 
 
+def chassis_key(value: str) -> str:
+    """A chassis number compared without spaces, dashes and dots (older ones are written with them)."""
+    return re.sub(r"[\s\-.]", "", value or "").upper()
+
+
+def verify_chassis(chassis: str, regnr: str) -> None:
+    """An older chassis number (not the 17-character VIN) is accepted only when Statens vegvesen has exactly this
+    chassis number for this registration number (0.54.0). Raises ValueError with the reason."""
+    if not is_configured():
+        raise ValueError("An older chassis number can only be checked with Statens vegvesen, which is not set up")
+    if not normalize_regnr(regnr):
+        raise ValueError("Find the car by its registration number first (Statens vegvesen gives the chassis number)")
+    try:
+        item = fetch_by_regnr(regnr)
+    except NotFound:
+        raise ValueError("Statens vegvesen does not know this registration number")
+    except RegistryError as exc:
+        raise ValueError(f"Statens vegvesen: {exc}")
+    if chassis_key(dig(item, "kjoretoyId", "understellsnummer") or "") != chassis_key(chassis):
+        raise ValueError("The chassis number differs from the one Statens vegvesen has for this registration number")
+
+
 def fetch_by_vin(vin: str) -> dict:
     items = _fetch({"understellsnummer": vin})
     for item in items:
-        if (dig(item, "kjoretoyId", "understellsnummer") or "").upper() == vin:
+        if chassis_key(dig(item, "kjoretoyId", "understellsnummer") or "") == chassis_key(vin):
             return item
     if len(items) == 1 and not dig(items[0], "kjoretoyId", "understellsnummer"):
         return items[0]
@@ -472,7 +495,13 @@ def sync_vehicle(conn, vehicle_id: int, accept=()) -> dict:
     now = dt.datetime.now(dt.timezone.utc)
 
     try:
-        item = fetch_by_vin(vehicle["vin"])
+        if vehicle.get("vin_nonstandard") and vehicle.get("registration_number"):
+            # An older chassis number (0.54.0): looked up by the reg. no., then checked against the chassis number.
+            item = fetch_by_regnr(vehicle["registration_number"])
+            if chassis_key(dig(item, "kjoretoyId", "understellsnummer") or "") != chassis_key(vehicle["vin"]):
+                raise RegistryError("The registration number now belongs to another chassis number")
+        else:
+            item = fetch_by_vin(vehicle["vin"])
     except NotFound as exc:
         _set_registry(conn, vehicle_id, {
             "sync_status": "not_found", "last_attempt_at": now, "last_error": str(exc),
