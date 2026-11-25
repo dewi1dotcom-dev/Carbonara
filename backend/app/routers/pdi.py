@@ -365,14 +365,37 @@ def _work_order(text: str) -> str:
     return value
 
 
+class ConfirmIn(BaseModel):
+    work_order: Optional[str] = Field(None, max_length=40)
+    create_work_order: bool = False   # give the PDI a work order in Carbonara and use its number (0.49.0)
+
+
+def _carbonara_work_order(conn, row: dict, staff_id: int) -> str:
+    """The PDI's work order in Carbonara (made now if it has none): the order items become its list of tasks."""
+    from .work_orders import create_work_order  # work_orders imports nothing from here
+    if row.get("work_order_id"):
+        wo = conn.execute("SELECT number FROM work_orders WHERE id = %s", (row["work_order_id"],)).fetchone()
+        if wo:
+            return str(wo["number"])
+    tasks = [f"{i.get('label')}: {i['choice']}" if i.get("choice") else str(i.get("label") or "")
+             for i in row["items"] or []]
+    if row.get("other"):
+        tasks.append(row["other"])
+    wo = create_work_order(conn, staff_id, vehicle_id=row["vehicle_id"], title="PDI", tasks=tasks,
+                           description=row.get("note"), planned_at=row["pdi_at"], pdi_order_id=row["id"])
+    conn.execute("UPDATE pdi_orders SET work_order_id = %s WHERE id = %s", (wo["id"], row["id"]))
+    return str(wo["number"])
+
+
 @router.post("/pdi/{order_id}/confirm")
-def confirm_date(order_id: int, body: WorkOrderIn, request: Request, conn=Depends(get_conn)):
+def confirm_date(order_id: int, body: ConfirmIn, request: Request, conn=Depends(get_conn)):
     """Confirm the PDI date (e.g. the workshop agrees to it), with the workshop's
-    work order number. A new date clears the confirmation (the number stays)."""
+    work order number, or one made in Carbonara. A new date clears the confirmation (the number stays)."""
     row = _open_order(conn, order_id)
     if row["status"] != "booked" or row["pdi_at"] is None:
         raise conflict("Enter the PDI date first")
-    work_order = _work_order(body.work_order)
+    work_order = (_carbonara_work_order(conn, row, _me(request)) if body.create_work_order
+                  else _work_order(body.work_order or ""))
     conn.execute("UPDATE pdi_orders SET pdi_confirmed_at = now(), pdi_confirmed_by = %s, work_order = %s "
                  "WHERE id = %s",
                  (_me(request), work_order, order_id))

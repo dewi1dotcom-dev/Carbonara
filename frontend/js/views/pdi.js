@@ -492,15 +492,22 @@ export function confirmDate(o, done) {
   const wo = h('input', { type: 'text', id: 'pdi-work-order', maxlength: 40, required: true, autocomplete: 'off',
     value: o.work_order ?? '', placeholder: 'e.g. 123456' });
   const save = h('button', { class: 'btn primary', type: 'submit' }, '✓ Confirm PDI date');
+  // Work orders in Carbonara (0.49.0): the PDI can get its number from there (its items become the task list).
+  const offer = canSee('work_orders') && !o.work_order;
+  const make = offer ? h('input', { type: 'checkbox' }) : null;
+  const typed = h('div', { class: 'field' }, h('label', { for: 'pdi-work-order' }, 'Work order no. *'), wo,
+    h('div', { class: 'muted small' }, 'The workshop’s work order number for this PDI. It is printed on the PDI sheet.'));
+  const sync = () => { typed.hidden = !!make?.checked; wo.required = !make?.checked; };
+  make?.addEventListener('change', sync);
   const form = h('form', {},
     h('p', {}, h('strong', {}, carText(o)), ` · PDI ${fmtDate(o.pdi_at)}`),
-    h('div', { class: 'field' }, h('label', { for: 'pdi-work-order' }, 'Work order no. *'), wo,
-      h('div', { class: 'muted small' }, 'The workshop’s work order number for this PDI. It is printed on the PDI sheet.')),
+    offer ? h('label', { class: 'check' }, make, h('span', {}, 'Make a work order in Carbonara and use its number')) : null,
+    typed,
     h('div', { class: 'actions' }, save));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(save, async () => {
-      await api.post(`/pdi/${o.id}/confirm`, { work_order: wo.value });
+      await api.post(`/pdi/${o.id}/confirm`, make?.checked ? { create_work_order: true } : { work_order: wo.value });
       close();
       toast('PDI date confirmed', 'success');
       await done();
@@ -536,7 +543,9 @@ export function workOrderDialog(o, done) {
 export function workOrderLine(o, done) {
   if (o.status === 'cancelled') return null;
   return h('div', { class: 'small pdi-wo' },
-    o.work_order ? h('span', {}, 'Work order no. ', h('strong', { class: 'mono' }, o.work_order), ' ') : null,
+    o.work_order ? h('span', {}, 'Work order no. ', o.work_order_id && canSee('work_orders')
+      ? h('a', { href: `#/work-orders/${o.work_order_id}` }, h('strong', { class: 'mono' }, o.work_order))
+      : h('strong', { class: 'mono' }, o.work_order), ' ') : null,
     h('button', { class: 'link', type: 'button', onClick: () => workOrderDialog(o, done) },
       o.work_order ? 'Change' : 'Add work order no.'));
 }

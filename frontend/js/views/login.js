@@ -28,7 +28,7 @@ export function loginView(el, state, onDone) {
   // auth.MODULE_ITEMS keys).
   const modules = setup ? [
     ['module_cars', 'Car sales and stock', 'Arrivals, vehicles, PDI orders, storage, test drives'],
-    ['module_workshop', 'Workshop customers and parts', 'Customer register, parts store and parts orders, customer car deliveries'],
+    ['module_workshop', 'Workshop customers and parts', 'Customer register, work orders, parts store and parts orders, customer car deliveries'],
     ['module_rental', 'Rental cars', 'Your own rental / loan cars'],
   ].map(([key, label, help]) => ({ key, box: h('input', { type: 'checkbox', checked: true }), label, help })) : [];
 

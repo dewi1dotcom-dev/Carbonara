@@ -16,6 +16,8 @@ import { marketView } from './views/market.js';
 import { partsView } from './views/parts.js';
 import { partsOrdersView, partsOrderView } from './views/partsorders.js';
 import { customerCarView, customersView, customerView } from './views/customers.js';
+import { clockPanel, hoursView } from './views/hours.js';
+import { workOrdersView, workOrderView } from './views/workorders.js';
 import { notificationsDialog, pushLogout, syncPush } from './views/notifications.js';
 import { pdiListView, prepDialog } from './views/pdi.js';
 import { pdiOrdersView } from './views/pdiorders.js';
@@ -53,6 +55,9 @@ const routes = [
   [/^#\/customers$/, customersView, 'customers'], // customer register (kept apart from the car database)
   [/^#\/customers\/(\d+)$/, customerView, 'customers'],
   [/^#\/customer-cars\/(\d+)$/, customerCarView, 'customers'],
+  [/^#\/work-orders$/, workOrdersView, 'work_orders'], // work orders: car + work + reply + labour + parts
+  [/^#\/work-orders\/(\d+)$/, workOrderView, 'work_orders'],
+  [/^#\/hours$/, hoursView, 'hours'], // work hours of everyone: admins only (canSee)
   [/^#\/messages$/, dmListView, 'messages'], // private messages: every user, whatever the team
   [/^#\/messages\/(\d+)$/, dmChatView, 'messages'],
   [/^#\/notes$/, notesView, 'notes'], // my notes as a page (a reminder notification opens it); usually the 📝 panel
@@ -72,7 +77,8 @@ async function render() {
   refreshNotify(); // not awaited: the page doesn't wait for the notification bar
   refreshDm();
   refreshNotes();
-  const hash = (location.hash || '#/').split('?')[0]; // "?…" holds page filters, not part of the route
+  refreshClock();
+  const hash =(location.hash || '#/').split('?')[0]; // "?…" holds page filters, not part of the route
   const match = routes.map(([re, view, nav]) => [hash.match(re), view, nav]).find(([m]) => m);
 
   // Each navigation renders into a fresh container, so a slow, stale view
@@ -175,6 +181,26 @@ async function refreshNotes() {
 setInterval(refreshNotes, 60 * 1000); // a reminder becomes due without navigating
 window.addEventListener('carbonara:notes-changed', refreshNotes);
 
+// ⏱ Work hours (0.49.0): start / end my day and the running work order clock. Marked while the day is started or a
+// clock runs. Hidden when work hours are off on the System page and no clock runs.
+const clockButton = h('button', {
+  class: 'user-btn dm-btn clock-btn', type: 'button', title: 'Work hours', 'aria-label': 'Work hours', hidden: true,
+  onClick: clockPanel,
+}, '⏱');
+
+async function refreshClock() {
+  if (!session.me) return;
+  let st;
+  try { st = await api.get('/hours/me'); } catch { return; }
+  clockButton.hidden = !st.enabled && !st.running;
+  const on = !!st.running || (!!st.day && !st.day.end);
+  clockButton.classList.toggle('on', on);
+  clockButton.classList.toggle('running', !!st.running);
+  clockButton.title = st.running ? `Clock running: #${st.running.number}` : on ? 'Working day started' : 'Work hours';
+}
+setInterval(refreshClock, 60 * 1000);
+window.addEventListener('carbonara:clock-changed', refreshClock);
+
 // "More" at the end of the top menu: the items a system admin chose (System page → Top menu) are moved
 // into its dropdown. Hidden when nothing is chosen, or when none of the chosen items is open to this user.
 // The panel is position: fixed, because the menu line scrolls sideways (overflow) and would clip it.
@@ -225,7 +251,7 @@ function renderUser() {
   });
   layoutNav();
   if (!me) { userMenu.replaceChildren(); return; }
-  userMenu.replaceChildren(notesButton, dmButton, h('button', {
+  userMenu.replaceChildren(clockButton, notesButton, dmButton, h('button', {
     // Silhouette only (user's request); the name shows on hover and as the dialog title.
     class: 'user-btn', type: 'button', title: me.name, 'aria-label': me.name, translate: 'no',
     onClick: () => {

@@ -50,6 +50,8 @@ class Setting:
 HOST_PATTERN = r"(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*"
 # A Norwegian organisation number: 9 digits, spaces allowed ("123 456 789").
 ORG_NO_PATTERN = r"[0-9]{3} ?[0-9]{3} ?[0-9]{3}"
+# Breaks: "11:30-12:00" or several separated by commas (worktime.parse_breaks checks the times themselves).
+BREAKS_PATTERN = r"\s*[0-2]?\d[:.][0-5]\d\s*-\s*[0-2]?\d[:.][0-5]\d\s*(,\s*[0-2]?\d[:.][0-5]\d\s*-\s*[0-2]?\d[:.][0-5]\d\s*)*"
 ORG_NO_ERROR = "9 digits, e.g. 123 456 789"
 
 SETTINGS: tuple[Setting, ...] = (
@@ -144,7 +146,8 @@ SETTINGS: tuple[Setting, ...] = (
     Setting("module_cars", "Car sales and stock", "Modules", default="on", choices=("on", "off"),
             help="Arrivals, Vehicles, PDI orders, Storage and Test drive."),
     Setting("module_workshop", "Workshop customers and parts", "Modules", default="on", choices=("on", "off"),
-            help="Customers (customer register), Parts (parts store and parts orders) and customer car Deliveries."),
+            help="Customers (customer register), Work orders, Parts (parts store and parts orders) and customer car "
+                 "Deliveries."),
     Setting("module_rental", "Rental cars", "Modules", default="on", choices=("on", "off"),
             help="The Rental cars page."),
     # Customer register (routers/customers.py, 0.48.0). Can belong to another company than the car stock (e.g. the
@@ -162,6 +165,17 @@ SETTINGS: tuple[Setting, ...] = (
             help="Shown on the customer register's privacy notice."),
     Setting("customer_number_start", "First customer number", "Customer register", int, 10000, min=1, max=99999999,
             help="New customers get the next free number from here (higher than any number in use)."),
+    # Work hours and work orders (worktime.py, routers/hours.py, routers/work_orders.py; 0.49.0).
+    Setting("work_hours", "Work hours", "Work hours", default="on", choices=("on", "off"),
+            help="On: everyone starts and ends their working day with the ⏱ button at the top. Only admins see the "
+                 "hours."),
+    Setting("work_breaks", "Breaks", "Work hours", default="11:30-12:00", pattern=BREAKS_PATTERN,
+            pattern_error="write the breaks as 11:30-12:00, separated by commas",
+            help="Fixed breaks every working day, e.g. 11:30-12:00, 14:00-14:15. They are taken off the working day "
+                 "and off the time on work orders (a 2 hour job started at 11:00 is done at 13:30 with lunch "
+                 "11:30-12:00). An admin can change them for one person's day."),
+    Setting("work_order_number_start", "First work order number", "Work hours", int, 1000, min=1, max=99999999,
+            help="New work orders get the next free number from here (higher than any number in use)."),
     # Data retention
     Setting("trash_days", "Keep deleted data (days)", "Data retention", int, 30, min=1, max=3650,
             help="Recently deleted cars and returned test drive customers."),

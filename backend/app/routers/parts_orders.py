@@ -69,27 +69,37 @@ class OrderIn(BaseModel):
     note: Optional[str] = Field(None, max_length=1000)
 
 
-def _check_car(conn, customer_id: int, car_id: Optional[int]) -> None:
-    if not conn.execute("SELECT 1 FROM customers WHERE id = %s", (customer_id,)).fetchone():
+def _check_car(conn, customer_id: Optional[int], car_id: Optional[int]) -> None:
+    """A customer is needed unless the order belongs to a work order (e.g. a PDI on a car in stock)."""
+    if customer_id and not conn.execute("SELECT 1 FROM customers WHERE id = %s", (customer_id,)).fetchone():
         raise not_found("Customer")
     if car_id and not conn.execute("SELECT 1 FROM customer_cars WHERE id = %s", (car_id,)).fetchone():
         raise not_found("Car")
 
 
-@router.post("/parts-orders", status_code=201)
-def create_order(body: OrderIn, conn=Depends(get_conn), staff=Depends(require_parts_editor)):
-    _check_car(conn, body.customer_id, body.car_id)
+def new_order(conn, staff_id: int, *, customer_id: Optional[int], car_id: Optional[int], reference: Optional[str],
+              note: Optional[str], work_order_id: Optional[int] = None) -> dict:
+    """A new parts order with the next number (also made from a work order, routers/work_orders.py)."""
+    if not customer_id and not work_order_id:
+        raise bad_request("Choose a customer")
+    _check_car(conn, customer_id, car_id)
     conn.execute("SELECT pg_advisory_xact_lock(hashtext('parts_order_no'))")
     no = (conn.execute("SELECT max(order_no) AS n FROM parts_orders").fetchone()["n"] or 0) + 1
     row = conn.execute(
-        """INSERT INTO parts_orders (order_no, customer_id, car_id, reference, note, created_by)
-           VALUES (%s, %s, %s, %s, %s, %s) RETURNING id""",
-        (no, body.customer_id, body.car_id, _clean(body.reference, 60), (body.note or "").strip()[:1000] or None,
-         staff["id"])).fetchone()
-    event(conn, "order_created", staff["id"], order_id=row["id"],
-          data={"customer_id": body.customer_id, "car_id": body.car_id})
-    touch(conn, body.customer_id)
+        """INSERT INTO parts_orders (order_no, customer_id, car_id, reference, note, work_order_id, created_by)
+           VALUES (%s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+        (no, customer_id, car_id, _clean(reference, 60), (note or "").strip()[:1000] or None, work_order_id,
+         staff_id)).fetchone()
+    event(conn, "order_created", staff_id, order_id=row["id"],
+          data={"customer_id": customer_id, "car_id": car_id, "work_order_id": work_order_id})
+    touch(conn, customer_id)
     return {"id": row["id"], "order_no": no}
+
+
+@router.post("/parts-orders", status_code=201)
+def create_order(body: OrderIn, conn=Depends(get_conn), staff=Depends(require_parts_editor)):
+    return new_order(conn, staff["id"], customer_id=body.customer_id, car_id=body.car_id, reference=body.reference,
+                     note=body.note)
 
 
 LINES_SELECT = """SELECT l.*, p.quantity AS stock, p.location, p.deleted_at IS NOT NULL AS part_deleted
@@ -103,9 +113,10 @@ def get_order(order_id: int, conn=Depends(get_conn), _staff=Depends(require_regi
     order = conn.execute(ORDERS_SELECT + " WHERE o.id = %s", (order_id,)).fetchone()
     extra = conn.execute(
         """SELECT o.note, o.updated_at, cs.name AS created_by_name, ds.name AS done_by_name, c.phone AS customer_phone,
-                  cc.vin, cc.model_year
+                  cc.vin, cc.model_year, o.work_order_id, w.number AS work_order_number
              FROM parts_orders o LEFT JOIN staff cs ON cs.id = o.created_by LEFT JOIN staff ds ON ds.id = o.done_by
              LEFT JOIN customers c ON c.id = o.customer_id LEFT JOIN customer_cars cc ON cc.id = o.car_id
+             LEFT JOIN work_orders w ON w.id = o.work_order_id
             WHERE o.id = %s""", (order_id,)).fetchone()
     lines = conn.execute(LINES_SELECT, (order_id,)).fetchall()
     total_ex = sum((l["quantity"] * (l["unit_price"] or 0) for l in lines), Decimal(0))

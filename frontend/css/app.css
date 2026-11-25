@@ -884,3 +884,26 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .car-photos .thumb { position: relative; padding: 0; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: none; cursor: zoom-in; }
 .car-photos .thumb img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
 .car-photos .badge.first { position: absolute; top: 4px; left: 4px; }
+
+/* Work orders + work hours (0.49.0) */
+.clock-btn.on { box-shadow: inset 0 -2px 0 var(--good); }
+.clock-btn.running::after {
+  content: ''; position: absolute; top: -.15rem; right: -.2rem; width: .6rem; height: .6rem; border-radius: 50%;
+  background: var(--good); border: 2px solid var(--topbar);
+}
+.clock-box { margin-bottom: 1rem; }
+.clock-box h3 { margin: 0 0 .35rem; }
+.clock-line { display: flex; justify-content: space-between; align-items: center; gap: .75rem; flex-wrap: wrap; }
+.good-text { color: var(--good); font-weight: 600; }
+.task-list ul.tasks { list-style: none; margin: .25rem 0 .75rem; padding: 0; }
+.task-list ul.tasks li { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; padding: .35rem 0; border-bottom: 1px solid var(--border); }
+.task-list ul.tasks li label.check { flex: 1; min-width: 12rem; margin: 0; }
+.task-list ul.tasks li.done label span { text-decoration: line-through; color: var(--muted); }
+.task-list .toolbar input[type=text] { flex: 1; min-width: 10rem; width: auto; }
+.hours-toolbar { align-items: center; flex-wrap: wrap; }
+.hours-toolbar .dt-field { width: auto; }
+.hours-toolbar select { width: auto; }
+.hours-table tr.sub-row td { border-top: 0; padding-top: 0; }
+.hours-table tr.open-day td { background: var(--warn-bg); }
+.print-only { display: none; }
+@media print { .print-only { display: block; } }

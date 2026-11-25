@@ -180,7 +180,7 @@ function httpsCard(s, rows, done) {
 // Top menu items a team can be given (server: auth.MENU_ITEMS). Today is always there.
 const MENU_LABEL = {
   arrivals: 'Arrivals', vehicles: 'Vehicles', pdi_orders: 'PDI orders', storage: 'Storage', testdrive: 'Test drive', rental: 'Rental cars',
-  deliveries: 'Deliveries', customers: 'Customers', parts: 'Parts', settings: 'Settings',
+  deliveries: 'Deliveries', customers: 'Customers', work_orders: 'Work orders', parts: 'Parts', settings: 'Settings',
 };
 
 /** Teams: name, which menu items they see, and who is in them. One team per user. */

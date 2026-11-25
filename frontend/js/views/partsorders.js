@@ -50,7 +50,8 @@ function ordersTable(data) {
   const rows = data.orders.map((o) => {
     const tr = h('tr', { class: 'click-row', tabindex: '0' },
       h('td', {}, h('a', { href: `#/parts-orders/${o.id}` }, `#${o.order_no}`)),
-      h('td', {}, o.customer_name ? h('span', { translate: 'no' }, o.customer_name) : h('span', { class: 'muted' }, 'Deleted customer'),
+      h('td', {}, o.customer_name ? h('span', { translate: 'no' }, o.customer_name)
+        : h('span', { class: 'muted' }, o.work_order_id ? `Work order #${o.work_order_number}` : 'Deleted customer'),
         o.customer_no ? h('span', { class: 'muted small block' }, String(o.customer_no)) : null),
       h('td', {}, o.registration_number ? h('span', { class: 'mono' }, o.registration_number) : '–',
         o.make ? h('span', { class: 'muted small block', translate: 'no' }, carTitle(o)) : null),
@@ -109,7 +110,7 @@ export async function partsOrderView(el, [id], host = el) {
     ? h('span', {}, canOpen(`#/customers/${o.customer_id}`) ? h('a', { href: `#/customers/${o.customer_id}`, translate: 'no' }, o.customer_name)
       : h('span', { translate: 'no' }, o.customer_name), ' ', h('span', { class: 'muted' }, `(${o.customer_no})`),
     o.customer_phone ? h('span', { class: 'muted small block', translate: 'no' }, o.customer_phone) : null)
-    : h('span', { class: 'muted' }, 'Deleted customer');
+    : h('span', { class: 'muted' }, o.work_order_id ? 'No customer' : 'Deleted customer');
   const carLink = o.car_id
     ? h('span', {}, h('a', { href: `#/customer-cars/${o.car_id}`, translate: 'no' }, carTitle(o)),
       ' ', h('span', { class: 'mono' }, o.registration_number || ''), o.vin ? h('span', { class: 'muted small block mono' }, o.vin) : null)
@@ -127,6 +128,8 @@ export async function partsOrderView(el, [id], host = el) {
     h('section', { class: 'card' },
       h('dl', { class: 'kv' },
         row('Customer', custLink),
+        row('Work order', o.work_order_id && (canOpen(`#/work-orders/${o.work_order_id}`)
+          ? h('a', { href: `#/work-orders/${o.work_order_id}` }, `#${o.work_order_number}`) : `#${o.work_order_number}`)),
         row('Car', carLink),
         row('Reference', o.reference && h('span', { translate: 'no' }, o.reference)),
         row('Note', o.note && h('span', { class: 'pre-line', translate: 'no' }, o.note)),
@@ -279,10 +282,10 @@ async function orderEditDialog(o, done) {
     h('div', { class: 'actions' }, ok));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!customer) { toast('Choose a customer', 'error'); return; }
+    if (!customer && !o.work_order_id) { toast('Choose a customer', 'error'); return; }
     busy(ok, async () => {
       await api.patch(`/parts-orders/${o.id}`, {
-        customer_id: customer.id, car_id: carSel.value ? Number(carSel.value) : null,
+        customer_id: customer?.id ?? null, car_id: carSel.value ? Number(carSel.value) : null,
         reference: ref.value.trim() || null, note: note.value.trim() || null,
       });
       close();

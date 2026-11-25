@@ -234,6 +234,7 @@ backend/
   app/push.py           phone / PC notifications (Web Push): notify() queues, the app thread sends + scheduled ones
   app/diskstatus.py     free space on the disk holding PHOTO_DIR + database size (System page, Today)
   app/caddyhost.py      hands the server address (System → HTTPS) to the caddy container via the caddy_host volume
+  app/worktime.py       break arithmetic: worked time minus breaks, add_work (when a job is done, skipping breaks)
   app/sync_worker.py    registry re-sync loop + daily housekeeping() (retention, trash purge,
                         test drive + rental customer purge, rental car SVV refresh, received customer deliveries,
                         stopped kiosk tablets,
@@ -244,8 +245,9 @@ backend/
                         the order's sheet), messages (Today message board), dm (private messages), notifications (push on/off, kinds, test),
                         notes (my notes), recalls (recall sources, checks, recalls per car),
                         market (market data test: CSV import, comparison), parts (parts store),
-                        customers (customer register, cars, owners, transfer from Vehicles), parts_orders
-  migrations/           001…046
+                        customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
+                        work_orders (work orders), hours (work hours: start / end of day, clock, admin list)
+  migrations/           001…047
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -267,7 +269,8 @@ frontend/               no build step; plain ES modules
                         login, settings, system, notifications (👤 menu → Notifications), notes (📝 panel + #/notes),
                         recalls (car page card, check dialog, Settings → Recall sources),
                         market (#/market Market prices + car page card; market data test), parts (#/parts parts store),
-                        customers (#/customers, customer cars, transfer dialog), partsorders (#/parts-orders)
+                        customers (#/customers, customer cars, transfer dialog), partsorders (#/parts-orders),
+                        workorders (#/work-orders), hours (⏱ panel + #/hours)
 ```
 
 **Migrations:**
@@ -320,6 +323,7 @@ frontend/               no build step; plain ES modules
 | 044 | `parts` | `parts` (part number + `part_key`, name, make, supplier, location, unit, quantity, minimum, cost / sales price ex VAT, VAT rate, note; soft delete), `part_movements` (created / received / out / count / import / price; change, quantity after, unit cost, reference, note, data), `part_imports` |
 | 045 | `customers` | `customers` (customer no., private / company, contact, `last_activity_at`), `customer_cars`, `car_ownerships` (one current owner per car), `parts_orders`, `parts_order_lines`, `register_events`; `vehicles.customer_first_name / _last_name / _address / _phone / customer_car_id`; `part_movements.order_id`, kinds `order` / `order_return` |
 | 046 | `part_numbers_upper` | existing part numbers (parts, order lines) in capital letters |
+| 047 | `work_orders_hours` | `work_orders` (number, status open / in_progress / done / cancelled, `vehicle_id` or `customer_car_id` + `customer_id`, title, description, `tasks` jsonb, `mechanic_note`, `estimated_minutes`, `planned_at`, `assigned_to`, `pdi_order_id`), `work_order_events`, `work_days` (staff, day, start, end, `breaks` jsonb), `work_time` (clock on a work order; one running per person); `parts_orders.work_order_id`, `pdi_orders.work_order_id`; teams with Parts or Customers get `work_orders` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -344,6 +348,7 @@ frontend/               no build step; plain ES modules
   Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
 - **Parts store:** `#/parts` (top menu "Parts" / "Delelager"; filters in the hash, e.g. `#/parts?q=…&show=low`).
 - **Customers:** `#/customers` · `#/customers/:id` · `#/customer-cars/:id` (nav `customers`). **Parts orders:** `#/parts-orders` · `#/parts-orders/:id` (nav `parts`).
+- **Work orders:** `#/work-orders` · `#/work-orders/:id` (nav `work_orders`). **Work hours:** the ⏱ button (every user) · `#/hours` (admins only: `canSee('hours')`).
 - **Private messages:** `#/messages` (people) · `#/messages/:staffId` (conversation); the 💬 button in the top bar, every
   user whatever the team (`canSee` always allows `messages`).
 - **My notes:** the 📝 panel (any page) · `#/notes` (the same as a page; reminder notifications open it); `canSee` always
@@ -1338,6 +1343,53 @@ customers deleted after `retention_years`, and modules + another company + conse
   server lock. The setup screen asks "What will Carbonara be used for here?" (`SetupIn.modules` → `app_settings`).
   `/auth/state` sends `me.modules`.
 
+**Work orders + work hours (0.49.0)** (migration 047; `app/worktime.py`, `routers/work_orders.py`, `routers/hours.py`,
+`views/workorders.js`, `views/hours.js`; the user's request: "logging of work hours, start day, end day per person, also
+logging of time for each work order"; "a work order is a car + parts + labour time + text field for what work to perform and
+a reply from mechanics; the work could be a list to check off or free text; PDIs can receive a work order number from
+Carbonara when the date is confirmed"; "only admins see hours"; "a fixed break, with the option to add more breaks and
+adjust the time, auto-subtracted from the work: a 2 hour job set from 11 goes to 13:30 if lunch is 30 minutes from 11:30";
+"one clock running at a time"):
+- **Work orders** (top menu "Work orders" / "Arbeidsordrer", team key `work_orders`, in the Workshop module; migration 047
+  gave it to teams with Parts or Customers). Access on the server: admins + teams with Work orders, Customers or Parts
+  (`work_orders._access`; customer data). Number = max + 1, at least System → Work hours → `work_order_number_start`.
+  - **The car:** from Vehicles (`vehicle_id`, e.g. a PDI) or the customer register (`customer_car_id`; the customer = its
+    current owner). New: "+ New work order" (car search over both: reg. no., VIN, owner's name), "🛠 New work order" on the
+    vehicle page, "+ New work order" on a customer car page. A "Work orders" card on customer / customer car pages, and on
+    the vehicle page only when the car has some.
+  - **The work:** free text (`description`) and / or tasks (`tasks` jsonb `{id, text, done, done_by (name), done_at}`; saved
+    whole with `PUT …/tasks`, ticked at once). **Mechanic's reply** (`mechanic_note`). Estimate (hours, typed "2,5"),
+    planned date + time, mechanic (`assigned_to`, `GET /work-orders/staff`). Status open → in progress (automatic when a
+    clock starts) → done, or cancelled; done / cancelled stop the clocks on it; "Open again".
+  - **Labour** = clocked time minus breaks (`_labour`). Everyone with access sees the total, "Expected done" (estimate − time
+    so far from now, or from the planned start, skipping breaks: `worktime.add_work`) and "Over the estimate". **Who worked
+    when only for admins** (Labour card, "+ Add time" / change / delete through `/hours/entries`).
+  - **Parts** = parts orders with `work_order_id` ("+ Add parts" → `POST /work-orders/{id}/parts-order` opens the
+    order's parts order, made if none is open; reference "#number"). Those don't need a customer (`parts_orders.new_order`);
+    the parts order page shows "Work order #n".
+  - **PDI:** "✓ Confirm PDI date" offers "Make a work order in Carbonara and use its number" (teams that see Work orders,
+    while the PDI has no number): `ConfirmIn.create_work_order` → `pdi._carbonara_work_order` (vehicle, title "PDI", tasks =
+    the order items "label: choice" + other, description = the order note, planned = PDI date; `pdi_orders.work_order_id`);
+    the number then links to the work order on the PDI card / PDI orders page.
+  - History `work_order_events` (created, updated with field names + estimate / planned / mechanic values, tasks n/m,
+    status, parts_order); never texts. Clock starts / stops are not in the history (hours are admin-only).
+- **Work hours** (System → Work hours: `work_hours` on / off (default on), `work_breaks` (default "11:30-12:00", several
+  comma-separated, `BREAKS_PATTERN`), `work_order_number_start`):
+  - **⏱ in the top bar** (before 📝; marked while the day is started, a dot while a clock runs; hidden when off and no clock):
+    "Start my day" / "End my day" (`POST /hours/day/start|end`; one `work_days` row per person and day, an ended day can be
+    started again, a day ended within a minute is dropped), the running clock with "Stop clock". Staff see only today's start
+    and their clock, never totals.
+  - **Clock:** "▶ Start my clock" on a work order (`POST /work-orders/{id}/clock`): stops any other clock of mine (one per
+    person, unique index), starts my day if needed. Ending the day stops it. A clock stopped within a minute is dropped.
+  - **Breaks:** copied onto the day when it starts (`work_days.breaks`), an admin can change one day's breaks; taken off the
+    day and off clocked time (`worktime.worked_seconds`, each person's own day breaks via `person_breaks`).
+  - **`#/hours` (admins only; link in the ⏱ panel):** a week at a time (◀ ▶, dates, This week, person filter), per person the
+    days (start, end, breaks, worked, on work orders; "Not ended" days marked) with the work order entries under each day;
+    "+ Add a day", change / delete a day (`/hours/days`), change entries; "⬇ Export (CSV)" for payroll (`GET /hours/export`;
+    semicolons, decimal hours with comma, BOM). Max 62 days per view.
+  - **Retention:** the worker deletes `work_days` older than `retention_years` (`hours.purge_old_days`); `work_time` stays
+    with the work order.
+
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
 - **How it's chosen:** per user (`staff.language`, default `en` for existing accounts),
@@ -1380,6 +1432,7 @@ customers deleted after `retention_years`, and modules + another company + conse
   | Mudflaps | **Skvettlapper** (not "Sprutlapper") |
   | Parts (store) | **Delelager** (a part = del, part number = delenummer, cost price = innpris) |
   | Parts order / Customers / Handed out | **Delebestilling** / **Kunder** / **Utlevert** |
+  | Work order / Work hours / Labour | **Arbeidsordre** / **Arbeidstimer** / **Arbeidstid** |
 
 **Theme: light / dark (0.20.0):**
 - Per user, under their name at the top: "Same as device" (default `auto`), "Light", "Dark".
@@ -1630,6 +1683,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.48.4 | Organisation number for each company on the System page (Company, kiosk, Rental cars, Customer register), shown with the company name on the privacy notices, the storage report and PDI orders |
 | 0.48.5 | Settings and System: every card folds (closed by default, the heading opens it; open cards remembered per browser) |
 | 0.48.6 | Parts import reads importers' fixed-width text price lists (.txt), with a make for the file and sales / cost price choice; replaced parts get "Replaced by …" |
+| 0.49.0 | **Work orders + work hours:** work orders (car from Vehicles or the customer register, work as text and / or a task list, mechanic's reply, labour clock, parts orders tied to it; PDIs get a number from here when the date is confirmed); ⏱ start / end of the working day and one running clock per person; fixed breaks taken off; #/hours for admins with corrections and CSV export (migration 047) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

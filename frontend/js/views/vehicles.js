@@ -8,8 +8,9 @@ import { marketCard, marketOn } from './market.js';
 import { priceCard, priceValue } from './prices.js';
 import { recallBadge, recallsCard } from './recalls.js';
 import { batteryCard, storageCard } from './storagecare.js';
+import { newWorkOrderDialog, workOrdersCard } from './workorders.js';
 import {
-  api, append, badge, busy, canOpen, CONDITION, session, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
+  api, append, badge, busy, canOpen, canSee, CONDITION, session, dateInput, osloTodayIso, duplicateNotice, finnLink, finnUrl, serviceStatus, debounce, euStatus, fmtDate, fmtKm, FUEL_TYPES, getInspectorId, h, openDialog, photoUrl, pill,
   readyBadge, regStatus, showError, spotLabel, STATUS,
   toast, tyreBadge, vehicleTitle, viewPhoto, WHEELS, wheelsSelect,
 } from '../ui.js';
@@ -790,7 +791,11 @@ function topActions(v, pdiData, pdiOpts, rerender) {
     pdiData.current ? null : h('button', {
       class: 'btn', type: 'button', onClick: () => pdiEditDialog(v, null, pdiOpts, rerender),
     }, '🔧 Create PDI order'),
-    h('button', { class: 'btn', type: 'button', onClick: () => documentDialog(v, null, rerender) }, '📄 Add document'));
+    h('button', { class: 'btn', type: 'button', onClick: () => documentDialog(v, null, rerender) }, '📄 Add document'),
+    canSee('work_orders') ? h('button', {
+      class: 'btn', type: 'button',
+      onClick: () => newWorkOrderDialog({ vehicle_id: v.id, text: [v.registration_number, vehicleTitle(v)].filter(Boolean).join(' · ') }),
+    }, '🛠 New work order') : null);
 }
 
 /** Starts (or resumes) the car's arrival inspection and opens it. The server takes a car in again only if it never
@@ -905,6 +910,7 @@ export async function vehicleView(el, [id], host = el) {
     documentsCard(v, docs, rerender),
     recallsCard(v, recallData, rerender), // before the PDI: open recalls go with the PDI order
     pdiCard(v, pdiData, pdiOpts, rerender),
+    await workOrdersCard({ vehicle_id: v.id }, null, { hideEmpty: true }), // only when the car has work orders
     storageCard(v, care, rerender),
     batteryCard(v, charging, rerender),
     registryCard(v, rerender),

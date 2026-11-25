@@ -5,6 +5,7 @@ import {
   api, append, busy, canOpen, canSee, dateInput, debounce, fmtDate, h, nameInput, openDialog, session, showError, toast,
 } from '../ui.js';
 import { field, fmtMoney } from './parts.js';
+import { workOrdersCard } from './workorders.js';
 
 export const ORDER_STATUS = {
   open: 'Open', ordered: 'Ordered from supplier', arrived: 'Arrived', done: 'Handed out', cancelled: 'Cancelled',
@@ -370,6 +371,7 @@ export async function customerView(el, [id], host = el) {
           h('span', {}, h('a', { href: `#/customer-cars/${car.id}`, translate: 'no' }, carTitle(car)),
             ' ', h('span', { class: 'mono' }, car.registration_number || ''),
             h('span', { class: 'muted small block' }, `${fmtDate(car.owned_from, false)} – ${fmtDate(car.owned_until, false)}`)))))) : null),
+    await workOrdersCard({ customer_id: c.id }),
     h('section', { class: 'card' }, h('h2', {}, 'Parts orders'), ordersList(c.orders)),
     h('section', { class: 'card' }, h('h2', {}, 'History'), historyList(c.events)),
     session.me?.is_admin ? h('div', { class: 'actions spread' }, del, h('span')) : null);
@@ -438,6 +440,8 @@ export async function customerCarView(el, [id], host = el) {
           h('span', { class: 'muted small block' }, o.ended_at
             ? `${fmtDate(o.started_at, false)} – ${fmtDate(o.ended_at, false)}` : `Owner since ${fmtDate(o.started_at, false)}`)))))
         : h('p', { class: 'empty' }, 'No owners in the register.')),
+    await workOrdersCard({ customer_car_id: car.id },
+      { customer_car_id: car.id, text: [car.registration_number, carTitle(car), owner?.name].filter(Boolean).join(' · ') }),
     h('section', { class: 'card' }, h('h2', {}, 'Parts orders'), ordersList(car.orders)),
     h('section', { class: 'card' }, h('h2', {}, 'History'), historyList(car.events)),
     session.me?.is_admin ? h('div', { class: 'actions spread' }, del, h('span')) : null);
