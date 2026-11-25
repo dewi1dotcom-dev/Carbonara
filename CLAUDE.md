@@ -1477,13 +1477,12 @@ team"):
   absences; red when over). Red "now" line on today. Views: one day, three days, one week (from Monday).
 - **Arrived (0.52.0, the user's request):** the **delivery kiosk** shows "Booked in today? Tap your car" with today's
   work orders (open / in progress, not arrived, car from the customer register; **from 07:00 the working day before the appointment** until the end of the appointment day, 0.53.1: a Monday appointment shows from Friday 07:00) as
-  **registration number + first name** (a company: its name; never surname or phone: `deliveries.BOOKED_SQL`,
-  `GET /api/kiosk/booked`, reloaded each time the form resets). Tapping fills the reg. no. (typing another one drops the
+  **the registration number only** (0.54.2; before: + first name) (`deliveries.BOOKED_SQL`, `GET /api/kiosk/booked`, reloaded each time the form resets). Tapping fills the reg. no. and the owner's name + phone (`GET /api/kiosk/booked/{id}/contact`, one car at a time; cleared again when another reg. no. is typed) (typing another one drops the
   choice); on "Register delivery" the server ties the delivery to the work order only if the reg. no. still matches; **a typed reg. no. of a booked car links too, without tapping** (0.53.1)
   (`car_deliveries.work_order_id`), sets `work_orders.arrived_at` and logs `arrived` `{delivery_id, kiosk}`. The planner
   marks the job (🔑, green bottom edge); the job dialog, the work order page ("Car arrived") and `POST
-  /work-orders/{id}/arrived {arrived}` set / undo it by hand; the staff delivery card shows "Booked: Work order #n". The
-  kiosk privacy notice says booked customers' reg. no. and first name show on the tablet that day.
+  /work-orders/{id}/arrived {arrived}` set / undo it by hand; the staff delivery card shows "Booked: Work order #n". The planner job dialog shows the delivery (key place + the map with the customer's pin; `delivery` in `planner.ORDER_SELECT`, 0.54.1). The
+  kiosk privacy notice says booked customers' reg. no. shows (and a tap fills in their name + phone) on the tablet that day.
 
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
@@ -1787,6 +1786,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.53.0 | Workshop and sales kept apart: Customers page gets a **Cars** tab (the workshop's customer cars, searchable, owner, open work orders); kiosk deliveries link to the customer register instead of the car stock (migration 051) |
 | 0.53.1 | Kiosk: booked cars show from 07:00 the working day before the appointment (Monday: from Friday); a typed reg. no. of a booked car also marks it as arrived, without tapping it in the list |
 | 0.54.0 | Veteran cars: older chassis numbers (not the 17-character VIN) accepted as Statens vegvesen has them, after a "checked on the car" tick, at arrival and in the customer register (migration 052) |
+| 0.54.1 | Planner: the job dialog shows where the customer parked (the pin on the kiosk map) and where the key is, once the car is delivered at the kiosk |
+| 0.54.2 | Kiosk: booked cars listed by registration number only; tapping one fills in the owner's name and phone (fetched for that car only), cleared again if another reg. no. is typed |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

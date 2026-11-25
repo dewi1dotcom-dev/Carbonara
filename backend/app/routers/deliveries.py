@@ -165,13 +165,14 @@ class DeliveryIn(BaseModel):
     work_order_id: Optional[int] = None   # the car was picked from today's booked cars (0.52.0)
 
 
-# Work orders for a car in the customer register, not arrived yet, shown on the kiosk as registration number + first
-# name (a company: its name) so the customer can pick their car. Nothing else is shown. Shown from 07:00 the working
+# Work orders for a car in the customer register, not arrived yet, shown on the kiosk as the registration number only
+# (0.54.2, the user's rule) so the customer can pick their car; a tap then fills in the owner's name and phone
+# (`booked_contact`, one car at a time, so the list itself never carries them). Shown from 07:00 the working
 # day before the appointment (0.53.1, the user's rule: customers often deliver the evening before; a Monday appointment
 # shows from Friday 07:00) until the end of the appointment day (Oslo time).
 BOOKED_SQL = """
     SELECT w.id, cc.registration_number, w.customer_car_id,
-           CASE WHEN c.kind = 'company' THEN c.company_name ELSE c.first_name END AS name
+           c.name AS customer_name, c.phone AS customer_phone
       FROM work_orders w JOIN customer_cars cc ON cc.id = w.customer_car_id
       LEFT JOIN customers c ON c.id = w.customer_id
       CROSS JOIN LATERAL (SELECT (w.planned_at AT TIME ZONE 'Europe/Oslo')::date AS d,
@@ -183,9 +184,18 @@ BOOKED_SQL = """
 
 @kiosk_router.get("/booked")
 def booked_today(_who=Depends(require_kiosk_or_staff), conn=Depends(get_conn)):
-    """Booked cars for the kiosk (from 07:00 the working day before): registration number + first name only."""
+    """Booked cars for the kiosk (from 07:00 the working day before): registration number only."""
     rows = conn.execute(BOOKED_SQL + " ORDER BY w.planned_at, cc.registration_number").fetchall()
-    return [{"id": r["id"], "registration_number": r["registration_number"], "name": r["name"]} for r in rows]
+    return [{"id": r["id"], "registration_number": r["registration_number"]} for r in rows]
+
+
+@kiosk_router.get("/booked/{work_order_id}/contact")
+def booked_contact(work_order_id: int, _who=Depends(require_kiosk_or_staff), conn=Depends(get_conn)):
+    """The owner's name and phone for one booked car, to fill in the form when the customer taps it."""
+    r = conn.execute(BOOKED_SQL + " AND w.id = %s", (work_order_id,)).fetchone()
+    if not r:
+        raise not_found("Booking")
+    return {"name": r["customer_name"], "phone": r["customer_phone"]}
 
 
 @kiosk_router.get("/config")

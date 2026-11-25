@@ -5,6 +5,7 @@
 import { api, append, busy, dateInput, fmtDate, h, openDialog, osloTodayIso, session, showError, timeInput, toast } from '../ui.js';
 import { fmtDuration } from './hours.js';
 import { newWorkOrderDialog, woBadge } from './workorders.js';
+import { mapWithPin, optText } from './deliveries.js';
 
 const PX = 1.6;          // pixels per minute (96 px an hour)
 const GAP = 14;          // between days
@@ -352,6 +353,17 @@ function slotDialog(r, t, data, rerender) {
 }
 
 /** Tap on a job: its details, change start / person / time it takes, take it off the plan, open it. */
+/** Where the customer parked (the pin they tapped on the kiosk map) and left the key. */
+function deliveryInfo(d) {
+  if (!d) return null;
+  return h('div', { class: 'delivery-map pl-delivery-map' },
+    h('div', { class: 'small muted' }, h('span', {}, 'Delivered at the kiosk'), ` ${fmtDate(d.created_at)}`),
+    d.key_place ? h('div', { class: 'small' }, 'Key: ', h('strong', { translate: 'no' }, optText(d.key_place))) : null,
+    d.map_id ? [
+      h('div', { class: 'small muted' }, 'Parked: ', h('span', { translate: 'no' }, optText({ name: d.map_name, name_no: d.map_name_no }))),
+      mapWithPin(d.map_id, d.pin_x, d.pin_y)] : null);
+}
+
 function jobDialog(o, data, rerender) {
   const day = dateInput({ value: o.planned_local.slice(0, 10) });
   const time = timeInput({ value: o.planned_local.slice(11, 16) });
@@ -372,6 +384,7 @@ function jobDialog(o, data, rerender) {
     h('p', { class: 'muted small' }, h('span', {}, 'Done about'), ` ${isoNo(o.end_local.slice(0, 10))} ${o.end_local.slice(11, 16)}`),
     h('p', {}, o.arrived_at ? h('span', { class: 'badge good' }, h('span', {}, 'Arrived'), ` ${fmtDate(o.arrived_at)}`)
       : h('span', { class: 'badge' }, 'Not arrived yet'), ' ', data.can_edit ? arrived : null),
+    deliveryInfo(o.delivery),
     data.can_edit ? [
       h('div', { class: 'grid' }, field('Date', day), field('Start', time), field('Estimated hours', est)),
       field('Mechanic', who),

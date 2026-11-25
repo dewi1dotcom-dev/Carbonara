@@ -35,7 +35,7 @@ export function optText(o) {
 }
 
 /** A map picture with the customer's pin on it (x, y = share of width / height). */
-function mapWithPin(mapId, x, y, cls = '') {
+export function mapWithPin(mapId, x, y, cls = '') {
   return h('div', { class: `map-wrap ${cls}` },
     h('img', { src: mapUrl(mapId), alt: '', loading: 'lazy', draggable: 'false' }),
     x != null && y != null ? h('span', { class: 'map-pin', style: { left: `${x * 100}%`, top: `${y * 100}%` } }) : null);
@@ -82,8 +82,9 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
     h('p', {}, 'Registreringsnummer, navn og telefonnummer, hvor bilen står og hvor nøkkelen ligger, hva du krysser av for, og meldingen du skriver.'),
     h('h3', {}, 'Hvorfor'),
     h('p', {}, 'For å finne bilen og nøkkelen, utføre det du ber oss om, og kontakte deg om bilen.'),
-    h('p', {}, 'Har du time hos oss, vises registreringsnummeret og fornavnet ditt på nettbrettet fra kl. 07.00 virkedagen før timen og ut timedagen, slik at '
-      + 'du kan velge bilen din. Etternavn og telefonnummer vises aldri der.'),
+    h('p', {}, 'Har du time hos oss, vises registreringsnummeret ditt på nettbrettet fra kl. 07.00 virkedagen før timen og ut timedagen, slik at '
+      + 'du kan velge bilen din. Når du trykker på bilen, fylles navnet og telefonnummeret vi har registrert inn i skjemaet, '
+      + 'slik at du kan kontrollere og rette dem.'),
     h('h3', {}, 'Rettslig grunnlag'),
     h('p', {}, 'Det er nødvendig for å utføre oppdraget du ber oss om (personvernforordningen art. 6 nr. 1 bokstav b).'),
     h('h3', {}, 'Hvor lenge'),
@@ -230,24 +231,46 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
     }) : [];
     drawMap();
 
-    // Booked today (0.52.0): the customer taps their car (reg. no. + first name only); the delivery is then tied to
-    // the work order and the planner shows the car as arrived. Typing another reg. no. drops the choice.
+    // Booked today (0.52.0): the customer taps their car (only the reg. no. is listed, 0.54.2); the owner's name and
+    // phone are then filled in (fetched for that one car) and the delivery is tied to the work order, so the planner
+    // shows the car as arrived. Typing another reg. no. drops the choice and clears what was filled in.
     let picked = null; // { id, registration_number }
+    let filled = null; // { name, phone } as filled in from the booking
     const bookedSlot = h('div');
     const norm = (s) => String(s || '').toUpperCase().replace(/[^\p{L}\p{N}]/gu, '');
+    const unfill = () => {
+      if (!filled) return;
+      if (name.value === filled.name) name.value = '';
+      if (phone.value === filled.phone) phone.value = '';
+      filled = null;
+    };
+    const pick = async (b, list) => {
+      unfill();
+      picked = b;
+      reg.value = b.registration_number;
+      drawBooked(list);
+      try {
+        const c = await api.get(`/kiosk/booked/${b.id}/contact`);
+        if (picked !== b) return; // another car was tapped meanwhile
+        filled = { name: name.value || c.name || '', phone: phone.value || c.phone || '' };
+        name.value = filled.name;
+        phone.value = filled.phone;
+      } catch { /* the form still works by typing */ }
+      (name.value ? (phone.value ? null : phone) : name)?.focus();
+    };
     const drawBooked = (list) => {
       bookedSlot.replaceChildren(...(list.length ? [h('div', { class: 'field kiosk-booked' },
         h('label', {}, 'Booked in? Tap your car'),
         h('div', { class: 'chips' }, list.map((b) => h('button', {
           class: `chip booked-chip${picked?.id === b.id ? ' on' : ''}`, type: 'button',
-          onClick: () => { picked = b; reg.value = b.registration_number; drawBooked(list); name.focus(); },
-        }, h('strong', { class: 'mono' }, b.registration_number), b.name ? h('span', { translate: 'no' }, ` · ${b.name}`) : null))),
+          onClick: () => pick(b, list),
+        }, h('strong', { class: 'mono' }, b.registration_number)))),
         h('p', { class: 'muted small' }, 'Not on the list? Just fill in the form.'))] : []));
     };
     api.get('/kiosk/booked').then((list) => {
       drawBooked(list);
       reg.addEventListener('input', () => {
-        if (picked && norm(reg.value) !== picked.registration_number) { picked = null; drawBooked(list); }
+        if (picked && norm(reg.value) !== picked.registration_number) { picked = null; unfill(); drawBooked(list); }
       });
     }).catch(() => {});
 

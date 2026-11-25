@@ -720,6 +720,8 @@ select.kiosk-lang { width: auto; }
 .map-btn { padding: 0; border: 0; background: none; cursor: zoom-in; display: block; margin-top: .3rem; }
 .delivery-map .map-wrap { max-width: min(100%, 340px); }
 .delivery-map .map-pin { width: 18px; height: 18px; border-width: 3px; }
+.pl-delivery-map { margin: .5rem 0 1rem; }
+.pl-delivery-map .map-wrap { max-width: 100%; margin-top: .3rem; }
 .photo-view .map-large { max-width: 100%; }
 .photo-view .map-large img { max-height: 75vh; width: auto; margin: 0; }
 .delivery-card { display: flex; gap: .75rem; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; }

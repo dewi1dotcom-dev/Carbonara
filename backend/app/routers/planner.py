@@ -62,7 +62,13 @@ ORDER_SELECT = """SELECT w.id, w.number, w.status, w.title, w.assigned_to, w.pla
                          jsonb_array_length(w.tasks) AS task_count,
                          (SELECT count(*) FROM jsonb_array_elements(w.tasks) x WHERE (x->>'done')::boolean) AS tasks_done,
                          (SELECT count(*) FROM work_time t WHERE t.work_order_id = w.id AND t.ended_at IS NULL)
-                             AS clocks_running
+                             AS clocks_running,
+                         -- the kiosk delivery tied to this job: where the customer parked and left the key
+                         (SELECT jsonb_build_object('id', d.id, 'created_at', d.created_at, 'map_id', d.map_id,
+                                     'map_name', m.name, 'map_name_no', m.name_no, 'pin_x', d.pin_x, 'pin_y', d.pin_y,
+                                     'key_place', d.key_place)
+                            FROM car_deliveries d LEFT JOIN delivery_maps m ON m.id = d.map_id
+                           WHERE d.work_order_id = w.id ORDER BY d.created_at DESC LIMIT 1) AS delivery
                     FROM work_orders w LEFT JOIN vehicles v ON v.id = w.vehicle_id
                     LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id
                     LEFT JOIN customers c ON c.id = w.customer_id"""
