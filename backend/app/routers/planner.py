@@ -23,7 +23,7 @@ from .. import worktime
 from ..common import bad_request, not_found
 from ..db import get_conn
 from ..worktime import OSLO, local
-from .work_orders import _access as work_order_access, require_work_orders
+from .work_orders import HAS_PARTS_SQL, _access as work_order_access, require_work_orders
 
 router = APIRouter(tags=["planner"])
 
@@ -74,11 +74,8 @@ ORDER_SELECT = """SELECT w.id, w.number, w.status, w.title, w.assigned_to, w.pla
                          (SELECT count(*) FROM jsonb_array_elements(w.tasks) x WHERE (x->>'done')::boolean) AS tasks_done,
                          (SELECT count(*) FROM work_time t WHERE t.work_order_id = w.id AND t.ended_at IS NULL)
                              AS clocks_running,
-                         -- parts: waiting for the supplier ('ordered') or here ('arrived'), for the job's status marks
-                         (SELECT CASE WHEN bool_or(po.status = 'ordered') THEN 'ordered'
-                                      WHEN bool_or(po.status = 'arrived') THEN 'arrived' END
-                            FROM parts_orders po WHERE po.work_order_id = w.id AND po.status <> 'cancelled')
-                             AS parts_status,
+                         -- parts (0.55.1): "waiting for parts" until someone ticks "Parts arrived and ready"
+                         w.parts_ready_at, """ + HAS_PARTS_SQL + """ AS has_parts,
                          -- the kiosk delivery tied to this job: where the customer parked and left the key
                          (SELECT jsonb_build_object('id', d.id, 'created_at', d.created_at, 'map_id', d.map_id,
                                      'map_name', m.name, 'map_name_no', m.name_no, 'pin_x', d.pin_x, 'pin_y', d.pin_y,

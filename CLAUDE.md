@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…053
+  migrations/           001…054
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -331,6 +331,7 @@ frontend/               no build step; plain ES modules
 | 051 | `delivery_customer_car` | `car_deliveries.customer_car_id` (kiosk deliveries link to the workshop's register, not the car stock) |
 | 052 | `older_chassis_numbers` | `vehicles.vin_nonstandard` (the VIN check now allows 4–30 letters / digits when it is set), `customer_cars.vin_nonstandard` |
 | 053 | `job_types_places` | `job_types` (name EN + NO, `color`, sort, active; 7 generic types seeded), `workshop_places` (team, name, sort, `deleted_at`: lifts / bays as planner lines); `work_orders.job_type_id / place_id`; existing PDI work orders get the PDI type |
+| 054 | `parts_ready` | `work_orders.parts_ready_at / parts_ready_by` ("Parts arrived and ready", ticked by hand) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1492,7 +1493,7 @@ team"):
     the new / edit work order dialogs and in the planner's job dialog; shown on the work order page. PDI work orders get
     the type named "PDI" (`create_work_order`). No type = the old status colours.
   - **Status marks:** a 6 px left edge (open grey, in progress green, done black, invoiced gold) and icons 🔑 arrived,
-    ⏱ clock running, 📦 waiting for parts (a parts order `ordered`), ✅ parts arrived, tasks n/m. Two lines per job:
+    ⏱ clock running, 📦 waiting for parts (the work order has parts lines and "Parts arrived and ready" isn't ticked), ✅ parts arrived and ready (0.55.1: `parts_ready_at`, `POST /work-orders/{id}/parts-ready`, a bar at the top of the work order page and in the planner job dialog), tasks n/m. Two lines per job:
     "#no reg. no. · customer" and "type · title".
   - **Places** (`workshop_places` per team; added / renamed / ordered / removed in "Lines", `PUT /planner/{team}/places`):
     lines under the people (🔧, grey). A job with `place_id` shows on the place's line **and** its mechanic's line;
@@ -1812,6 +1813,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.54.1 | Planner: the job dialog shows where the customer parked (the pin on the kiosk map) and where the key is, once the car is delivered at the kiosk |
 | 0.54.2 | Kiosk: booked cars listed by registration number only; tapping one fills in the owner's name and phone (fetched for that car only), cleared again if another reg. no. is typed |
 | 0.55.0 | **Planner, bigger:** fills the screen width, "Open in its own window" (no top bar, refreshes itself), month calendar coloured by how booked each day is, chart of the next 7 working days, **job types with colours** (admins) + status marks (edge, 🔑 ⏱ 📦), legend, **workshop places** (lifts / bays) as lines; job type on work orders (migration 053) |
+| 0.55.1 | Work orders: "✓ Parts arrived and ready" at the top (else "Waiting for parts" when it has parts), also in the planner; the planner job dialog has the planning boxes at the top and the kiosk delivery folded at the bottom (migration 054) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

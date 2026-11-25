@@ -10,7 +10,7 @@
 import { api, append, busy, dateInput, fmtDate, h, openDialog, osloTodayIso, session, showError, timeInput, toast } from '../ui.js';
 import { lang } from '../i18n.js';
 import { fmtDuration } from './hours.js';
-import { jobTypeName, jobTypes, newWorkOrderDialog, woBadge } from './workorders.js';
+import { jobTypeName, jobTypes, newWorkOrderDialog, partsReadyBar, woBadge } from './workorders.js';
 import { mapWithPin, optText } from './deliveries.js';
 
 const GAP = 14;          // between days
@@ -242,7 +242,7 @@ function legendBox(data) {
       h('li', {}, h('span', { class: 'pl-icon' }, '🔑'), h('span', {}, 'Car arrived')),
       h('li', {}, h('span', { class: 'pl-icon' }, '⏱'), h('span', {}, 'Clock running')),
       h('li', {}, h('span', { class: 'pl-icon' }, '📦'), h('span', {}, 'Waiting for parts')),
-      h('li', {}, h('span', { class: 'pl-icon' }, '✅'), h('span', {}, 'Parts arrived'))),
+      h('li', {}, h('span', { class: 'pl-icon' }, '✅'), h('span', {}, 'Parts arrived and ready'))),
     h('h3', {}, 'Absence'),
     h('ul', { class: 'pl-legend-list' },
       Object.entries(ABSENCE).map(([k, t]) => h('li', {}, h('span', { class: `pl-swatch abs-${k}` }), h('span', {}, t))),
@@ -385,7 +385,7 @@ function jobBar(p, data, rerender) {
   const icons = [
     o.arrived_at ? h('span', { title: 'Car arrived' }, '🔑') : null,
     Number(o.clocks_running) > 0 ? h('span', { title: 'Clock running' }, '⏱') : null,
-    o.parts_status === 'ordered' ? h('span', { title: 'Waiting for parts' }, '📦') : o.parts_status === 'arrived' ? h('span', { title: 'Parts arrived' }, '✅') : null,
+    o.parts_ready_at ? h('span', { title: 'Parts arrived and ready' }, '✅') : o.has_parts ? h('span', { title: 'Waiting for parts' }, '📦') : null,
     o.task_count ? h('span', {}, `${o.tasks_done}/${o.task_count}`) : null,
   ].filter(Boolean);
   const handle = p.last ? h('span', { class: 'pl-resize', title: 'Drag to change the time it takes' }) : null;
@@ -557,7 +557,6 @@ function slotDialog(r, t, data, rerender) {
 function deliveryInfo(d) {
   if (!d) return null;
   return h('div', { class: 'delivery-map pl-delivery-map' },
-    h('div', { class: 'small muted' }, h('span', {}, 'Delivered at the kiosk'), ` ${fmtDate(d.created_at)}`),
     d.key_place ? h('div', { class: 'small' }, 'Key: ', h('strong', { translate: 'no' }, optText(d.key_place))) : null,
     d.map_id ? [
       h('div', { class: 'small muted' }, 'Parked: ', h('span', { translate: 'no' }, optText({ name: d.map_name, name_no: d.map_name_no }))),
@@ -581,19 +580,22 @@ function jobDialog(o, data, rerender) {
     close();
     await rerender();
   }));
-  const form = h('form', {},
-    h('p', {}, woBadge(o.status), ' ', h('span', { translate: 'no' }, [o.registration_number, [o.make, o.model].filter(Boolean).join(' '), o.customer_name].filter(Boolean).join(' · '))),
-    o.title ? h('p', { translate: 'no' }, o.title) : null,
-    h('p', { class: 'muted small' }, h('span', {}, 'Done about'), ` ${isoNo(o.end_local.slice(0, 10))} ${o.end_local.slice(11, 16)}`,
-      o.parts_status === 'ordered' ? [' · ', h('span', {}, '📦 Waiting for parts')] : o.parts_status === 'arrived' ? [' · ', h('span', {}, '✅ Parts arrived')] : null),
-    h('p', {}, o.arrived_at ? h('span', { class: 'badge good' }, h('span', {}, 'Arrived'), ` ${fmtDate(o.arrived_at)}`)
-      : h('span', { class: 'badge' }, 'Not arrived yet'), ' ', data.can_edit ? arrived : null),
-    deliveryInfo(o.delivery),
+  // The planning boxes first (the user's request), then the job, parts and arrival, and the kiosk delivery folded.
+  const form = h('form', { class: 'pl-job-dialog' },
     data.can_edit ? [
       h('div', { class: 'grid' }, field('Date', day), field('Start', time), field('Estimated hours', est)),
       h('div', { class: 'grid' }, field('Mechanic', who), field('Place', where), field('Job type', type)),
       h('div', { class: 'actions spread' }, off, ok)] : null,
-    h('p', {}, h('a', { href: `#/work-orders/${o.id}`, onClick: () => close() }, 'Open the work order')));
+    h('p', {}, woBadge(o.status), ' ', h('span', { translate: 'no' }, [o.registration_number, [o.make, o.model].filter(Boolean).join(' '), o.customer_name].filter(Boolean).join(' · '))),
+    o.title ? h('p', { translate: 'no' }, o.title) : null,
+    h('p', { class: 'muted small' }, h('span', {}, 'Done about'), ` ${isoNo(o.end_local.slice(0, 10))} ${o.end_local.slice(11, 16)}`),
+    partsReadyBar(o, data.can_edit, async () => { close(); await rerender(); }),
+    h('p', {}, o.arrived_at ? h('span', { class: 'badge good' }, h('span', {}, 'Arrived'), ` ${fmtDate(o.arrived_at)}`)
+      : h('span', { class: 'badge' }, 'Not arrived yet'), ' ', data.can_edit ? arrived : null),
+    h('p', {}, h('a', { href: `#/work-orders/${o.id}`, onClick: () => close() }, 'Open the work order')),
+    o.delivery ? h('details', { class: 'pl-kiosk' },
+      h('summary', {}, h('span', {}, 'Delivered at the kiosk'), ` ${fmtDate(o.delivery.created_at)}`),
+      deliveryInfo(o.delivery)) : null);
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const s = est.value.trim().replace(',', '.');

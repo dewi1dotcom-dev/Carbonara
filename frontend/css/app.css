@@ -1060,3 +1060,11 @@ body.planner-full .pl-page-head h1 { font-size: 1.3rem; margin: 0; }
 .pl-types-row input[type=checkbox] { width: auto; justify-self: center; }
 .pl-un-item .pl-swatch { margin-right: .3rem; }
 .kv .pl-swatch { margin-right: .35rem; }
+
+/* Work orders 0.55.1: parts arrived and ready; planner job dialog with the kiosk delivery folded */
+.parts-ready-bar { display: flex; align-items: center; flex-wrap: wrap; gap: .5rem .75rem; margin: .5rem 0 .75rem; }
+.parts-ready-bar .badge { font-size: .9rem; padding: .3rem .6rem; }
+.pl-kiosk { border: 1px solid var(--border); border-radius: 8px; padding: .4rem .6rem; margin-top: .5rem; }
+.pl-kiosk summary { cursor: pointer; font-weight: 600; }
+.pl-kiosk .pl-delivery-map { margin-bottom: .25rem; }
+.pl-job-dialog .grid select { min-width: 0; }

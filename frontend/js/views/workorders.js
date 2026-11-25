@@ -105,6 +105,25 @@ export async function workOrdersCard(filter, newArgs, { hideEmpty = false } = {}
     data.orders.length ? workOrderTable(data.orders.slice(0, 20)) : h('p', { class: 'empty' }, 'No work orders.'));
 }
 
+// ---------------------------------------------------------------- parts ready (0.55.1)
+
+/** "Parts arrived and ready" (ticked by hand) or "Waiting for parts" (the work order has parts, not ticked yet). */
+export function partsReadyBar(o, editable, onChange) {
+  const btn = editable ? h('button', { class: o.parts_ready_at ? 'link small' : 'btn primary', type: 'button' },
+    o.parts_ready_at ? 'Undo' : '✓ Parts arrived and ready') : null;
+  btn?.addEventListener('click', () => busy(btn, async () => {
+    await api.post(`/work-orders/${o.id}/parts-ready`, { ready: !o.parts_ready_at });
+    await onChange();
+  }));
+  const state = o.parts_ready_at
+    ? h('span', {}, h('span', { class: 'badge good' }, '✓ Parts arrived and ready'), ' ',
+      h('span', { class: 'muted small' }, fmtDate(o.parts_ready_at)),
+      o.parts_ready_by_name ? h('span', { class: 'muted small', translate: 'no' }, ` · ${o.parts_ready_by_name}`) : null)
+    : o.has_parts ? h('span', { class: 'badge warn' }, '📦 Waiting for parts')
+      : h('span', { class: 'muted small' }, 'No parts on this work order yet.');
+  return h('div', { class: 'parts-ready-bar no-print' }, state, btn);
+}
+
 // ---------------------------------------------------------------- job types (0.55.0)
 
 let typesCache = null;
@@ -215,7 +234,7 @@ export async function newWorkOrderDialog(car = null, prefill = {}) {
 const EVENT = {
   created: 'Work order created', updated: 'Details changed', tasks: 'Tasks changed', status: 'Status changed',
   parts_order: 'Parts order made', extra_lines: 'Other charges changed', invoiced: 'Invoiced', credited: 'Invoice credited',
-  arrived: 'Car arrived', not_arrived: 'Not arrived after all',
+  arrived: 'Car arrived', not_arrived: 'Not arrived after all', parts_ready: 'Parts arrived and ready', parts_not_ready: 'Parts not ready after all',
 };
 
 function eventDetail(e) {
@@ -320,6 +339,7 @@ export async function workOrderView(el, [id], host = el) {
         h('button', { class: 'btn', type: 'button', onClick: () => window.print() }, '🖨 Print'),
         editable ? h('button', { class: 'btn', type: 'button', onClick: () => editDialog(o, rerender) }, 'Edit') : null)),
     actions.length ? h('div', { class: 'actions left no-print' }, actions) : null,
+    partsReadyBar(o, editable, rerender),
     h('section', { class: 'card clock-card no-print' },
       h('div', { class: 'clock-line' },
         h('div', {},

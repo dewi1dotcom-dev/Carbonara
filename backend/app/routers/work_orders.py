@@ -137,7 +137,13 @@ def create_work_order(conn, staff_id: int, *, vehicle_id=None, customer_car_id=N
     return row
 
 
+# The work order has parts (a line on a parts order that isn't cancelled): shown as "Waiting for parts" until
+# "Parts arrived and ready" is ticked (0.55.1).
+HAS_PARTS_SQL = """EXISTS (SELECT 1 FROM parts_order_lines pl JOIN parts_orders po ON po.id = pl.order_id
+                             WHERE po.work_order_id = w.id AND po.status <> 'cancelled')"""
+
 WO_SELECT = """SELECT w.id, w.number, w.status, w.title, w.planned_at, w.estimated_minutes, w.created_at, w.done_at,
+                      w.parts_ready_at, """ + HAS_PARTS_SQL + """ AS has_parts,
                       w.vehicle_id, w.customer_car_id, w.customer_id, w.assigned_to, w.pdi_order_id, w.updated_at,
                       w.arrived_at, w.job_type_id, w.place_id, jt.name AS job_type_name, jt.name_no AS job_type_name_no,
                       jt.color AS job_type_color, wp.name AS place_name,
@@ -291,10 +297,11 @@ def get_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_ord
     out = conn.execute(WO_SELECT + " WHERE w.id = %s", (wo_id,)).fetchone()
     extra = conn.execute(
         """SELECT cs.name AS created_by_name, us.name AS updated_by_name, ds.name AS done_by_name,
-                  c.phone AS customer_phone, p.status AS pdi_status
+                  c.phone AS customer_phone, p.status AS pdi_status, pr.name AS parts_ready_by_name
              FROM work_orders w LEFT JOIN staff cs ON cs.id = w.created_by LEFT JOIN staff us ON us.id = w.updated_by
              LEFT JOIN staff ds ON ds.id = w.done_by LEFT JOIN customers c ON c.id = w.customer_id
              LEFT JOIN pdi_orders p ON p.id = w.pdi_order_id
+             LEFT JOIN staff pr ON pr.id = w.parts_ready_by
             WHERE w.id = %s""", (wo_id,)).fetchone()
     labour = _labour(conn, [wo_id]).get(wo_id, 0)
     is_admin = bool(staff.get("is_admin"))
@@ -537,4 +544,22 @@ def set_arrived(wo_id: int, body: ArrivedIn, conn=Depends(get_conn), staff=Depen
         return {"id": wo_id}
     conn.execute("UPDATE work_orders SET arrived_at = CASE WHEN %s THEN now() END WHERE id = %s", (body.arrived, wo_id))
     _event(conn, wo_id, "arrived" if body.arrived else "not_arrived", staff["id"])
+    return {"id": wo_id}
+
+
+class PartsReadyIn(BaseModel):
+    ready: bool
+
+
+@router.post("/work-orders/{wo_id}/parts-ready")
+def set_parts_ready(wo_id: int, body: PartsReadyIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
+    """"Parts arrived and ready" (0.55.1), ticked by hand; until then a work order with parts shows "Waiting for parts"."""
+    o = _order(conn, wo_id, lock=True)
+    _not_locked(o)
+    if bool(o["parts_ready_at"]) == body.ready:
+        return {"id": wo_id}
+    conn.execute("UPDATE work_orders SET parts_ready_at = CASE WHEN %s THEN now() END, "
+                 "parts_ready_by = CASE WHEN %s THEN %s END WHERE id = %s",
+                 (body.ready, body.ready, staff["id"], wo_id))
+    _event(conn, wo_id, "parts_ready" if body.ready else "parts_not_ready", staff["id"])
     return {"id": wo_id}

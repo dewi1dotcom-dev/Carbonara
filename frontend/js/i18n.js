@@ -246,6 +246,10 @@ const NO = {
   'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
   'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
   'Sales price ex VAT': 'Utsalgspris eks. mva.',
+  // Parts arrived and ready (0.55.1)
+  'Parts arrived and ready': 'Deler kommet og klare',
+  'Parts not ready after all': 'Deler likevel ikke klare',
+  'No parts on this work order yet.': 'Ingen deler på denne arbeidsordren ennå.',
   // Planner places, job types, own window (0.55.0)
   'Open in its own window': 'Åpne i eget vindu',
   'Full screen': 'Fullskjerm',
