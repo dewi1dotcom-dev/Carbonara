@@ -35,6 +35,7 @@ const EVENT = {
   order_created: 'Parts order created', order_line_added: 'Line added', order_line_changed: 'Line changed',
   order_line_removed: 'Line removed', order_status: 'Status changed', order_customer_changed: 'Customer changed',
   order_car_changed: 'Car changed', order_updated: 'Order details changed',
+  customer_delivery: 'Delivered at the kiosk', customer_delivery_received: 'Delivery received',
 };
 const qty = (n) => Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 });
 
@@ -268,37 +269,83 @@ function carForm(customerId, car, done) {
 
 // ---------------------------------------------------------------- #/customers
 
+/** #/customers: the workshop's register, two tabs: Customers and Cars (0.53.0, so the cars are easy to find).
+ *  Kept apart from Vehicles (the sales company's stock); a car moves over only with the customer's consent. */
 export async function customersView(el) {
   const saved = new URLSearchParams(location.hash.split('?')[1] || '');
   let q = saved.get('q') || '';
-  const first = await api.get(`/customers?q=${encodeURIComponent(q)}`);
-  const company = first.company;
-  const search = h('input', { type: 'search', value: q, placeholder: 'Name, customer no., phone, e-mail, reg. no.…', 'aria-label': 'Search customers' });
+  const tab = saved.get('tab') === 'cars' ? 'cars' : 'customers';
+  const path = (t, text) => `/${t === 'cars' ? 'customer-cars' : 'customers'}?q=${encodeURIComponent(text)}`;
+  const [first, info] = await Promise.all([api.get(path(tab, q)), tab === 'cars' ? api.get('/customers?q=') : null]);
+  const meta = info || first;
+  const company = meta.company;
+  const search = h('input', {
+    type: 'search', value: q, 'aria-label': tab === 'cars' ? 'Search cars' : 'Search customers',
+    placeholder: tab === 'cars' ? 'Reg. no., VIN, make, model, owner…' : 'Name, customer no., phone, e-mail, reg. no.…',
+  });
   const listSlot = h('div');
-  const draw = (data) => listSlot.replaceChildren(customerTable(data));
-  let seq = 0;
-  search.addEventListener('input', debounce(async () => {
-    q = search.value.trim();
+  const draw = (data) => listSlot.replaceChildren(tab === 'cars' ? carTable(data) : customerTable(data));
+  const hashFor = (t, text) => {
+    const p = new URLSearchParams({ ...(t === 'cars' ? { tab: 'cars' } : {}), ...(text ? { q: text } : {}) }).toString();
+    return `#/customers${p ? `?${p}` : ''}`;
+  };
+  const reload = async () => {
     const my = ++seq;
-    if (location.hash.startsWith('#/customers')) history.replaceState(null, '', `#/customers${q ? `?q=${encodeURIComponent(q)}` : ''}`);
     try {
-      const data = await api.get(`/customers?q=${encodeURIComponent(q)}`);
+      const data = await api.get(path(tab, q));
       if (my === seq) draw(data);
     } catch (e) { showError(e); }
+  };
+  let seq = 0;
+  search.addEventListener('input', debounce(() => {
+    q = search.value.trim();
+    if (location.hash.startsWith('#/customers')) history.replaceState(null, '', hashFor(tab, q));
+    reload();
   }, 300));
+  const tabBtn = (t, label) => h('a', { class: `tab${t === tab ? ' active' : ''}`, href: hashFor(t, '') }, label);
+  const newCar = () => pickCustomer('Owner of the car', (c) => carForm(c.id, null, reload));
   append(el,
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Customers'),
         h('div', { class: 'muted' }, company?.company ? `Customer register of ${company.company}` : 'The customer register',
-          ' · ', h('button', { class: 'link', type: 'button', onClick: () => registerPrivacyDialog(company, first.retention_years) },
+          ' · ', h('button', { class: 'link', type: 'button', onClick: () => registerPrivacyDialog(company, meta.retention_years) },
             'Privacy notice'))),
       h('div', { class: 'row-actions' },
         canSee('parts') ? h('a', { class: 'btn', href: '#/parts-orders' }, '📋 Parts orders') : null,
-        h('button', { class: 'btn primary', type: 'button', onClick: () => customerForm(null, (c) => { location.hash = `#/customers/${c.id}`; }) },
-          '+ New customer'))),
+        tab === 'cars'
+          ? h('button', { class: 'btn primary', type: 'button', onClick: newCar }, '+ New car')
+          : h('button', { class: 'btn primary', type: 'button', onClick: () => customerForm(null, (c) => { location.hash = `#/customers/${c.id}`; }) },
+            '+ New customer'))),
+    h('div', { class: 'tabs' }, tabBtn('customers', 'Customers'), tabBtn('cars', 'Cars')),
+    h('p', { class: 'muted small' }, 'The workshop’s own customers and their cars, kept apart from Vehicles (the cars for sale). '
+      + 'A car from Vehicles is copied in only when the customer agrees.'),
     h('div', { class: 'toolbar' }, search),
     listSlot);
   draw(first);
+}
+
+/** The register's cars: reg. no., car, owner, open work orders. */
+function carTable(data) {
+  if (!data.cars.length) return h('p', { class: 'empty' }, 'No cars found.');
+  const rows = data.cars.map((car) => {
+    const tr = h('tr', { class: 'click-row', tabindex: '0' },
+      h('td', {}, h('a', { href: `#/customer-cars/${car.id}`, class: 'mono' }, car.registration_number || '–'),
+        car.vin ? h('span', { class: 'muted small block mono' }, car.vin) : null),
+      h('td', { translate: 'no' }, [carTitle(car), car.model_year].filter(Boolean).join(' ')),
+      h('td', {}, car.owner_id ? [h('a', { href: `#/customers/${car.owner_id}`, translate: 'no' }, car.owner_name), ' ',
+        h('span', { class: 'muted' }, `(${car.owner_no})`)] : h('span', { class: 'muted' }, 'No owner')),
+      h('td', { class: 'num' }, Number(car.open_work_orders) ? String(car.open_work_orders) : '–'));
+    const go = () => { location.hash = `#/customer-cars/${car.id}`; };
+    tr.addEventListener('click', (e) => { if (!e.target.closest('a')) go(); });
+    tr.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+    return tr;
+  });
+  return h('div', {},
+    h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
+      h('thead', {}, h('tr', {}, h('th', {}, 'Reg. no.'), h('th', {}, 'Car'), h('th', {}, 'Owner'), h('th', { class: 'num' }, 'Open work orders'))),
+      h('tbody', {}, rows))),
+    data.total > data.cars.length
+      ? h('p', { class: 'muted small' }, `Showing the latest ${data.cars.length} of ${data.total}. Search to find others.`) : null);
 }
 
 function customerTable(data) {

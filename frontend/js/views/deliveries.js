@@ -9,7 +9,7 @@
 // kiosk setup for admins (maps, key places, tick boxes, kiosk tablets).
 import { lang, setLang } from '../i18n.js';
 import {
-  api, append, badge, busy, euStatus, fmtDate, h, nameInput, openDialog, session, showError, toast, vehicleTitle,
+  api, append, badge, busy, canOpen, euStatus, fmtDate, h, nameInput, openDialog, session, showError, toast, vehicleTitle,
 } from '../ui.js';
 
 const IDLE_MS = 3 * 60 * 1000;   // a half-filled form is cleared when the customer walks away
@@ -381,9 +381,13 @@ function cardTop(first) {
 
     slot.replaceChildren(...[
       h('div', { class: 'list-title' }, h('span', { class: 'mono strong delivery-reg' }, d.registration_number),
-        // Linked when the car is in Carbonara (same reg. no, or the VIN from Statens vegvesen).
-        d.vehicle_id && d.make ? [' ', h('a', { href: `#/vehicles/${d.vehicle_id}` }, vehicleTitle(d))]
-          : car ? [' ', h('span', { translate: 'no' }, car)] : null),
+        // Linked when the car is in the workshop's customer register (same reg. no, or the VIN from Statens
+        // vegvesen; 0.53.0). Deliveries from before that may still link to the car stock.
+        d.customer_car_id ? [' ', canOpen(`#/customer-cars/${d.customer_car_id}`)
+          ? h('a', { href: `#/customer-cars/${d.customer_car_id}`, translate: 'no' }, [d.car_make, d.car_model].filter(Boolean).join(' ') || 'Customer car')
+          : h('span', { translate: 'no' }, [d.car_make, d.car_model].filter(Boolean).join(' '))]
+          : d.vehicle_id && d.make ? [' ', h('a', { href: `#/vehicles/${d.vehicle_id}` }, vehicleTitle(d))]
+            : car ? [' ', h('span', { translate: 'no' }, car)] : null),
       d.svv_vin ? h('div', {}, h('span', {}, 'VIN: '), h('span', { class: 'mono' }, d.svv_vin)) : null,
       h('div', {}, h('span', { translate: 'no' }, d.display_name || d.customer_name), ' · ',
         h('a', { href: `tel:${d.customer_phone}` }, d.customer_phone)),

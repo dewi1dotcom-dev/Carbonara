@@ -990,3 +990,9 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
   background: var(--surface); color: var(--text); cursor: pointer; }
 .booked-chip.on { border-color: var(--primary); background: var(--primary); color: var(--primary-text); }
 .pl-job.arrived { box-shadow: inset 0 -3px 0 var(--good), var(--shadow); }
+
+/* Tabs (0.53.0: Customers | Cars) */
+.tabs { display: flex; gap: .25rem; border-bottom: 1px solid var(--border); margin: .25rem 0 .75rem; }
+.tabs .tab { padding: .5rem .9rem; text-decoration: none; color: var(--muted); border-radius: 8px 8px 0 0; }
+.tabs .tab:hover { color: var(--text); }
+.tabs .tab.active { color: var(--text); font-weight: 600; box-shadow: inset 0 -3px 0 var(--primary); }

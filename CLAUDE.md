@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…050
+  migrations/           001…051
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -328,6 +328,7 @@ frontend/               no build step; plain ES modules
 | 048 | `invoices` | `invoices` (number, kind invoice / credit_note, `credits_invoice_id`, work order, customer, issue / delivery / due date, snapshots `seller` / `buyer` / `car` / `lines` / `vat_lines`, totals, `kid`, `note`, `parts_order_ids`, `paid_at / paid_by`; trigger `invoices_locked`: never changed or deleted except the payment and links set to NULL); `work_orders.labour_rate / billed_minutes / extra_lines / km / invoice_id`, status `invoiced` |
 | 049 | `planner` | `planner_rows` (team, staff, sort, hidden: the lines of a team's planner), `absences` (staff, kind holiday / away / course / other, start, end, note); teams with Work orders get `planner` |
 | 050 | `work_order_arrival` | `work_orders.arrived_at`, `car_deliveries.work_order_id` |
+| 051 | `delivery_customer_car` | `car_deliveries.customer_car_id` (kiosk deliveries link to the workshop's register, not the car stock) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -623,8 +624,8 @@ the server is LAN-only, so no customer phones / public internet).
   the keyboard is laid over the page, from `visualViewport`).
 - **`/api/kiosk/*`** is the only API open without a staff session: `auth.require_kiosk_or_staff` (kiosk
   cookie or staff). Staff can preview the form at `#/kiosk` (deliveries sent from it are real).
-- **The form:** reg. no (stored uppercase without spaces, 2–8 letters/digits; linked to the car when the
-  reg. no is in Carbonara), name (`nameInput`) + phone (`clean_phone`), **key place** (one, from the list),
+- **The form:** reg. no (stored uppercase without spaces, 2–8 letters/digits; linked to the car in the **customer register**
+  when the reg. no is there, `customer_car_id`, 0.53.0; before that it linked to Vehicles), name (`nameInput`) + phone (`clean_phone`), **key place** (one, from the list),
   **where the car is**: a tap on the location's map picture (pin stored as `pin_x/pin_y`, 0–1 share of
   width/height), **tick boxes** (any), message. Key place and pin are required once the lists/maps exist.
   Choices are stored as `{en, no}` snapshots, so renaming an option doesn't change old deliveries.
@@ -1306,6 +1307,15 @@ owner, with history; customers have a customer number; owners can change; owners
 database stays separate but can be transferred when a customer allows it; a choice at first setup, for companies working
 together"). The user's choices: stock goes down when an order is handed out, automatic customer numbers, inactive
 customers deleted after `retention_years`, and modules + another company + consent.
+- **Two companies, two databases (0.53.0, the user's question):** the sales company's cars are **Vehicles** (`vehicles`);
+  the workshop's customers and their cars are the **customer register** (`customers`, `customer_cars`, `car_ownerships`;
+  a customer can own several cars, owners change over time). They are separate tables and screens; the only bridges are
+  on purpose: "Transfer to the customer register" (customer's consent), work orders on a car in stock (e.g. a PDI the
+  sales company orders) and the vehicle page's typed customer row. Kiosk deliveries (workshop) link to the register
+  (`car_deliveries.customer_car_id`, register events `customer_delivery` / `customer_delivery_received`), never to
+  Vehicles any more. The Customers page has two tabs, **Customers** and **Cars** (`#/customers?tab=cars`,
+  `GET /customer-cars?q=`: reg. no., VIN, make / model, owner; "+ New car" picks the owner first). Admins see both sides
+  (they are admins of the whole install); teams decide what others see.
 - **Customers** (`#/customers`, `#/customers/:id`; top menu "Customers" / "Kunder", team key `customers`): customer no.
   (automatic: max + 1, at least System → Customer register → "First customer number" `customer_number_start`, advisory
   lock), private (first + last name) or company (company name, 9-digit org. no.), phone (`clean_phone`), e-mail, address,
@@ -1764,6 +1774,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.52.0 | Delivery kiosk: today's booked cars (reg. no. + first name) to tap; the delivery is tied to the work order and the planner shows the car as arrived (also set by hand) (migration 050) |
 | 0.52.1 | Top bar: time and date on one line, with the buttons (⏱ 📝 💬 👤) under it (`.topbar-side`) |
 | 0.52.2 | Top bar clock: weekday and date as dd.mm.yyyy, the time to the right of it |
+| 0.53.0 | Workshop and sales kept apart: Customers page gets a **Cars** tab (the workshop's customer cars, searchable, owner, open work orders); kiosk deliveries link to the customer register instead of the car stock (migration 051) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

@@ -246,6 +246,18 @@ const NO = {
   'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
   'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
   'Sales price ex VAT': 'Utsalgspris eks. mva.',
+  // Customer register: cars tab (0.53.0)
+  'Search cars': 'Søk i biler',
+  'Reg. no., VIN, make, model, owner': 'Reg.nr., VIN, merke, modell, eier',
+  'Owner of the car': 'Eier av bilen',
+  'New car': 'Ny bil',
+  'The workshop’s own customers and their cars, kept apart from Vehicles (the cars for sale). A car from Vehicles is copied in only when the customer agrees.': 'Verkstedets egne kunder og bilene deres, holdt adskilt fra Biler (bilene til salgs). En bil fra Biler kopieres inn bare når kunden samtykker.',
+  'No owner': 'Ingen eier',
+  'Open work orders': 'Åpne arbeidsordrer',
+  'Reg. no.': 'Reg.nr.',
+  'Customer car': 'Kundebil',
+  'Delivered at the kiosk': 'Levert på nettbrettet',
+  'Delivery received': 'Levering mottatt',
   // Kiosk arrival (0.52.0)
   'Booked in today? Tap your car': 'Har du time i dag? Trykk på bilen din',
   'Not on the list? Just fill in the form.': 'Står den ikke på listen? Fyll bare ut skjemaet.',

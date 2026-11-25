@@ -344,6 +344,37 @@ def _find(conn, reg: str, vin: str) -> Optional[dict]:
             ORDER BY (cc.vin = %s) DESC NULLS LAST LIMIT 1""", (vin, vin, reg, reg, vin)).fetchone()
 
 
+@router.get("/customer-cars")
+def list_cars(q: str = "", conn=Depends(get_conn), _staff=Depends(require_register)):
+    """The register's cars (0.53.0, "Cars" on the Customers page): reg. no., VIN, make / model, owner's name or no."""
+    where, params = [], []
+    for tok in q.split()[:5]:
+        like = "%" + re.sub(r"([%_\\])", r"\\\1", tok) + "%"
+        key = re.sub(r"[^A-Za-z0-9]", "", tok).upper()
+        digits = re.sub(r"\D", "", tok)
+        conds = ["cc.make ILIKE %s", "cc.model ILIKE %s", "c.name ILIKE %s"]
+        params += [like] * 3
+        if key:
+            conds += ["cc.registration_number LIKE %s", "cc.vin LIKE %s"]
+            params += [f"%{key}%", f"%{key}%"]
+        if digits:
+            conds.append("c.customer_no::text = %s")
+            params.append(digits)
+        where.append("(" + " OR ".join(conds) + ")")
+    rows = conn.execute(
+        f"""SELECT cc.id, cc.registration_number, cc.vin, cc.make, cc.model, cc.model_year, cc.vehicle_id,
+                   c.id AS owner_id, c.name AS owner_name, c.customer_no AS owner_no,
+                   (SELECT count(*) FROM work_orders w WHERE w.customer_car_id = cc.id
+                       AND w.status IN ('open', 'in_progress')) AS open_work_orders,
+                   count(*) OVER () AS total
+              FROM customer_cars cc
+              LEFT JOIN car_ownerships o ON o.car_id = cc.id AND o.ended_at IS NULL
+              LEFT JOIN customers c ON c.id = o.customer_id
+              {('WHERE ' + ' AND '.join(where)) if where else ''}
+             ORDER BY cc.updated_at DESC LIMIT {LIST_LIMIT}""", params).fetchall()
+    return {"cars": rows, "total": rows[0]["total"] if rows else 0, "limit": LIST_LIMIT}
+
+
 @router.get("/customer-cars/find")
 def find_car(reg: str = "", vin: str = "", conn=Depends(get_conn), _staff=Depends(require_register)):
     """Before adding a car: is it in the register already, and who owns it."""

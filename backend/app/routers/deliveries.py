@@ -46,12 +46,14 @@ DELIVERY_SELECT = """
            d.received_at + make_interval(days => %(trash_days)s) AS purge_at,
            m.name AS map_name, m.name_no AS map_name_no, k.name AS kiosk_name,
            v.make, v.model, v.model_year,
+           d.customer_car_id, cc.make AS car_make, cc.model AS car_model,
            d.work_order_id, (SELECT w.number FROM work_orders w WHERE w.id = d.work_order_id) AS work_order_number
       FROM car_deliveries d
       LEFT JOIN delivery_maps m ON m.id = d.map_id
       LEFT JOIN staff sr ON sr.id = d.received_by
       LEFT JOIN kiosk_devices k ON k.id = d.kiosk_id
-      LEFT JOIN vehicles v ON v.id = d.vehicle_id AND v.deleted_at IS NULL"""
+      LEFT JOIN vehicles v ON v.id = d.vehicle_id AND v.deleted_at IS NULL
+      LEFT JOIN customer_cars cc ON cc.id = d.customer_car_id"""
 
 
 def _clean_reg(raw: Optional[str]) -> str:
@@ -104,15 +106,21 @@ def _registry_lookup(reg: str, typed_name: str) -> dict:
     }
 
 
+def _register_event(conn, car_id: int, delivery_id: int) -> None:
+    conn.execute("INSERT INTO register_events (car_id, kind, data) VALUES (%s, 'customer_delivery', %s)",
+                 (car_id, Jsonb({"delivery_id": delivery_id})))
+
+
 def _save_lookup(conn, delivery_id: int, fields: dict) -> None:
     row = update_row(conn, "car_deliveries", delivery_id, fields)
-    # Not linked by reg. no, but the car is in Carbonara by VIN (e.g. its reg. no was never typed in).
-    if row and not row["vehicle_id"] and row["svv_vin"]:
-        v = conn.execute("SELECT id FROM vehicles WHERE vin = %s AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
-                         (row["svv_vin"],)).fetchone()
-        if v:
-            conn.execute("UPDATE car_deliveries SET vehicle_id = %s WHERE id = %s", (v["id"], delivery_id))
-            log_event(conn, v["id"], "customer_delivery", data={"delivery_id": delivery_id})
+    # Not linked by reg. no, but the car is in the workshop's register by VIN (0.53.0: the register, never the
+    # sales stock).
+    if row and not row["customer_car_id"] and not row["vehicle_id"] and row["svv_vin"]:
+        car = conn.execute("SELECT id FROM customer_cars WHERE vin = %s ORDER BY id DESC LIMIT 1",
+                           (row["svv_vin"],)).fetchone()
+        if car:
+            conn.execute("UPDATE car_deliveries SET customer_car_id = %s WHERE id = %s", (car["id"], delivery_id))
+            _register_event(conn, car["id"], delivery_id)
 
 
 def lookup_in_background(delivery_id: int, reg: str, typed_name: str) -> None:
@@ -237,8 +245,9 @@ def create_delivery(body: DeliveryIn, tasks: BackgroundTasks, who=Depends(requir
               for i in dict.fromkeys(body.check_ids) if i in options and options[i]["kind"] == "checkbox"]
     message = (body.message or "").strip() or None
 
-    vehicle = conn.execute("SELECT id FROM vehicles WHERE registration_number = %s AND deleted_at IS NULL "
-                           "ORDER BY id DESC LIMIT 1", (reg,)).fetchone()
+    # The workshop's own register (0.53.0): never the sales company's stock (vehicles).
+    car = conn.execute("SELECT id FROM customer_cars WHERE registration_number = %s ORDER BY id DESC LIMIT 1",
+                       (reg,)).fetchone()
     # A car picked from today's booked cars: tied to its work order only while the reg. no. still matches
     # (the customer may have picked the wrong one and typed their own).
     booked = None
@@ -247,15 +256,15 @@ def create_delivery(body: DeliveryIn, tasks: BackgroundTasks, who=Depends(requir
         if booked and booked["registration_number"] != reg:
             booked = None
     row = conn.execute(
-        """INSERT INTO car_deliveries (registration_number, vehicle_id, customer_name, customer_phone, map_id,
+        """INSERT INTO car_deliveries (registration_number, customer_car_id, customer_name, customer_phone, map_id,
                                        pin_x, pin_y, key_place, checks, message, kiosk_id, work_order_id)
            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
-        (reg, vehicle["id"] if vehicle else None, name, phone, map_id, pin_x, pin_y,
+        (reg, car["id"] if car else None, name, phone, map_id, pin_x, pin_y,
          Jsonb(key_place) if key_place else None, Jsonb(checks), message,
          who["kiosk"]["id"] if who["kiosk"] else None, booked["id"] if booked else None),
     ).fetchone()
-    if vehicle:  # the car's history gets the delivery, never the customer's details
-        log_event(conn, vehicle["id"], "customer_delivery", data={"delivery_id": row["id"]})
+    if car:  # the car's history in the register gets the delivery, never the customer's details
+        _register_event(conn, car["id"], row["id"])
     if booked:  # the planner shows the car as arrived
         conn.execute("UPDATE work_orders SET arrived_at = now() WHERE id = %s", (booked["id"],))
         conn.execute("INSERT INTO work_order_events (work_order_id, kind, data) VALUES (%s, 'arrived', %s)",
@@ -288,7 +297,7 @@ def list_deliveries(conn=Depends(get_conn)):
 def receive_delivery(delivery_id: int, request: Request, conn=Depends(get_conn)):
     """Staff have the car and the key. Received by = the logged-in staff member."""
     staff_id = request.state.staff["id"]
-    d = conn.execute("SELECT id, vehicle_id, received_at FROM car_deliveries WHERE id = %s FOR UPDATE",
+    d = conn.execute("SELECT id, vehicle_id, customer_car_id, received_at FROM car_deliveries WHERE id = %s FOR UPDATE",
                      (delivery_id,)).fetchone()
     if not d:
         raise not_found("Delivery")
@@ -296,7 +305,11 @@ def receive_delivery(delivery_id: int, request: Request, conn=Depends(get_conn))
         raise conflict("This delivery is already received")
     conn.execute("UPDATE car_deliveries SET received_at = now(), received_by = %s WHERE id = %s",
                  (staff_id, delivery_id))
-    if d["vehicle_id"]:
+    if d["customer_car_id"]:
+        conn.execute("INSERT INTO register_events (car_id, kind, data, created_by) "
+                     "VALUES (%s, 'customer_delivery_received', %s, %s)",
+                     (d["customer_car_id"], Jsonb({"delivery_id": delivery_id}), staff_id))
+    elif d["vehicle_id"]:  # a delivery made before 0.53.0, linked to the car stock
         log_event(conn, d["vehicle_id"], "customer_delivery_received", staff_id=staff_id,
                   data={"delivery_id": delivery_id})
     return {"ok": True}
