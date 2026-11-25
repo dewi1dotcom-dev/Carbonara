@@ -2,7 +2,7 @@
 // another, with breaks (hatched) and absences. Drag a job to move it (time and person), drag its right edge to change
 // the estimate, drag a job from "Not planned" onto a line, or tap an empty spot. Everyone in the team can change it.
 // Server: routers/planner.py; jobs are saved through PATCH /work-orders/{id}.
-import { api, append, busy, dateInput, h, openDialog, osloTodayIso, session, showError, timeInput, toast } from '../ui.js';
+import { api, append, busy, dateInput, fmtDate, h, openDialog, osloTodayIso, session, showError, timeInput, toast } from '../ui.js';
 import { fmtDuration } from './hours.js';
 import { newWorkOrderDialog, woBadge } from './workorders.js';
 
@@ -201,7 +201,7 @@ function jobBar(p, data, rerender, { timeAt }) {
   const label = [o.registration_number, o.title || o.customer_name].filter(Boolean).join(' · ');
   const handle = p.last ? h('span', { class: 'pl-resize', title: 'Drag to change the time it takes' }) : null;
   const bar = h('div', {
-    class: `pl-job st-${o.status}${o.pdi_order_id ? ' pdi' : ''}${p.cont ? ' cont' : ''}`,
+    class: `pl-job st-${o.status}${o.pdi_order_id ? ' pdi' : ''}${p.cont ? ' cont' : ''}${o.arrived_at ? ' arrived' : ''}`,
     style: `left:${p.x1}px;width:${p.x2 - p.x1}px;top:${9 + p.row * 46}px`,
     title: `#${o.number} ${label}`,
   },
@@ -209,6 +209,7 @@ function jobBar(p, data, rerender, { timeAt }) {
   h('span', { class: 'pl-job-text', translate: 'no' }, label),
   o.task_count ? h('span', { class: 'pl-job-meta' }, `${o.tasks_done}/${o.task_count}`) : null,
   Number(o.clocks_running) > 0 ? h('span', { class: 'pl-job-meta' }, '⏱') : null,
+  o.arrived_at ? h('span', { class: 'pl-job-meta pl-arrived', title: 'The car has arrived' }, '🔑') : null,
   handle);
 
   if (!data.can_edit) {
@@ -358,10 +359,19 @@ function jobDialog(o, data, rerender) {
   const est = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', value: o.estimated_minutes ? String(Math.round((o.estimated_minutes / 60) * 100) / 100).replace('.', ',') : '' });
   const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
   const off = h('button', { class: 'link danger', type: 'button' }, 'Take off the plan');
+  const arrived = h('button', { class: o.arrived_at ? 'btn small' : 'btn small primary', type: 'button' },
+    o.arrived_at ? 'Not arrived after all' : '🔑 The car has arrived');
+  arrived.addEventListener('click', () => busy(arrived, async () => {
+    await api.post(`/work-orders/${o.id}/arrived`, { arrived: !o.arrived_at });
+    close();
+    await rerender();
+  }));
   const form = h('form', {},
     h('p', {}, woBadge(o.status), ' ', h('span', { translate: 'no' }, [o.registration_number, [o.make, o.model].filter(Boolean).join(' '), o.customer_name].filter(Boolean).join(' · '))),
     o.title ? h('p', { translate: 'no' }, o.title) : null,
     h('p', { class: 'muted small' }, h('span', {}, 'Done about'), ` ${isoNo(o.end_local.slice(0, 10))} ${o.end_local.slice(11, 16)}`),
+    h('p', {}, o.arrived_at ? h('span', { class: 'badge good' }, h('span', {}, 'Arrived'), ` ${fmtDate(o.arrived_at)}`)
+      : h('span', { class: 'badge' }, 'Not arrived yet'), ' ', data.can_edit ? arrived : null),
     data.can_edit ? [
       h('div', { class: 'grid' }, field('Date', day), field('Start', time), field('Estimated hours', est)),
       field('Mechanic', who),

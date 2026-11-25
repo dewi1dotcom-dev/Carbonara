@@ -121,6 +121,7 @@ def create_work_order(conn, staff_id: int, *, vehicle_id=None, customer_car_id=N
 
 WO_SELECT = """SELECT w.id, w.number, w.status, w.title, w.planned_at, w.estimated_minutes, w.created_at, w.done_at,
                       w.vehicle_id, w.customer_car_id, w.customer_id, w.assigned_to, w.pdi_order_id, w.updated_at,
+                      w.arrived_at,
                       coalesce(cc.registration_number, v.registration_number) AS registration_number,
                       coalesce(cc.vin, v.vin) AS vin, coalesce(cc.make, v.make) AS make,
                       coalesce(cc.model, v.model) AS model, v.deleted_at IS NOT NULL AS vehicle_deleted,
@@ -491,3 +492,19 @@ def save_extra_lines(wo_id: int, body: ExtraLinesIn, conn=Depends(get_conn), sta
                  (Jsonb(lines, dumps=lambda v: json.dumps(v, default=str)), staff["id"], wo_id))
     _event(conn, wo_id, "extra_lines", staff["id"], {"count": len(lines)})
     return {"lines": lines}
+
+
+class ArrivedIn(BaseModel):
+    arrived: bool
+
+
+@router.post("/work-orders/{wo_id}/arrived")
+def set_arrived(wo_id: int, body: ArrivedIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
+    """The car is here (also set by the kiosk when the customer picks it from today's booked cars), or not after all."""
+    o = _order(conn, wo_id, lock=True)
+    _not_locked(o)
+    if bool(o["arrived_at"]) == body.arrived:
+        return {"id": wo_id}
+    conn.execute("UPDATE work_orders SET arrived_at = CASE WHEN %s THEN now() END WHERE id = %s", (body.arrived, wo_id))
+    _event(conn, wo_id, "arrived" if body.arrived else "not_arrived", staff["id"])
+    return {"id": wo_id}

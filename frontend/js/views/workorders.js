@@ -194,11 +194,13 @@ export async function newWorkOrderDialog(car = null, prefill = {}) {
 const EVENT = {
   created: 'Work order created', updated: 'Details changed', tasks: 'Tasks changed', status: 'Status changed',
   parts_order: 'Parts order made', extra_lines: 'Other charges changed', invoiced: 'Invoiced', credited: 'Invoice credited',
+  arrived: 'Car arrived', not_arrived: 'Not arrived after all',
 };
 
 function eventDetail(e) {
   const d = e.data || {};
   if (e.kind === 'invoiced') return h('a', { href: `#/invoices/${d.invoice_id}` }, `Invoice no. ${d.number}`);
+  if (e.kind === 'arrived' && d.kiosk) return h('span', {}, 'Registered on the delivery kiosk');
   if (e.kind === 'credited') {
     return [h('a', { href: `#/invoices/${d.invoice_id}` }, `Invoice no. ${d.number}`), ' → ',
       h('a', { href: `#/invoices/${d.credit_note_id}` }, `Credit note no. ${d.credit_note_number}`)];
@@ -277,6 +279,16 @@ export async function workOrderView(el, [id], host = el) {
     editable ? [' ', h('button', { class: 'link small no-print', type: 'button', onClick: chooseCustomer }, 'change')] : null,
     o.customer_phone ? h('span', { class: 'muted small block', translate: 'no' }, o.customer_phone) : null)
     : editable ? h('button', { class: 'link', type: 'button', onClick: chooseCustomer }, 'Choose the customer') : h('span', { class: 'muted' }, '–');
+  // Arrived: set by the kiosk when the customer picks their booked car, or by hand here / in the planner.
+  const arrivedBtn = editable ? h('button', { class: 'link small no-print', type: 'button' },
+    o.arrived_at ? 'Not arrived after all' : '🔑 The car has arrived') : null;
+  arrivedBtn?.addEventListener('click', () => busy(arrivedBtn, async () => {
+    await api.post(`/work-orders/${o.id}/arrived`, { arrived: !o.arrived_at });
+    await rerender();
+  }));
+  const arrivedValue = o.arrived_at || editable
+    ? h('span', {}, o.arrived_at ? fmtDate(o.arrived_at) : h('span', { class: 'muted' }, 'Not arrived yet'), ' ', arrivedBtn)
+    : null;
 
   append(el,
     h('p', { class: 'small no-print' }, h('a', { href: '#/work-orders' }, '← Work orders')),
@@ -304,6 +316,7 @@ export async function workOrderView(el, [id], host = el) {
         row('Mileage', o.km != null && `${Number(o.km).toLocaleString('nb-NO')} km`),
         row('Mechanic', o.assigned_name && h('span', { translate: 'no' }, o.assigned_name)),
         row('Planned', o.planned_local && fmtLocal(o.planned_local)),
+        row('Car arrived', arrivedValue),
         row('Estimated hours', o.estimated_minutes && fmtDuration(o.estimated_minutes * 60)),
         row('PDI', o.pdi_order_id && (canOpen('#/pdi-orders') && o.vehicle_id
           ? h('a', { href: `#/pdi-orders?car=${o.vehicle_id}` }, 'Open the PDI order') : h('span', {}, 'PDI order'))),

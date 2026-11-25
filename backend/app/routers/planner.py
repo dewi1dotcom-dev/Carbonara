@@ -58,7 +58,7 @@ def rows(conn, team_id: int) -> list[dict]:
 ORDER_SELECT = """SELECT w.id, w.number, w.status, w.title, w.assigned_to, w.planned_at, w.estimated_minutes,
                          coalesce(cc.registration_number, v.registration_number) AS registration_number,
                          coalesce(cc.make, v.make) AS make, coalesce(cc.model, v.model) AS model,
-                         c.name AS customer_name, w.pdi_order_id,
+                         c.name AS customer_name, w.pdi_order_id, w.arrived_at,
                          jsonb_array_length(w.tasks) AS task_count,
                          (SELECT count(*) FROM jsonb_array_elements(w.tasks) x WHERE (x->>'done')::boolean) AS tasks_done,
                          (SELECT count(*) FROM work_time t WHERE t.work_order_id = w.id AND t.ended_at IS NULL)

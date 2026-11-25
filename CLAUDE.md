@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…049
+  migrations/           001…050
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -327,6 +327,7 @@ frontend/               no build step; plain ES modules
 | 047 | `work_orders_hours` | `work_orders` (number, status open / in_progress / done / cancelled, `vehicle_id` or `customer_car_id` + `customer_id`, title, description, `tasks` jsonb, `mechanic_note`, `estimated_minutes`, `planned_at`, `assigned_to`, `pdi_order_id`), `work_order_events`, `work_days` (staff, day, start, end, `breaks` jsonb), `work_time` (clock on a work order; one running per person); `parts_orders.work_order_id`, `pdi_orders.work_order_id`; teams with Parts or Customers get `work_orders` |
 | 048 | `invoices` | `invoices` (number, kind invoice / credit_note, `credits_invoice_id`, work order, customer, issue / delivery / due date, snapshots `seller` / `buyer` / `car` / `lines` / `vat_lines`, totals, `kid`, `note`, `parts_order_ids`, `paid_at / paid_by`; trigger `invoices_locked`: never changed or deleted except the payment and links set to NULL); `work_orders.labour_rate / billed_minutes / extra_lines / km / invoice_id`, status `invoiced` |
 | 049 | `planner` | `planner_rows` (team, staff, sort, hidden: the lines of a team's planner), `absences` (staff, kind holiday / away / course / other, start, end, note); teams with Work orders get `planner` |
+| 050 | `work_order_arrival` | `work_orders.arrived_at`, `car_deliveries.work_order_id` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1454,6 +1455,15 @@ team"):
   dialog says not to write why someone is away. Deleted by the worker a year after they end (`purge_old_absences`).
 - **Capacity:** under each name, planned / available hours over the days shown (available = working day − breaks −
   absences; red when over). Red "now" line on today. Views: one day, three days, one week (from Monday).
+- **Arrived (0.52.0, the user's request):** the **delivery kiosk** shows "Booked in today? Tap your car" with today's
+  work orders (planned start today in Oslo time, open / in progress, not arrived, car from the customer register) as
+  **registration number + first name** (a company: its name; never surname or phone: `deliveries.BOOKED_SQL`,
+  `GET /api/kiosk/booked`, reloaded each time the form resets). Tapping fills the reg. no. (typing another one drops the
+  choice); on "Register delivery" the server ties the delivery to the work order only if the reg. no. still matches
+  (`car_deliveries.work_order_id`), sets `work_orders.arrived_at` and logs `arrived` `{delivery_id, kiosk}`. The planner
+  marks the job (🔑, green bottom edge); the job dialog, the work order page ("Car arrived") and `POST
+  /work-orders/{id}/arrived {arrived}` set / undo it by hand; the staff delivery card shows "Booked: Work order #n". The
+  kiosk privacy notice says booked customers' reg. no. and first name show on the tablet that day.
 
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
@@ -1751,6 +1761,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.49.0 | **Work orders + work hours:** work orders (car from Vehicles or the customer register, work as text and / or a task list, mechanic's reply, labour clock, parts orders tied to it; PDIs get a number from here when the date is confirmed); ⏱ start / end of the working day and one running clock per person; fixed breaks taken off; #/hours for admins with corrections and CSV export (migration 047) |
 | 0.50.0 | **Invoices:** parts and labour (hours × rate) and other charges on the work order; "Make invoice" issues a Norwegian invoice (unbroken number series, all required details, never changed or deleted; parts leave the stock), credit notes, mark as paid, invoice list + CSV export for the accountant; Invoicing settings on the System page (migration 048) |
 | 0.51.0 | **Planner:** a calendar per team with a line per person, work orders laid out over the working day (breaks, evenings, weekends skipped), drag to move / change mechanic / stretch, "Not planned" list, absences (holiday / away / course / other), planned vs. available hours; working day start / end on the System page (migration 049) |
+| 0.52.0 | Delivery kiosk: today's booked cars (reg. no. + first name) to tap; the delivery is tied to the work order and the planner shows the car as arrived (also set by hand) (migration 050) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

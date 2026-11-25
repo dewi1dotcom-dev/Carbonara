@@ -246,6 +246,14 @@ const NO = {
   'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
   'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
   'Sales price ex VAT': 'Utsalgspris eks. mva.',
+  // Kiosk arrival (0.52.0)
+  'Booked in today? Tap your car': 'Har du time i dag? Trykk på bilen din',
+  'Not on the list? Just fill in the form.': 'Står den ikke på listen? Fyll bare ut skjemaet.',
+  'Booked': 'Bestilt time',
+  'The car has arrived': 'Bilen har kommet',
+  'Not arrived yet': 'Ikke kommet ennå',
+  'Car arrived': 'Bilen kom',
+  'Registered on the delivery kiosk': 'Registrert på leveringsnettbrettet',
   // Planner (0.51.0)
   'Planner': 'Planlegger',
   'You are not in a team. A system admin puts people in teams on the System page.': 'Du er ikke i et team. En systemadministrator plasserer folk i team på Systemsiden.',

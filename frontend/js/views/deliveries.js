@@ -82,6 +82,8 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
     h('p', {}, 'Registreringsnummer, navn og telefonnummer, hvor bilen står og hvor nøkkelen ligger, hva du krysser av for, og meldingen du skriver.'),
     h('h3', {}, 'Hvorfor'),
     h('p', {}, 'For å finne bilen og nøkkelen, utføre det du ber oss om, og kontakte deg om bilen.'),
+    h('p', {}, 'Har du time hos oss i dag, vises registreringsnummeret og fornavnet ditt på nettbrettet samme dag, slik at '
+      + 'du kan velge bilen din. Etternavn og telefonnummer vises aldri der.'),
     h('h3', {}, 'Rettslig grunnlag'),
     h('p', {}, 'Det er nødvendig for å utføre oppdraget du ber oss om (personvernforordningen art. 6 nr. 1 bokstav b).'),
     h('h3', {}, 'Hvor lenge'),
@@ -228,10 +230,32 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
     }) : [];
     drawMap();
 
+    // Booked today (0.52.0): the customer taps their car (reg. no. + first name only); the delivery is then tied to
+    // the work order and the planner shows the car as arrived. Typing another reg. no. drops the choice.
+    let picked = null; // { id, registration_number }
+    const bookedSlot = h('div');
+    const norm = (s) => String(s || '').toUpperCase().replace(/[^\p{L}\p{N}]/gu, '');
+    const drawBooked = (list) => {
+      bookedSlot.replaceChildren(...(list.length ? [h('div', { class: 'field kiosk-booked' },
+        h('label', {}, 'Booked in today? Tap your car'),
+        h('div', { class: 'chips' }, list.map((b) => h('button', {
+          class: `chip booked-chip${picked?.id === b.id ? ' on' : ''}`, type: 'button',
+          onClick: () => { picked = b; reg.value = b.registration_number; drawBooked(list); name.focus(); },
+        }, h('strong', { class: 'mono' }, b.registration_number), b.name ? h('span', { translate: 'no' }, ` · ${b.name}`) : null))),
+        h('p', { class: 'muted small' }, 'Not on the list? Just fill in the form.'))] : []));
+    };
+    api.get('/kiosk/booked').then((list) => {
+      drawBooked(list);
+      reg.addEventListener('input', () => {
+        if (picked && norm(reg.value) !== picked.registration_number) { picked = null; drawBooked(list); }
+      });
+    }).catch(() => {});
+
     const submit = h('button', { class: 'btn primary big', type: 'submit' }, 'Register delivery');
     const form = h('form', { class: 'card kiosk-card', autocomplete: 'off' },
       h('div', { class: 'kiosk-head' }, h('h1', {}, 'Deliver your car')),
       h('p', { class: 'muted' }, 'Register the car you are leaving with us. Quick and easy.'),
+      bookedSlot,
       h('div', { class: 'field' }, h('label', { for: 'kd-reg' }, 'Registration number'), reg),
       h('div', { class: 'grid' },
         h('div', { class: 'field' }, h('label', { for: 'kd-name' }, 'Your name'), name),
@@ -278,6 +302,7 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
           key_place_id: key ? Number(key.value) : null,
           check_ids: checkBoxes.filter((b) => b.checked).map((b) => Number(b.value)),
           message: message.value.trim() || null,
+          work_order_id: picked ? picked.id : null,
         });
         clearTimeout(idleTimer);
         renderDone(reg.value, key ? cfg.key_places.find((o) => String(o.id) === key.value) : null);
@@ -378,6 +403,8 @@ function deliveryDetails(d) {
     cardTop(d),
     h('div', { class: 'muted small' }, `Delivered ${fmtDate(d.created_at)}`,
       d.kiosk_name ? h('span', { translate: 'no' }, ` · ${d.kiosk_name}`) : null),
+    d.work_order_id ? h('div', { class: 'small' }, h('span', {}, 'Booked:'), ' ',
+      h('a', { href: `#/work-orders/${d.work_order_id}` }, `Work order #${d.work_order_number}`)) : null,
     d.key_place ? h('div', {}, 'Key: ', h('strong', { translate: 'no' }, optText(d.key_place))) : null,
     d.checks?.length ? h('div', { class: 'chips delivery-checks' },
       d.checks.map((c) => h('span', { class: 'badge', translate: 'no' }, optText(c)))) : null,

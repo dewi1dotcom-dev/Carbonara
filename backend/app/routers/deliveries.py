@@ -45,7 +45,8 @@ DELIVERY_SELECT = """
            d.svv_status, d.svv_checked_at, d.svv_error, d.svv_vin, d.svv_make, d.svv_model, d.svv_eu_due,
            d.received_at + make_interval(days => %(trash_days)s) AS purge_at,
            m.name AS map_name, m.name_no AS map_name_no, k.name AS kiosk_name,
-           v.make, v.model, v.model_year
+           v.make, v.model, v.model_year,
+           d.work_order_id, (SELECT w.number FROM work_orders w WHERE w.id = d.work_order_id) AS work_order_number
       FROM car_deliveries d
       LEFT JOIN delivery_maps m ON m.id = d.map_id
       LEFT JOIN staff sr ON sr.id = d.received_by
@@ -153,6 +154,24 @@ class DeliveryIn(BaseModel):
     key_place_id: Optional[int] = None
     check_ids: list[int] = Field(default_factory=list, max_length=50)
     message: Optional[str] = Field(None, max_length=1000)
+    work_order_id: Optional[int] = None   # the car was picked from today's booked cars (0.52.0)
+
+
+# Work orders planned today (Oslo) for a car in the customer register, not arrived yet: shown on the kiosk as
+# registration number + first name (a company: its name), so the customer can pick their car. Nothing else is shown.
+BOOKED_SQL = """
+    SELECT w.id, cc.registration_number,
+           CASE WHEN c.kind = 'company' THEN c.company_name ELSE c.first_name END AS name
+      FROM work_orders w JOIN customer_cars cc ON cc.id = w.customer_car_id
+      LEFT JOIN customers c ON c.id = w.customer_id
+     WHERE w.status IN ('open', 'in_progress') AND w.arrived_at IS NULL AND cc.registration_number IS NOT NULL
+       AND (w.planned_at AT TIME ZONE 'Europe/Oslo')::date = (now() AT TIME ZONE 'Europe/Oslo')::date"""
+
+
+@kiosk_router.get("/booked")
+def booked_today(_who=Depends(require_kiosk_or_staff), conn=Depends(get_conn)):
+    """Today's booked cars for the kiosk (registration number + first name only)."""
+    return conn.execute(BOOKED_SQL + " ORDER BY w.planned_at, cc.registration_number").fetchall()
 
 
 @kiosk_router.get("/config")
@@ -220,16 +239,27 @@ def create_delivery(body: DeliveryIn, tasks: BackgroundTasks, who=Depends(requir
 
     vehicle = conn.execute("SELECT id FROM vehicles WHERE registration_number = %s AND deleted_at IS NULL "
                            "ORDER BY id DESC LIMIT 1", (reg,)).fetchone()
+    # A car picked from today's booked cars: tied to its work order only while the reg. no. still matches
+    # (the customer may have picked the wrong one and typed their own).
+    booked = None
+    if body.work_order_id:
+        booked = conn.execute(BOOKED_SQL + " AND w.id = %s FOR UPDATE OF w", (body.work_order_id,)).fetchone()
+        if booked and booked["registration_number"] != reg:
+            booked = None
     row = conn.execute(
         """INSERT INTO car_deliveries (registration_number, vehicle_id, customer_name, customer_phone, map_id,
-                                       pin_x, pin_y, key_place, checks, message, kiosk_id)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
+                                       pin_x, pin_y, key_place, checks, message, kiosk_id, work_order_id)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
         (reg, vehicle["id"] if vehicle else None, name, phone, map_id, pin_x, pin_y,
          Jsonb(key_place) if key_place else None, Jsonb(checks), message,
-         who["kiosk"]["id"] if who["kiosk"] else None),
+         who["kiosk"]["id"] if who["kiosk"] else None, booked["id"] if booked else None),
     ).fetchone()
     if vehicle:  # the car's history gets the delivery, never the customer's details
         log_event(conn, vehicle["id"], "customer_delivery", data={"delivery_id": row["id"]})
+    if booked:  # the planner shows the car as arrived
+        conn.execute("UPDATE work_orders SET arrived_at = now() WHERE id = %s", (booked["id"],))
+        conn.execute("INSERT INTO work_order_events (work_order_id, kind, data) VALUES (%s, 'arrived', %s)",
+                     (booked["id"], Jsonb({"delivery_id": row["id"], "kiosk": True})))
     # VIN, EU-kontroll (and later the owner's name) from Statens vegvesen. The task runs
     # after this request has committed, so the row exists.
     tasks.add_task(lookup_in_background, row["id"], reg, name)
