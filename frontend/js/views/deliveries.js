@@ -82,7 +82,7 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
     h('p', {}, 'Registreringsnummer, navn og telefonnummer, hvor bilen står og hvor nøkkelen ligger, hva du krysser av for, og meldingen du skriver.'),
     h('h3', {}, 'Hvorfor'),
     h('p', {}, 'For å finne bilen og nøkkelen, utføre det du ber oss om, og kontakte deg om bilen.'),
-    h('p', {}, 'Har du time hos oss i dag, vises registreringsnummeret og fornavnet ditt på nettbrettet samme dag, slik at '
+    h('p', {}, 'Har du time hos oss, vises registreringsnummeret og fornavnet ditt på nettbrettet fra kl. 07.00 virkedagen før timen og ut timedagen, slik at '
       + 'du kan velge bilen din. Etternavn og telefonnummer vises aldri der.'),
     h('h3', {}, 'Rettslig grunnlag'),
     h('p', {}, 'Det er nødvendig for å utføre oppdraget du ber oss om (personvernforordningen art. 6 nr. 1 bokstav b).'),
@@ -237,7 +237,7 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
     const norm = (s) => String(s || '').toUpperCase().replace(/[^\p{L}\p{N}]/gu, '');
     const drawBooked = (list) => {
       bookedSlot.replaceChildren(...(list.length ? [h('div', { class: 'field kiosk-booked' },
-        h('label', {}, 'Booked in today? Tap your car'),
+        h('label', {}, 'Booked in? Tap your car'),
         h('div', { class: 'chips' }, list.map((b) => h('button', {
           class: `chip booked-chip${picked?.id === b.id ? ' on' : ''}`, type: 'button',
           onClick: () => { picked = b; reg.value = b.registration_number; drawBooked(list); name.focus(); },

@@ -259,7 +259,7 @@ const NO = {
   'Delivered at the kiosk': 'Levert på nettbrettet',
   'Delivery received': 'Levering mottatt',
   // Kiosk arrival (0.52.0)
-  'Booked in today? Tap your car': 'Har du time i dag? Trykk på bilen din',
+  'Booked in? Tap your car': 'Har du time? Trykk på bilen din',
   'Not on the list? Just fill in the form.': 'Står den ikke på listen? Fyll bare ut skjemaet.',
   'Booked': 'Bestilt time',
   'The car has arrived': 'Bilen har kommet',

@@ -1466,10 +1466,10 @@ team"):
 - **Capacity:** under each name, planned / available hours over the days shown (available = working day − breaks −
   absences; red when over). Red "now" line on today. Views: one day, three days, one week (from Monday).
 - **Arrived (0.52.0, the user's request):** the **delivery kiosk** shows "Booked in today? Tap your car" with today's
-  work orders (planned start today in Oslo time, open / in progress, not arrived, car from the customer register) as
+  work orders (open / in progress, not arrived, car from the customer register; **from 07:00 the working day before the appointment** until the end of the appointment day, 0.53.1: a Monday appointment shows from Friday 07:00) as
   **registration number + first name** (a company: its name; never surname or phone: `deliveries.BOOKED_SQL`,
   `GET /api/kiosk/booked`, reloaded each time the form resets). Tapping fills the reg. no. (typing another one drops the
-  choice); on "Register delivery" the server ties the delivery to the work order only if the reg. no. still matches
+  choice); on "Register delivery" the server ties the delivery to the work order only if the reg. no. still matches; **a typed reg. no. of a booked car links too, without tapping** (0.53.1)
   (`car_deliveries.work_order_id`), sets `work_orders.arrived_at` and logs `arrived` `{delivery_id, kiosk}`. The planner
   marks the job (🔑, green bottom edge); the job dialog, the work order page ("Car arrived") and `POST
   /work-orders/{id}/arrived {arrived}` set / undo it by hand; the staff delivery card shows "Booked: Work order #n". The
@@ -1775,6 +1775,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.52.1 | Top bar: time and date on one line, with the buttons (⏱ 📝 💬 👤) under it (`.topbar-side`) |
 | 0.52.2 | Top bar clock: weekday and date as dd.mm.yyyy, the time to the right of it |
 | 0.53.0 | Workshop and sales kept apart: Customers page gets a **Cars** tab (the workshop's customer cars, searchable, owner, open work orders); kiosk deliveries link to the customer register instead of the car stock (migration 051) |
+| 0.53.1 | Kiosk: booked cars show from 07:00 the working day before the appointment (Monday: from Friday); a typed reg. no. of a booked car also marks it as arrived, without tapping it in the list |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
