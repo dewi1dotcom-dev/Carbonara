@@ -241,8 +241,11 @@ const NO = {
   'Set the stock of existing parts from the file’s quantities': 'Sett beholdningen for eksisterende deler fra antallet i filen',
   'New parts always get the file’s quantity. Untick the first box to only update prices from a supplier’s full price list.':
     'Nye deler får alltid antallet fra filen. Fjern det første krysset for bare å oppdatere priser fra en leverandørs fullstendige prisliste.',
-  'A CSV file or an Excel file (.xlsx, first sheet). Columns are found by their name, in English or Norwegian: part number (needed), name, make, supplier, location, unit, quantity, minimum, cost price, price ex VAT or price inc VAT, VAT, note. A column called just “price” counts as ex VAT. Parts are matched by part number; only cells with a value change a part, and price changes go into its history.':
-    'En CSV-fil eller Excel-fil (.xlsx, første ark). Kolonnene finnes ut fra navnet, på engelsk eller norsk: delenummer (påkrevd), navn, merke, leverandør, plassering, enhet, antall, minimum, innpris, pris eks. mva. eller pris inkl. mva., mva., merknad. En kolonne som bare heter «pris» regnes som eks. mva. Delene kobles på delenummer; bare celler med en verdi endrer en del, og prisendringer havner i historikken.',
+  'A CSV file, an Excel file (.xlsx, first sheet) or an importer’s text price list (.txt). Columns are found by their name, in English or Norwegian: part number (needed), name, make, supplier, location, unit, quantity, minimum, cost price, price ex VAT or price inc VAT, VAT, note. A column called just “price” counts as ex VAT. Parts are matched by part number; only cells with a value change a part, and price changes go into its history. A text price list has no column names: part number, name and price are read from their places on each line (and the new part number when a part has been replaced).':
+    'En CSV-fil, en Excel-fil (.xlsx, første ark) eller en importørs prisliste som tekst (.txt). Kolonnene finnes ut fra navnet, på engelsk eller norsk: delenummer (påkrevd), navn, merke, leverandør, plassering, enhet, antall, minimum, innpris, pris eks. mva. eller pris inkl. mva., mva., merknad. En kolonne som bare heter «pris» regnes som eks. mva. Delene kobles på delenummer; bare celler med en verdi endrer en del, og prisendringer havner i historikken. En prisliste som tekst har ingen kolonnenavn: delenummer, navn og pris leses fra plassen sin på hver linje (og det nye delenummeret når en del er erstattet).',
+  'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
+  'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
+  'Sales price ex VAT': 'Utsalgspris eks. mva.',
   'Only the parts team or an administrator can do this': 'Bare deleteamet eller en administrator kan gjøre dette',
   'The part needs a name': 'Delen må ha et navn', 'The part number needs letters or digits': 'Delenummeret må ha bokstaver eller tall',
   'Enter a quantity above 0': 'Skriv inn et antall over 0', 'No parts found in the file': 'Fant ingen deler i filen',
@@ -1031,6 +1034,7 @@ const NO = {
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
+  ['Replaced by {}', 'Erstattet av {}'],
   // Customer register + parts orders (0.48.0)
   ['Customer {n} added', 'Kunde {1} lagt til'], ['Customer register of {}', 'Kunderegister for {1}'],
   ['Showing the latest {n} of {n}. Search to find others.', 'Viser de siste {1} av {2}. Søk for å finne andre.'],

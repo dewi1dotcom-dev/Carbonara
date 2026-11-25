@@ -1283,6 +1283,13 @@ sales price, and no link to cars for now):
   repeated part number in a file counts once. "Add parts that are not in Carbonara yet" (default on; off = update
   prices from a full supplier list only) and "Set the stock of existing parts" (default off; new parts always get the
   file's quantity). Logged in `part_imports` (last 5 shown).
+- **Importers' text price lists (0.48.6)** (`_fixed_rows`): a `.txt` without `;` / tab whose lines (80 % of the first 60) fit
+  one of two fixed-width layouts gets the column names `part_number, name, price, replaced_by` added: **A** = part no. (15) |
+  name (30) | space | price `0000344,82` | discount code | replaced by (16) | its price; **B** = part no. | name | price
+  `2.150,00` | discount code (lined up with spaces). The two sample files (one per make, 36 110 and 8 510 lines) are in the
+  user's notes folder. A 0,00 price = no price. "Replaced by X" goes into the note (never over a note someone wrote; NO
+  pattern "Erstattet av"). The form also asks **"Make for parts without one in the file"** (`make`) and whether a text list's
+  price is the sales or the cost price ex VAT (`price_is`, default sales). Saving is batched (`executemany`) for big lists.
 
 **Customer register + parts orders (0.48.0)** (migration 045; `routers/customers.py`, `routers/parts_orders.py`,
 `views/customers.js`, `views/partsorders.js`; the user's request: "collect parts in an order connected to a car and
@@ -1622,6 +1629,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.48.3 | Fix: the new customer form showed both the private person and the company fields (a global `[hidden]` rule in `app.css`) |
 | 0.48.4 | Organisation number for each company on the System page (Company, kiosk, Rental cars, Customer register), shown with the company name on the privacy notices, the storage report and PDI orders |
 | 0.48.5 | Settings and System: every card folds (closed by default, the heading opens it; open cards remembered per browser) |
+| 0.48.6 | Parts import reads importers' fixed-width text price lists (.txt), with a make for the file and sales / cost price choice; replaced parts get "Replaced by …" |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

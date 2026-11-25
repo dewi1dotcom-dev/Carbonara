@@ -325,6 +325,10 @@ function importCard(changed) {
   const file = h('input', { type: 'file', accept: '.csv,.xlsx,.txt,text/csv' });
   const addNew = h('input', { type: 'checkbox', checked: true });
   const setStock = h('input', { type: 'checkbox' });
+  const make = h('input', { type: 'text', maxlength: 60 });
+  const priceIs = h('select', {},
+    h('option', { value: 'sale' }, 'Sales price ex VAT'),
+    h('option', { value: 'cost' }, 'Cost price ex VAT'));
   const result = h('div');
   const past = h('div');
   const go = h('button', { class: 'btn primary', type: 'button' }, 'Import');
@@ -341,6 +345,8 @@ function importCard(changed) {
     fd.append('file', file.files[0]);
     fd.append('add_new', addNew.checked ? 'true' : 'false');
     fd.append('set_stock', setStock.checked ? 'true' : 'false');
+    fd.append('make', make.value.trim());
+    fd.append('price_is', priceIs.value);
     const r = await api.postForm('/parts/import', fd);
     result.replaceChildren(h('div', { class: 'notice' },
       h('span', { class: 'block' }, `Imported: ${r.added} added, ${r.updated} updated, ${r.unchanged} unchanged`),
@@ -355,13 +361,18 @@ function importCard(changed) {
   return h('section', { class: 'card' },
     h('details', {},
       h('summary', {}, h('strong', {}, 'Import a price list or stock list')),
-      h('p', { class: 'muted small' }, 'A CSV file or an Excel file (.xlsx, first sheet). Columns are found by their name, in English or '
+      h('p', { class: 'muted small' }, 'A CSV file, an Excel file (.xlsx, first sheet) or an importer’s text price list (.txt). Columns are found by their name, in English or '
         + 'Norwegian: part number (needed), name, make, supplier, location, unit, quantity, minimum, cost price, price ex VAT '
         + 'or price inc VAT, VAT, note. A column called just “price” counts as ex VAT. Parts are matched by part number; '
-        + 'only cells with a value change a part, and price changes go into its history.'),
+        + 'only cells with a value change a part, and price changes go into its history. A text price list '
+        + 'has no column names: part number, name and price are read from their places on each line (and the new part '
+        + 'number when a part has been replaced).'),
       h('div', { class: 'toolbar' }, file, go),
       h('label', { class: 'check' }, addNew, h('span', {}, 'Add parts that are not in Carbonara yet')),
       h('label', { class: 'check' }, setStock, h('span', {}, 'Set the stock of existing parts from the file’s quantities')),
+      h('div', { class: 'grid' },
+        h('label', {}, 'Make for parts without one in the file', make),
+        h('label', {}, 'The price in a text price list (.txt) is', priceIs)),
       h('p', { class: 'muted small' }, 'New parts always get the file’s quantity. Untick the first box to only update prices from a '
         + 'supplier’s full price list.'),
       result,

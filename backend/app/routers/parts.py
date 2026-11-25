@@ -414,7 +414,9 @@ COLUMNS = {
                    "veilpris", "veiledendepris", "listprice", "listepris", "bruttopris"),
     "vat_rate": ("vatrate", "vat", "mva", "mvasats", "mvaprosent"),
     "note": ("note", "notes", "comment", "merknad", "kommentar", "notat"),
+    "replaced_by": ("replacedby", "supersededby", "erstattetav", "erstatning", "nyttdelenummer", "nyttnr"),
 }
+REPLACED = "Replaced by "  # note on a replaced part ("Erstattet av" in Norwegian through the translator)
 UNIT_WORDS = {"pcs": ("pcs", "pc", "stk", "st", "ea", "each"), "set": ("set", "sett"), "l": ("l", "ltr", "liter", "litre"),
               "m": ("m", "meter", "metre"), "kg": ("kg",)}
 
@@ -449,6 +451,38 @@ def _unit(value) -> Optional[str]:
     return next((u for u, words in UNIT_WORDS.items() if v in words), None) if v else None
 
 
+# Importers' price lists as fixed-width text (.txt) without column names, one part per line:
+#  A: part no. (15) | name (30) | space | price "0000344,82" | discount code (1) | replaced by (16) | its price
+#  B: part no. | name | price "2.150,00" | discount code     (columns lined up with spaces)
+FIXED_A = re.compile(r"^(.{15})(.{30}) (\d{7},\d{2}) (.)(.{16})(\d{7},\d{2}) *$")
+FIXED_B = re.compile(r"^([^\s,]+) +(\S.*?) +(\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2})(?: +(\S{1,6}))? *$")
+FIXED_HEADER = ["part_number", "name", "price", "replaced_by"]
+
+
+def _fixed_rows(text: str) -> Optional[list[list]]:
+    """Rows of a fixed-width price list (with FIXED_HEADER added), or None when the text isn't one."""
+    lines = [ln.rstrip("\r") for ln in text.split("\n")]
+    sample = [ln for ln in lines[:60] if ln.strip()]
+    if not sample or any(c in ln for ln in sample for c in ";\t"):  # separators = a CSV file
+        return None
+    for pattern in (FIXED_A, FIXED_B):
+        if sum(1 for ln in sample if pattern.match(ln)) < max(1, len(sample) * 0.8):
+            continue
+        rows = [FIXED_HEADER]
+        for ln in lines:
+            m = pattern.match(ln)
+            if not m:
+                rows.append(["", ln.strip()] if ln.strip() else [])  # no part number: counted as skipped
+                continue
+            price = m.group(3)
+            replaced = m.group(5).strip() if pattern is FIXED_A else ""
+            if not re.search(r"[1-9]", price):
+                price = ""  # 0,00 = no price (often a part that has been replaced)
+            rows.append([m.group(1).strip(), m.group(2).strip(), price, replaced])
+        return rows
+    return None
+
+
 def _rows(data: bytes, name: str) -> list[list]:
     """The file's rows as lists of cell values (CSV or the first sheet of an Excel file)."""
     if data[:2] == b"PK" or name.lower().endswith((".xlsx", ".xlsm")):
@@ -470,6 +504,9 @@ def _rows(data: bytes, name: str) -> list[list]:
         text = data.decode("utf-8-sig")
     except UnicodeDecodeError:
         text = data.decode("cp1252", errors="replace")
+    fixed = _fixed_rows(text)
+    if fixed:
+        return fixed
     first = text.split("\n", 1)[0]
     delimiter = max((";", ",", "\t"), key=first.count)  # Excel in Norway saves CSV with semicolons
     return list(csv.reader(io.StringIO(text), delimiter=delimiter))
@@ -492,6 +529,7 @@ def _header(rows: list[list]) -> tuple[int, dict]:
 
 @router.post("/parts/import", status_code=201)
 async def import_parts(file: UploadFile = File(...), add_new: bool = Form(True), set_stock: bool = Form(False),
+                       make: str = Form(""), price_is: Literal["sale", "cost"] = Form("sale"),
                        conn=Depends(get_conn), staff=Depends(require_parts_editor)):
     data = await file.read(MAX_BYTES + 1)
     if len(data) > MAX_BYTES:
@@ -500,9 +538,13 @@ async def import_parts(file: UploadFile = File(...), add_new: bool = Form(True),
         raise bad_request("The file is empty")
     rows = _rows(data, file.filename or "")
     start, index = _header(rows)
+    fixed = rows[start] is FIXED_HEADER
+    if fixed and price_is == "cost":  # a text price list has no column names: the person says what its price is
+        index["cost_price"] = index.pop("sale_price")
     body = rows[start + 1:]
     if len(body) > MAX_ROWS:
         raise bad_request(f"The file has more than {MAX_ROWS} rows")
+    file_make = _clean(make, 60)
 
     parsed, skipped, seen = [], 0, set()
     for raw in body:
@@ -524,13 +566,15 @@ async def import_parts(file: UploadFile = File(...), add_new: bool = Form(True),
         inc = _num(get("sale_inc"))
         if sale is None and inc is not None:
             sale = (inc / (1 + (vat if vat is not None else Decimal(25)) / 100)).quantize(CENT)
+        replaced = (_clean(get("replaced_by"), 60) or "").upper()
         parsed.append({
             "key": key, "part_number": number, "name": cap_name(_clean(get("name"), 200) or "") or None,
-            "make": _clean(get("make"), 60),
+            "make": _clean(get("make"), 60) or file_make,
             "supplier": _clean(get("supplier"), 100), "location": _clean(get("location"), 60),
             "unit": _unit(get("unit")), "quantity": _num(get("quantity"), lo=Decimal(-MAX_QTY), hi=MAX_QTY),
             "min_quantity": _num(get("min_quantity"), hi=MAX_QTY), "cost_price": _num(get("cost_price")),
             "sale_price": sale, "vat_rate": vat, "note": _clean(get("note"), 1000),
+            "replaced_by": replaced if part_key(replaced) and part_key(replaced) != key else None,
         })
     if not parsed:
         raise bad_request("No parts found in the file")
@@ -542,40 +586,64 @@ async def import_parts(file: UploadFile = File(...), add_new: bool = Form(True),
               "note")
     added = updated = unchanged = not_added = 0
     sid = staff["id"]
+    src = _clean(file.filename, 100)
+    # Big price lists (tens of thousands of parts) are written in batches, not one statement per part.
+    new_rows, upd_rows, moves = [], [], []
     for p in parsed:
         old = existing.get(p["key"])
+        if p["replaced_by"] and p["note"] is None and (not old or not old["note"] or old["note"].startswith(REPLACED)):
+            p["note"] = REPLACED + p["replaced_by"]  # never over a note someone wrote
         if old:
             change = {f: p[f] for f in fields if p[f] is not None and p[f] != old[f]}
             qty = p["quantity"] if set_stock and p["quantity"] is not None and p["quantity"] != old["quantity"] else None
             if not change and qty is None:
                 unchanged += 1
                 continue
-            _price_change(conn, old, change, sid)
-            if change:
-                update_row(conn, "parts", old["id"], {**change, "updated_by": sid})
+            price = {}
+            for f, short in (("sale_price", "sale"), ("cost_price", "cost")):
+                if f in change:
+                    price[f"{short}_from"], price[f"{short}_to"] = old[f], change[f]
+            if price:
+                moves.append((old["id"], "price", 0, old["quantity"], None,
+                              Jsonb(price, dumps=lambda o: json.dumps(o, default=str))))
             if qty is not None:
-                _move(conn, old["id"], "import", qty - old["quantity"], qty, sid, note=_clean(file.filename, 100))
-                conn.execute("UPDATE parts SET quantity = %s WHERE id = %s", (qty, old["id"]))
-            conn.execute("UPDATE parts SET updated_at = now() WHERE id = %s", (old["id"],))
+                moves.append((old["id"], "import", qty - old["quantity"], qty, src, None))
+            merged = {**old, **change, "quantity": qty if qty is not None else old["quantity"]}
+            upd_rows.append((*[merged[f] for f in fields], merged["quantity"], sid, old["id"]))
             updated += 1
         elif add_new:
             if not p["name"]:
                 skipped += 1  # a new part needs a name
                 continue
             qty = p["quantity"] if p["quantity"] is not None and p["quantity"] >= 0 else Decimal(0)
-            row = conn.execute(
-                """INSERT INTO parts (part_number, part_key, name, make, supplier, location, unit, quantity,
-                                      min_quantity, cost_price, sale_price, vat_rate, note, created_by, updated_by)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
-                (p["part_number"], p["key"], p["name"], p["make"], p["supplier"], p["location"], p["unit"] or "pcs",
-                 qty, p["min_quantity"], p["cost_price"], p["sale_price"],
-                 p["vat_rate"] if p["vat_rate"] is not None else Decimal(25), p["note"], sid, sid)).fetchone()
-            _move(conn, row["id"], "import", qty, qty, sid, note=_clean(file.filename, 100))
+            new_rows.append((p["part_number"], p["key"], p["name"], p["make"], p["supplier"], p["location"],
+                             p["unit"] or "pcs", qty, p["min_quantity"], p["cost_price"], p["sale_price"],
+                             p["vat_rate"] if p["vat_rate"] is not None else Decimal(25), p["note"], sid, sid))
             added += 1
         else:
             not_added += 1  # not in Carbonara, and the person chose to update existing parts only
+    with conn.cursor() as cur:
+        if upd_rows:
+            cur.executemany(
+                f"""UPDATE parts SET {', '.join(f'{f} = %s' for f in fields)}, quantity = %s, updated_by = %s,
+                                     updated_at = now() WHERE id = %s""", upd_rows)
+        if new_rows:
+            cur.executemany(
+                """INSERT INTO parts (part_number, part_key, name, make, supplier, location, unit, quantity,
+                                      min_quantity, cost_price, sale_price, vat_rate, note, created_by, updated_by)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)""", new_rows)
+            # One "import" line in each new part's history (the key is unique among parts not deleted).
+            cur.execute(
+                """INSERT INTO part_movements (part_id, kind, change, quantity_after, note, created_by)
+                   SELECT p.id, 'import', p.quantity, p.quantity, %s, %s FROM parts p
+                    WHERE p.deleted_at IS NULL AND p.part_key = ANY(%s)""",
+                (src, sid, [r[1] for r in new_rows]))
+        if moves:
+            cur.executemany(
+                """INSERT INTO part_movements (part_id, kind, change, quantity_after, note, data, created_by)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s)""", [(*m, sid) for m in moves])
     imp = conn.execute(
         """INSERT INTO part_imports (file_name, rows_read, added, updated, skipped, imported_by)
            VALUES (%s, %s, %s, %s, %s, %s) RETURNING *""",
         ((file.filename or "file")[:200], len(parsed), added, updated, skipped, sid)).fetchone()
-    return {**imp, "unchanged": unchanged, "not_added": not_added}
+    return {**imp, "unchanged": unchanged, "not_added": not_added, "fixed_width": fixed}
