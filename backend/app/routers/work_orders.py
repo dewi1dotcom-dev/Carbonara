@@ -84,9 +84,20 @@ def _check_staff(conn, staff_id: Optional[int]) -> None:
         raise not_found("Person")
 
 
+def _check_job_type(conn, job_type_id: Optional[int]) -> None:
+    if job_type_id and not conn.execute("SELECT 1 FROM job_types WHERE id = %s", (job_type_id,)).fetchone():
+        raise not_found("Job type")
+
+
+def _check_place(conn, place_id: Optional[int]) -> None:
+    if place_id and not conn.execute("SELECT 1 FROM workshop_places WHERE id = %s AND deleted_at IS NULL",
+                                     (place_id,)).fetchone():
+        raise not_found("Place")
+
+
 def create_work_order(conn, staff_id: int, *, vehicle_id=None, customer_car_id=None, customer_id=None, title=None,
                       description=None, tasks: Optional[list[str]] = None, estimated_minutes=None, planned_at=None,
-                      assigned_to=None, pdi_order_id=None) -> dict:
+                      assigned_to=None, pdi_order_id=None, job_type_id=None, place_id=None) -> dict:
     """A new work order with the next number (shared with the PDI date confirmation)."""
     if bool(vehicle_id) == bool(customer_car_id):
         raise bad_request("Choose the car for the work order")
@@ -103,16 +114,23 @@ def create_work_order(conn, staff_id: int, *, vehicle_id=None, customer_car_id=N
     if customer_id and not conn.execute("SELECT 1 FROM customers WHERE id = %s", (customer_id,)).fetchone():
         raise not_found("Customer")
     _check_staff(conn, assigned_to)
+    _check_job_type(conn, job_type_id)
+    _check_place(conn, place_id)
+    if pdi_order_id and not job_type_id:  # a PDI gets the PDI job type, when the dealer still has one by that name
+        pdi_type = conn.execute("SELECT id FROM job_types WHERE active AND lower(name) = 'pdi' ORDER BY id LIMIT 1"
+                                ).fetchone()
+        job_type_id = pdi_type["id"] if pdi_type else None
     conn.execute("SELECT pg_advisory_xact_lock(hashtext('work_order_no'))")  # two new orders never share a number
     n = conn.execute("SELECT max(number) AS n FROM work_orders").fetchone()["n"] or 0
     number = max(n + 1, settings.work_order_number_start)
     row = conn.execute(
         """INSERT INTO work_orders (number, vehicle_id, customer_car_id, customer_id, title, description, tasks,
-                                    estimated_minutes, planned_at, assigned_to, pdi_order_id, created_by, updated_by)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, number""",
+                                    estimated_minutes, planned_at, assigned_to, pdi_order_id, job_type_id, place_id,
+                                    created_by, updated_by)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, number""",
         (number, vehicle_id, customer_car_id, customer_id, _text(title, 120), _text(description, 5000),
-         Jsonb(_tasks(tasks or [])), estimated_minutes, planned_at, assigned_to, pdi_order_id, staff_id,
-         staff_id)).fetchone()
+         Jsonb(_tasks(tasks or [])), estimated_minutes, planned_at, assigned_to, pdi_order_id, job_type_id, place_id,
+         staff_id, staff_id)).fetchone()
     _event(conn, row["id"], "created", staff_id, {"vehicle_id": vehicle_id, "customer_car_id": customer_car_id,
                                                    "customer_id": customer_id, "pdi_order_id": pdi_order_id})
     touch(conn, customer_id)
@@ -121,7 +139,8 @@ def create_work_order(conn, staff_id: int, *, vehicle_id=None, customer_car_id=N
 
 WO_SELECT = """SELECT w.id, w.number, w.status, w.title, w.planned_at, w.estimated_minutes, w.created_at, w.done_at,
                       w.vehicle_id, w.customer_car_id, w.customer_id, w.assigned_to, w.pdi_order_id, w.updated_at,
-                      w.arrived_at,
+                      w.arrived_at, w.job_type_id, w.place_id, jt.name AS job_type_name, jt.name_no AS job_type_name_no,
+                      jt.color AS job_type_color, wp.name AS place_name,
                       coalesce(cc.registration_number, v.registration_number) AS registration_number,
                       coalesce(cc.vin, v.vin) AS vin, coalesce(cc.make, v.make) AS make,
                       coalesce(cc.model, v.model) AS model, v.deleted_at IS NOT NULL AS vehicle_deleted,
@@ -132,7 +151,8 @@ WO_SELECT = """SELECT w.id, w.number, w.status, w.title, w.planned_at, w.estimat
                           AS clocks_running
                  FROM work_orders w LEFT JOIN vehicles v ON v.id = w.vehicle_id
                  LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id
-                 LEFT JOIN customers c ON c.id = w.customer_id LEFT JOIN staff a ON a.id = w.assigned_to"""
+                 LEFT JOIN customers c ON c.id = w.customer_id LEFT JOIN staff a ON a.id = w.assigned_to
+                 LEFT JOIN job_types jt ON jt.id = w.job_type_id LEFT JOIN workshop_places wp ON wp.id = w.place_id"""
 
 
 def _labour(conn, order_ids: list[int]) -> dict[int, int]:
@@ -226,6 +246,8 @@ class WorkOrderIn(BaseModel):
     estimated_minutes: Optional[int] = Field(None, gt=0, le=100_000)
     planned_at: Optional[str] = None   # local "2026-11-25T11:00"
     assigned_to: Optional[int] = None
+    job_type_id: Optional[int] = None
+    place_id: Optional[int] = None
 
 
 @router.post("/work-orders", status_code=201)
@@ -233,7 +255,7 @@ def new_order(body: WorkOrderIn, conn=Depends(get_conn), staff=Depends(require_w
     return create_work_order(conn, staff["id"], vehicle_id=body.vehicle_id, customer_car_id=body.customer_car_id,
                              title=body.title, description=body.description, tasks=body.tasks,
                              estimated_minutes=body.estimated_minutes, planned_at=_planned(body.planned_at),
-                             assigned_to=body.assigned_to)
+                             assigned_to=body.assigned_to, job_type_id=body.job_type_id, place_id=body.place_id)
 
 
 def _order(conn, wo_id: int, lock: bool = False) -> dict:
@@ -320,6 +342,8 @@ class WorkOrderPatch(BaseModel):
     billed_minutes: Optional[int] = Field(None, ge=0, le=100_000)    # null = the clocked time, rounded up
     km: Optional[int] = Field(None, ge=0, le=5_000_000)
     customer_id: Optional[int] = None
+    job_type_id: Optional[int] = None
+    place_id: Optional[int] = None
 
 
 def _not_locked(o: dict) -> None:
@@ -354,6 +378,12 @@ def edit_order(wo_id: int, body: WorkOrderPatch, conn=Depends(get_conn), staff=D
     if "assigned_to" in sent:
         _check_staff(conn, sent["assigned_to"])
         new["assigned_to"] = sent["assigned_to"]
+    if "job_type_id" in sent:
+        _check_job_type(conn, sent["job_type_id"])
+        new["job_type_id"] = sent["job_type_id"]
+    if "place_id" in sent:
+        _check_place(conn, sent["place_id"])
+        new["place_id"] = sent["place_id"]
     changed = [f for f, v in new.items() if v != o[f]]
     if not changed:
         return {"id": wo_id}
@@ -362,7 +392,7 @@ def edit_order(wo_id: int, body: WorkOrderPatch, conn=Depends(get_conn), staff=D
                  (*[new[f] for f in changed], staff["id"], wo_id))
     data = {"fields": changed}
     for f in ("estimated_minutes", "planned_at", "assigned_to", "labour_rate", "billed_minutes", "km",
-              "customer_id"):  # short values and ids; texts are never logged
+              "customer_id", "job_type_id", "place_id"):  # short values and ids; texts are never logged
         if f in changed:
             data[f] = {"from": o[f], "to": new[f]}
     _event(conn, wo_id, "updated", staff["id"], data)

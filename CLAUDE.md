@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…052
+  migrations/           001…053
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -330,6 +330,7 @@ frontend/               no build step; plain ES modules
 | 050 | `work_order_arrival` | `work_orders.arrived_at`, `car_deliveries.work_order_id` |
 | 051 | `delivery_customer_car` | `car_deliveries.customer_car_id` (kiosk deliveries link to the workshop's register, not the car stock) |
 | 052 | `older_chassis_numbers` | `vehicles.vin_nonstandard` (the VIN check now allows 4–30 letters / digits when it is set), `customer_cars.vin_nonstandard` |
+| 053 | `job_types_places` | `job_types` (name EN + NO, `color`, sort, active; 7 generic types seeded), `workshop_places` (team, name, sort, `deleted_at`: lifts / bays as planner lines); `work_orders.job_type_id / place_id`; existing PDI work orders get the PDI type |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1475,6 +1476,28 @@ team"):
   dialog says not to write why someone is away. Deleted by the worker a year after they end (`purge_old_absences`).
 - **Capacity:** under each name, planned / available hours over the days shown (available = working day − breaks −
   absences; red when over). Red "now" line on today. Views: one day, three days, one week (from Monday).
+- **Bigger planner (0.55.0, the user's request with a photo of their old booking system; the user's choices: places =
+  lifts / bays, colours = job type fill + status mark):**
+  - **Full width:** on `#/planner` the page has no 980 px limit (`body.planner-wide`); pixels per minute (`data.px`) =
+    the width shared over the days shown (0.55–4 px; below that it scrolls sideways). Redrawn on a resize and every minute
+    (others' changes), never while a dialog is open or a job is dragged (`hookOnce` in `planner.js`).
+  - **Own window:** "⧉ Open in its own window" opens `#/planner?…&full=1` in a popup window (`body.planner-full`: no top
+    bar, menu, 🔔 bar or footer; "⛶ Full screen"). The installed app has a "Planner" shortcut (`manifest.json` shortcuts).
+  - **Top row:** a month calendar (pick a day; each day coloured by how booked the team's people are: green < 85 %, amber
+    85–100 %, red over; tooltip with % and hours), "Booked, next 7 working days" bars from the day shown (dashed line =
+    100 %; tap a bar to go there), and the legend (job types, status edges, icons, absences, break). `GET /planner/load`
+    (people lines only; up to 62 days) gives planned / available seconds per day.
+  - **Job types** (`job_types`, migration 053; "Job types" button for admins, `PUT /job-types` saves the list; one not in
+    use is kept on old work orders): name EN + NO, colour = the job's fill (text dark / light by brightness). Chosen on
+    the new / edit work order dialogs and in the planner's job dialog; shown on the work order page. PDI work orders get
+    the type named "PDI" (`create_work_order`). No type = the old status colours.
+  - **Status marks:** a 6 px left edge (open grey, in progress green, done black, invoiced gold) and icons 🔑 arrived,
+    ⏱ clock running, 📦 waiting for parts (a parts order `ordered`), ✅ parts arrived, tasks n/m. Two lines per job:
+    "#no reg. no. · customer" and "type · title".
+  - **Places** (`workshop_places` per team; added / renamed / ordered / removed in "Lines", `PUT /planner/{team}/places`):
+    lines under the people (🔧, grey). A job with `place_id` shows on the place's line **and** its mechanic's line;
+    dropping a job on a place line sets the place, on a person's line the mechanic. Place capacity = working day − the
+    System page breaks. Removing a place takes it off unfinished jobs.
 - **Arrived (0.52.0, the user's request):** the **delivery kiosk** shows "Booked in today? Tap your car" with today's
   work orders (open / in progress, not arrived, car from the customer register; **from 07:00 the working day before the appointment** until the end of the appointment day, 0.53.1: a Monday appointment shows from Friday 07:00) as
   **the registration number only** (0.54.2; before: + first name) (`deliveries.BOOKED_SQL`, `GET /api/kiosk/booked`, reloaded each time the form resets). Tapping fills the reg. no. and the owner's name + phone (`GET /api/kiosk/booked/{id}/contact`, one car at a time; cleared again when another reg. no. is typed) (typing another one drops the
@@ -1788,6 +1811,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.54.0 | Veteran cars: older chassis numbers (not the 17-character VIN) accepted as Statens vegvesen has them, after a "checked on the car" tick, at arrival and in the customer register (migration 052) |
 | 0.54.1 | Planner: the job dialog shows where the customer parked (the pin on the kiosk map) and where the key is, once the car is delivered at the kiosk |
 | 0.54.2 | Kiosk: booked cars listed by registration number only; tapping one fills in the owner's name and phone (fetched for that car only), cleared again if another reg. no. is typed |
+| 0.55.0 | **Planner, bigger:** fills the screen width, "Open in its own window" (no top bar, refreshes itself), month calendar coloured by how booked each day is, chart of the next 7 working days, **job types with colours** (admins) + status marks (edge, 🔑 ⏱ 📦), legend, **workshop places** (lifts / bays) as lines; job type on work orders (migration 053) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

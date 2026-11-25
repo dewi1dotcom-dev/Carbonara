@@ -6,6 +6,7 @@ import { carTitle, orderBadge, pickCustomer } from './customers.js';
 import { entryDialog, fmtDuration, fmtLocal } from './hours.js';
 import { field, fmtMoney, fmtQty, money2, parseNum, qtyText } from './parts.js';
 import { lineDialog } from './partsorders.js';
+import { lang } from '../i18n.js';
 
 export const WO_STATUS = { open: 'Open', in_progress: 'In progress', done: 'Done', invoiced: 'Invoiced', cancelled: 'Cancelled' };
 const WO_CLS = { open: '', in_progress: 'warn', done: 'good', invoiced: '', cancelled: 'bad' };
@@ -104,6 +105,23 @@ export async function workOrdersCard(filter, newArgs, { hideEmpty = false } = {}
     data.orders.length ? workOrderTable(data.orders.slice(0, 20)) : h('p', { class: 'empty' }, 'No work orders.'));
 }
 
+// ---------------------------------------------------------------- job types (0.55.0)
+
+let typesCache = null;
+/** The job types (planner colours), cached for the page. */
+export async function jobTypes(fresh = false) {
+  if (fresh || !typesCache) typesCache = await api.get('/job-types');
+  return typesCache;
+}
+export const jobTypeName = (t) => (t ? (lang === 'no' ? t.name_no || t.name : t.name || t.name_no) : '');
+/** "No type" + the active job types (and the chosen one, even when switched off). */
+export function jobTypeSelect(selected) {
+  const sel = h('select', {}, h('option', { value: '' }, 'No type'));
+  jobTypes().then((list) => list.filter((t) => t.active || t.id === selected).forEach((t) =>
+    sel.append(h('option', { value: t.id, selected: t.id === selected, translate: 'no' }, jobTypeName(t))))).catch(() => {});
+  return sel;
+}
+
 // ---------------------------------------------------------------- new work order
 
 let staffCache = null;
@@ -124,6 +142,7 @@ export async function newWorkOrderDialog(car = null, prefill = {}) {
   const pTime = timeInput({ value: prefill.planned ? prefill.planned.slice(11, 16) : '' });
   const who = h('select', {}, h('option', { value: '' }, 'Nobody yet'));
   staffList().then((list) => list.forEach((s) => who.append(h('option', { value: s.id, selected: s.id === prefill.assigned_to, translate: 'no' }, s.name)))).catch(() => {});
+  const type = jobTypeSelect(prefill.job_type_id ?? null);
   const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Create work order');
 
   const drawCar = () => {
@@ -163,7 +182,8 @@ export async function newWorkOrderDialog(car = null, prefill = {}) {
 
   const form = h('form', {},
     h('div', { class: 'field' }, h('label', {}, 'Car *'), carSlot),
-    field('Title', title),
+    h('div', { class: 'grid' }, field('Title', title), field('Job type', type)),
+    prefill.place_name ? h('p', { class: 'muted small' }, h('span', {}, 'Place:'), ' ', h('strong', { translate: 'no' }, prefill.place_name)) : null,
     field('Work to perform', desc),
     field('Tasks to tick off', tasks, 'Optional: one per line. The mechanic ticks them off.'),
     h('div', { class: 'grid' }, field('Estimated hours', est), field('Planned date', pDay), field('Planned time', pTime)),
@@ -181,6 +201,7 @@ export async function newWorkOrderDialog(car = null, prefill = {}) {
         tasks: tasks.value.split('\n').map((s) => s.trim()).filter(Boolean),
         estimated_minutes: minutes, planned_at: pDay.value ? `${pDay.value}T${pTime.value || '08:00'}` : null,
         assigned_to: who.value ? Number(who.value) : null,
+        job_type_id: type.value ? Number(type.value) : null, place_id: prefill.place_id || null,
       });
       close();
       if (prefill.onDone) await prefill.onDone(r); else location.hash = `#/work-orders/${r.id}`;
@@ -314,7 +335,11 @@ export async function workOrderView(el, [id], host = el) {
         row('Car', carValue),
         row('Customer', custValue),
         row('Mileage', o.km != null && `${Number(o.km).toLocaleString('nb-NO')} km`),
+        row('Job type', o.job_type_id && h('span', { class: 'inline' },
+          h('span', { class: 'pl-swatch', style: `background:${o.job_type_color}` }),
+          h('span', { translate: 'no' }, jobTypeName({ name: o.job_type_name, name_no: o.job_type_name_no })))),
         row('Mechanic', o.assigned_name && h('span', { translate: 'no' }, o.assigned_name)),
+        row('Place', o.place_name && h('span', { translate: 'no' }, o.place_name)),
         row('Planned', o.planned_local && fmtLocal(o.planned_local)),
         row('Car arrived', arrivedValue),
         row('Estimated hours', o.estimated_minutes && fmtDuration(o.estimated_minutes * 60)),
@@ -633,9 +658,10 @@ async function editDialog(o, done) {
   try {
     (await staffList()).forEach((s) => who.append(h('option', { value: s.id, selected: s.id === o.assigned_to, translate: 'no' }, s.name)));
   } catch (e) { showError(e); }
+  const type = jobTypeSelect(o.job_type_id);
   const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
   const form = h('form', {},
-    field('Title', title),
+    h('div', { class: 'grid' }, field('Title', title), field('Job type', type)),
     field('Work to perform', desc),
     h('div', { class: 'grid' }, field('Estimated hours', est), field('Planned date', pDay), field('Planned time', pTime)),
     h('div', { class: 'grid' }, field('Mechanic', who), field('Mileage (km)', km)),
@@ -650,7 +676,7 @@ async function editDialog(o, done) {
       await api.patch(`/work-orders/${o.id}`, {
         title: title.value.trim() || null, description: desc.value.trim() || null, estimated_minutes: minutes,
         planned_at: pDay.value ? `${pDay.value}T${pTime.value || '08:00'}` : null,
-        assigned_to: who.value ? Number(who.value) : null, km: kmVal,
+        assigned_to: who.value ? Number(who.value) : null, km: kmVal, job_type_id: type.value ? Number(type.value) : null,
       });
       close();
       toast('Saved', 'success');
