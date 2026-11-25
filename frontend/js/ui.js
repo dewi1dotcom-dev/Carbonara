@@ -171,15 +171,10 @@ export function viewPhoto(id, title = 'Photo') {
 
 // All dates/times are shown in Norwegian standard, 24-hour, Oslo time,
 // regardless of the device's language settings: "08.11.2026 00:48".
-// (The header clock keeps the long form, in the user's language:
-// "søndag 8. november 2026" / "Sunday 8 November 2026".)
+// (The header clock: the weekday in the user's language, then dd.mm.yyyy and the time, 0.52.2.)
 const TZ = 'Europe/Oslo';
 const fmtTime = new Intl.DateTimeFormat('nb-NO', { timeZone: TZ, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-// Header clock: weekday and date on their own lines under the time (narrower top bar).
 const fmtWeekday = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', { timeZone: TZ, weekday: 'long' });
-const fmtLongDate = new Intl.DateTimeFormat(lang === 'no' ? 'nb-NO' : 'en-GB', {
-  timeZone: TZ, day: 'numeric', month: 'long', year: 'numeric',
-});
 const fmtParts = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: '2-digit', month: '2-digit', year: 'numeric' });
 
 /** dd.mm.yyyy in Oslo time, built from parts so no locale can change the order. */
@@ -426,8 +421,9 @@ export function startClock(el) {
   const tick = () => {
     const now = new Date();
     el.replaceChildren(
-      h('span', { class: 'clock-time' }, fmtTime.format(now)),
-      h('span', { class: 'clock-date' }, `${capFirst(fmtWeekday.format(now))} ${fmtLongDate.format(now)}`));
+      // Weekday and dd.mm.yyyy, then the time on the right (0.52.2, the user's request).
+      h('span', { class: 'clock-date' }, `${capFirst(fmtWeekday.format(now))} ${fmtDate(now, false)}`),
+      h('span', { class: 'clock-time' }, fmtTime.format(now)));
     setTimeout(tick, 60000 - (now.getSeconds() * 1000 + now.getMilliseconds()) + 50);
   };
   tick();
