@@ -111,6 +111,62 @@ def add_work(start: datetime, minutes: float, breaks_for: BreaksFor) -> datetime
     return t
 
 
+def _minutes(text: str, fallback: int) -> int:
+    m = re.fullmatch(r"([0-2]?\d)[:.]([0-5]\d)", str(text or "").strip())
+    return int(m[1]) * 60 + int(m[2]) if m and int(m[1]) < 24 else fallback
+
+
+def day_window() -> tuple[int, int]:
+    """The working day (System page → Work hours) as minutes after midnight: (start, end)."""
+    start = _minutes(settings.planner_day_start, 7 * 60)
+    end = _minutes(settings.planner_day_end, 15 * 60 + 30)
+    return (start, end) if end > start else (7 * 60, 15 * 60 + 30)
+
+
+def free_intervals(day: date, breaks: list[str], window: tuple[int, int]) -> list[tuple[datetime, datetime]]:
+    """Working time of a day: the window minus the breaks; nothing on Saturdays and Sundays."""
+    if day.weekday() >= 5:
+        return []
+    midnight = datetime.combine(day, time(0), OSLO)
+    out, t = [], midnight + timedelta(minutes=window[0])
+    end = midnight + timedelta(minutes=window[1])
+    for bs, be in _intervals(day, breaks):
+        if be <= t or bs >= end:
+            continue
+        if bs > t:
+            out.append((t, bs))
+        t = max(t, be)
+    if t < end:
+        out.append((t, end))
+    return out
+
+
+def work_segments(start: datetime, minutes: float, breaks_for: BreaksFor,
+                  window: Optional[tuple[int, int]] = None) -> list[tuple[datetime, datetime]]:
+    """The pieces of working time a job of `minutes` started at `start` fills: breaks, evenings and weekends skipped
+    (the Planner draws these; the last piece's end = when it is done)."""
+    window = window or day_window()
+    t = start.astimezone(OSLO)
+    left = timedelta(minutes=max(0.0, minutes))
+    out = []
+    if not left:
+        return out
+    for _ in range(400):  # days; plenty for any job
+        d = t.date()
+        for fs, fe in free_intervals(d, breaks_for(d), window):
+            if fe <= t:
+                continue
+            s = max(t, fs)
+            chunk = min(left, fe - s)
+            out.append((s, s + chunk))
+            left -= chunk
+            t = s + chunk
+            if not left:
+                return out
+        t = datetime.combine(d + timedelta(days=1), time(0), OSLO)
+    return out
+
+
 def static_breaks(breaks: list[str]) -> BreaksFor:
     return lambda _d: breaks
 

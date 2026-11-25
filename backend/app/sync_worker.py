@@ -31,6 +31,7 @@ from .config import settings
 from .migrate import run_migrations
 from .routers.customers import purge_inactive as purge_inactive_customers
 from .routers.hours import purge_old_days as purge_old_work_days
+from .routers.planner import purge_old_absences
 from .routers.deliveries import purge_stopped_kiosks
 from .routers.dm import purge_expired as purge_expired_private_messages
 from .routers.messages import DELETE_EXPIRED_SQL as MESSAGES_EXPIRED_SQL
@@ -123,6 +124,10 @@ def housekeeping() -> None:
             n = purge_old_work_days(conn, settings.retention_years)
         if n:
             log.info("Retention: deleted %d old work day(s)", n)
+
+    # Planner absences that ended more than a year ago (0.51.0).
+    with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
+        purge_old_absences(conn)
 
     # My notes ticked off as done more than TRASH_DAYS ago.
     with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:

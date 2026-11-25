@@ -933,3 +933,52 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .extra-line input.num-input { flex: 0 1 6rem; min-width: 4.5rem; }
 @media (max-width: 640px) { .invoice-doc { padding: 1rem; font-size: .85rem; } .invoice-doc .inv-kind { text-align: left; } }
 @media print { .invoice-doc { padding: 0; max-width: none; border-radius: 0; margin: 0; } }
+
+/* Planner (0.51.0): a line per person, jobs over the working day */
+.planner { padding: .5rem; }
+.planner-toolbar { align-items: center; flex-wrap: wrap; }
+.planner-toolbar .dt-field, .planner-toolbar select { width: auto; flex: 0 0 auto; }
+.planner-toolbar .dt-field { max-width: 11rem; }
+.pl-wrap { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.pl-names { flex: none; width: 9.5rem; background: var(--surface); border-right: 1px solid var(--border); z-index: 2; }
+.pl-corner { height: 48px; border-bottom: 1px solid var(--border); }
+.pl-name { display: flex; flex-direction: column; justify-content: center; gap: .1rem; padding: 0 .5rem; border-bottom: 1px solid var(--border); overflow: hidden; }
+.pl-name strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pl-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; position: relative; }
+.pl-head { position: relative; height: 48px; border-bottom: 1px solid var(--border); }
+.pl-day-head { position: absolute; top: 0; height: 48px; }
+.pl-day-title { font-weight: 600; font-size: .85rem; padding: .2rem .3rem; background: var(--panel); border-radius: 4px 4px 0 0; }
+.pl-day-head.today .pl-day-title { background: var(--primary); color: var(--primary-text); }
+.pl-ticks { position: relative; height: 20px; }
+.pl-tick { position: absolute; top: 2px; font-size: .75rem; color: var(--muted); border-left: 1px solid var(--border); padding-left: 2px; }
+.pl-lane { position: relative; border-bottom: 1px solid var(--border); cursor: cell;
+  background-image: repeating-linear-gradient(90deg, transparent 0 95px, var(--border) 95px 96px); }
+.pl-break { position: absolute; top: 0; bottom: 0; pointer-events: auto;
+  background: repeating-linear-gradient(45deg, rgb(127 127 127 / .14) 0 4px, transparent 4px 9px); }
+.pl-weekend { position: absolute; top: 0; bottom: 0; background: rgb(127 127 127 / .12); }
+.pl-now { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--bad); z-index: 3; pointer-events: none; }
+.pl-absence { position: absolute; top: 4px; bottom: 4px; border: 0; border-radius: 6px; color: #fff; font-size: .8rem; font-weight: 600;
+  text-align: left; padding: 0 .4rem; overflow: hidden; white-space: nowrap; cursor: pointer; z-index: 1; opacity: .9; }
+.pl-absence.abs-holiday { background: #7c3aed; }
+.pl-absence.abs-away { background: #6b21a8; }
+.pl-absence.abs-course { background: #0e7490; }
+.pl-absence.abs-other { background: #57534e; }
+.pl-job { position: absolute; height: 40px; border-radius: 6px; padding: .15rem .4rem; font-size: .8rem; line-height: 1.2; overflow: hidden;
+  cursor: grab; z-index: 2; touch-action: none; user-select: none; border: 1px solid rgb(0 0 0 / .25); color: #111; box-shadow: var(--shadow); }
+.pl-job.st-open { background: #93c5fd; }
+.pl-job.st-in_progress { background: #4ade80; }
+.pl-job.st-done, .pl-job.st-invoiced { background: #d6d3d1; color: #44403c; }
+.pl-job.pdi { background: #f0abfc; }
+.pl-job.cont { border-left: 3px dashed rgb(0 0 0 / .5); }
+.pl-job.dragging { opacity: .85; cursor: grabbing; z-index: 10; box-shadow: 0 4px 14px rgb(0 0 0 / .3); }
+.pl-job-no { font-weight: 700; }
+.pl-job-meta { margin-left: .35rem; font-size: .75rem; opacity: .8; }
+.pl-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 10px; cursor: ew-resize; background: rgb(0 0 0 / .12); }
+.pl-ghost { position: fixed; z-index: 1000; width: 110px; pointer-events: none; }
+.pl-unplanned { display: flex; flex-wrap: wrap; gap: .5rem; }
+.pl-un-item { border: 1px solid var(--border); border-radius: 8px; padding: .4rem .6rem; background: var(--surface); cursor: grab; touch-action: none;
+  user-select: none; max-width: 22rem; }
+.pl-key { display: inline-block; width: 1.2rem; height: .8rem; vertical-align: middle; border: 1px solid var(--border); }
+.pl-key-break { background: repeating-linear-gradient(45deg, rgb(127 127 127 / .3) 0 4px, transparent 4px 9px); }
+.bad-text { color: var(--bad); font-weight: 600; }
+@media (max-width: 640px) { .pl-names { width: 6.5rem; } .pl-name { font-size: .85rem; } }

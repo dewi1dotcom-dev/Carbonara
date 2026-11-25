@@ -50,6 +50,7 @@ class Setting:
 HOST_PATTERN = r"(?=.{1,253}$)[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*"
 # A Norwegian organisation number: 9 digits, spaces allowed ("123 456 789").
 ORG_NO_PATTERN = r"[0-9]{3} ?[0-9]{3} ?[0-9]{3}"
+TIME_PATTERN = r"([01]?[0-9]|2[0-3])[:.][0-5][0-9]"
 # Norwegian bank account: 11 digits, written 1234.56.78901 or with spaces / without.
 BANK_ACCOUNT_PATTERN = r"[0-9]{4}[ .]?[0-9]{2}[ .]?[0-9]{5}"
 # Breaks: "11:30-12:00" or several separated by commas (worktime.parse_breaks checks the times themselves).
@@ -176,6 +177,12 @@ SETTINGS: tuple[Setting, ...] = (
             help="Fixed breaks every working day, e.g. 11:30-12:00, 14:00-14:15. They are taken off the working day "
                  "and off the time on work orders (a 2 hour job started at 11:00 is done at 13:30 with lunch "
                  "11:30-12:00). An admin can change them for one person's day."),
+    Setting("planner_day_start", "Working day starts", "Work hours", default="07:00", pattern=TIME_PATTERN,
+            pattern_error="write the time as 07:00",
+            help="The Planner shows the day from here, and a job planned past the end of the day goes on the next "
+                 "working day (Monday to Friday)."),
+    Setting("planner_day_end", "Working day ends", "Work hours", default="15:30", pattern=TIME_PATTERN,
+            pattern_error="write the time as 15:30"),
     Setting("work_order_number_start", "First work order number", "Work hours", int, 1000, min=1, max=99999999,
             help="New work orders get the next free number from here (higher than any number in use)."),
     # Invoicing (routers/invoices.py, 0.50.0). The seller is the Customer register company (else Company above).

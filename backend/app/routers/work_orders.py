@@ -254,9 +254,10 @@ def _expected_done(conn, o: dict, labour: int) -> Optional[str]:
         if left <= 0:
             return None
         return local(worktime.add_work(datetime.now(OSLO), left, worktime.person_breaks(conn, running["staff_id"])))
-    if o["planned_at"] and not labour:
-        return local(worktime.add_work(o["planned_at"], o["estimated_minutes"],
-                                       worktime.person_breaks(conn, o["assigned_to"])))
+    if o["planned_at"] and not labour:  # as the Planner draws it: breaks, evenings and weekends skipped
+        segs = worktime.work_segments(o["planned_at"], o["estimated_minutes"],
+                                      worktime.person_breaks(conn, o["assigned_to"]))
+        return local(segs[-1][1]) if segs else None
     return None
 
 

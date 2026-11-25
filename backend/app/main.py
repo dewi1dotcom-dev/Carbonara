@@ -15,8 +15,8 @@ from .migrate import run_migrations
 from . import caddyhost, push
 from .auth import require_staff
 from .routers import (admin, customers, dashboard, deliveries, dm, documents, from_ad, hours, inspections, invoices,
-                      market, messages, notes, notifications, parts, parts_orders, pdi, pdi_sheets, recalls, rentals,
-                      session, storage_care, system, testdrives, vehicle_photos, vehicles, vin, work_orders)
+                      market, messages, notes, notifications, parts, parts_orders, pdi, pdi_sheets, planner, recalls,
+                      rentals, session, storage_care, system, testdrives, vehicle_photos, vehicles, vin, work_orders)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -42,7 +42,7 @@ app.include_router(session.router, prefix="/api")
 app.include_router(deliveries.kiosk_router, prefix="/api")
 for module in (admin, vin, inspections, vehicles, testdrives, rentals, pdi, pdi_sheets, dashboard, system, storage_care,
                documents, deliveries, messages, dm, notifications, notes, recalls, vehicle_photos, from_ad,
-               market, parts, customers, parts_orders, hours, work_orders, invoices):
+               market, parts, customers, parts_orders, hours, work_orders, invoices, planner):
     app.include_router(module.router, prefix="/api", dependencies=[Depends(require_staff)])
 
 

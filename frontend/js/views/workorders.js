@@ -113,17 +113,17 @@ async function staffList() {
 }
 
 /** New work order. `car` = { vehicle_id | customer_car_id, text } to skip the car search. */
-export async function newWorkOrderDialog(car = null) {
+export async function newWorkOrderDialog(car = null, prefill = {}) {
   let chosen = car;
   const carSlot = h('div');
   const title = h('input', { type: 'text', maxlength: 120, autocomplete: 'off', placeholder: 'e.g. Service, Tyre change, Brakes' });
   const desc = h('textarea', { rows: 4, maxlength: 5000, placeholder: 'What should be done' });
   const tasks = h('textarea', { rows: 4, placeholder: 'One task per line' });
   const est = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: 'e.g. 2,5' });
-  const pDay = dateInput({});
-  const pTime = timeInput({});
+  const pDay = dateInput({ value: prefill.planned ? prefill.planned.slice(0, 10) : '' });
+  const pTime = timeInput({ value: prefill.planned ? prefill.planned.slice(11, 16) : '' });
   const who = h('select', {}, h('option', { value: '' }, 'Nobody yet'));
-  staffList().then((list) => list.forEach((s) => who.append(h('option', { value: s.id, translate: 'no' }, s.name)))).catch(() => {});
+  staffList().then((list) => list.forEach((s) => who.append(h('option', { value: s.id, selected: s.id === prefill.assigned_to, translate: 'no' }, s.name)))).catch(() => {});
   const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Create work order');
 
   const drawCar = () => {
@@ -183,7 +183,7 @@ export async function newWorkOrderDialog(car = null) {
         assigned_to: who.value ? Number(who.value) : null,
       });
       close();
-      location.hash = `#/work-orders/${r.id}`;
+      if (prefill.onDone) await prefill.onDone(r); else location.hash = `#/work-orders/${r.id}`;
     });
   });
   const { close } = openDialog('New work order', form, { wide: true });

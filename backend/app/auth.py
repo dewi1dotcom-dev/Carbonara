@@ -33,13 +33,13 @@ STAFF_PUBLIC = ("id, name, first_name, last_name, phone, active, is_admin, is_su
 
 # Top menu items a team can be given (keys = data-nav in index.html). Today is
 # always there; System is for system admins only, so neither is listed.
-MENU_ITEMS = ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive", "rental", "customers", "work_orders", "parts",
-              "deliveries", "settings")
+MENU_ITEMS = ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive", "rental", "customers", "work_orders", "planner",
+              "parts", "deliveries", "settings")
 
 # Modules (System page / first-time setup, 0.48.0): a module switched off takes its menu items away from everyone.
 MODULE_ITEMS = {
     "module_cars": ("arrivals", "vehicles", "pdi_orders", "storage", "testdrive"),
-    "module_workshop": ("customers", "work_orders", "parts", "deliveries"),
+    "module_workshop": ("customers", "work_orders", "planner", "parts", "deliveries"),
     "module_rental": ("rental",),
 }
 

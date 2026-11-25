@@ -18,6 +18,7 @@ import { partsOrdersView, partsOrderView } from './views/partsorders.js';
 import { customerCarView, customersView, customerView } from './views/customers.js';
 import { clockPanel, hoursView } from './views/hours.js';
 import { invoicesView, invoiceView } from './views/invoices.js';
+import { plannerView } from './views/planner.js';
 import { workOrdersView, workOrderView } from './views/workorders.js';
 import { notificationsDialog, pushLogout, syncPush } from './views/notifications.js';
 import { pdiListView, prepDialog } from './views/pdi.js';
@@ -59,6 +60,7 @@ const routes = [
   [/^#\/work-orders$/, workOrdersView, 'work_orders'], // work orders: car + work + reply + labour + parts
   [/^#\/work-orders\/(\d+)$/, workOrderView, 'work_orders'],
   [/^#\/hours$/, hoursView, 'hours'], // work hours of everyone: admins only (canSee)
+  [/^#\/planner$/, plannerView, 'planner'], // the team's calendar: a line per person, jobs over the day
   [/^#\/invoices$/, invoicesView, 'work_orders'], // invoices + credit notes from work orders
   [/^#\/invoices\/(\d+)$/, invoiceView, 'work_orders'],
   [/^#\/messages$/, dmListView, 'messages'], // private messages: every user, whatever the team

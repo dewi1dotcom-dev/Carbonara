@@ -247,8 +247,8 @@ backend/
                         market (market data test: CSV import, comparison), parts (parts store),
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
-                        invoices (invoices + credit notes from work orders)
-  migrations/           001…048
+                        invoices (invoices + credit notes from work orders), planner (team calendar)
+  migrations/           001…049
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -271,7 +271,7 @@ frontend/               no build step; plain ES modules
                         recalls (car page card, check dialog, Settings → Recall sources),
                         market (#/market Market prices + car page card; market data test), parts (#/parts parts store),
                         customers (#/customers, customer cars, transfer dialog), partsorders (#/parts-orders),
-                        workorders (#/work-orders), hours (⏱ panel + #/hours), invoices (#/invoices)
+                        workorders (#/work-orders), hours (⏱ panel + #/hours), invoices (#/invoices), planner (#/planner)
 ```
 
 **Migrations:**
@@ -326,6 +326,7 @@ frontend/               no build step; plain ES modules
 | 046 | `part_numbers_upper` | existing part numbers (parts, order lines) in capital letters |
 | 047 | `work_orders_hours` | `work_orders` (number, status open / in_progress / done / cancelled, `vehicle_id` or `customer_car_id` + `customer_id`, title, description, `tasks` jsonb, `mechanic_note`, `estimated_minutes`, `planned_at`, `assigned_to`, `pdi_order_id`), `work_order_events`, `work_days` (staff, day, start, end, `breaks` jsonb), `work_time` (clock on a work order; one running per person); `parts_orders.work_order_id`, `pdi_orders.work_order_id`; teams with Parts or Customers get `work_orders` |
 | 048 | `invoices` | `invoices` (number, kind invoice / credit_note, `credits_invoice_id`, work order, customer, issue / delivery / due date, snapshots `seller` / `buyer` / `car` / `lines` / `vat_lines`, totals, `kid`, `note`, `parts_order_ids`, `paid_at / paid_by`; trigger `invoices_locked`: never changed or deleted except the payment and links set to NULL); `work_orders.labour_rate / billed_minutes / extra_lines / km / invoice_id`, status `invoiced` |
+| 049 | `planner` | `planner_rows` (team, staff, sort, hidden: the lines of a team's planner), `absences` (staff, kind holiday / away / course / other, start, end, note); teams with Work orders get `planner` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -350,7 +351,7 @@ frontend/               no build step; plain ES modules
   Today and Settings) · `#/kiosk` (staff preview of the kiosk form).
 - **Parts store:** `#/parts` (top menu "Parts" / "Delelager"; filters in the hash, e.g. `#/parts?q=…&show=low`).
 - **Customers:** `#/customers` · `#/customers/:id` · `#/customer-cars/:id` (nav `customers`). **Parts orders:** `#/parts-orders` · `#/parts-orders/:id` (nav `parts`).
-- **Work orders:** `#/work-orders` · `#/work-orders/:id` (nav `work_orders`). **Invoices:** `#/invoices` · `#/invoices/:id` (nav `work_orders`). **Work hours:** the ⏱ button (every user) · `#/hours` (admins only: `canSee('hours')`).
+- **Work orders:** `#/work-orders` · `#/work-orders/:id` (nav `work_orders`). **Invoices:** `#/invoices` · `#/invoices/:id` (nav `work_orders`). **Planner:** `#/planner?team=&start=&days=` (nav `planner`). **Work hours:** the ⏱ button (every user) · `#/hours` (admins only: `canSee('hours')`).
 - **Private messages:** `#/messages` (people) · `#/messages/:staffId` (conversation); the 💬 button in the top bar, every
   user whatever the team (`canSee` always allows `messages`).
 - **My notes:** the 📝 panel (any page) · `#/notes` (the same as a page; reminder notifications open it); `canSee` always
@@ -1429,6 +1430,31 @@ Customer register company):
   `invoice_vat_registered` (on), `invoice_foretaksregisteret` (on), `invoice_kid` (off; MOD10), `invoice_number_start`
   (10000), `invoice_note`.
 
+**Planner (0.51.0)** (migration 049; `routers/planner.py`, `views/planner.js`, `worktime.work_segments`; the user's request with a
+photo of their old booking system: "a calendar to plan the jobs, each user gets their own line (users can be added or
+removed) of work orders lined up after each other per day; one calendar for each team, everyone can make changes in their
+team"):
+- **Top menu "Planner" / "Planlegger"** (team key `planner`, Workshop module; migration 049 gave it to teams with Work
+  orders). Admins plan every team (team dropdown); others their own team only (`_check_team`), and need work order access.
+- **Lines** = the team's members + people added − people taken off (`planner_rows`; "Lines" dialog: order ↑↓, remove,
+  add anyone active).
+- **Jobs** = work orders assigned to a line's person with a planned start (not cancelled), length = the estimate (1 h when
+  none), laid out by `worktime.work_segments`: only inside the **working day** (System → Work hours: `planner_day_start`
+  07:00, `planner_day_end` 15:30; Monday–Friday), breaks skipped; a job past the end of the day continues the next working
+  day (drawn with a dashed left edge). One bar per day from its first to its last piece (spans the break, like the old
+  system). Overlapping jobs on a line are stacked. Colours: open blue, in progress green, done / invoiced grey, PDI pink.
+  The work order's "Expected done" from the planned start uses the same layout.
+- **Changing:** drag a job (time snapped to 15 min, and onto another line = another mechanic) → `PATCH /work-orders/{id}`
+  `{planned_at, assigned_to}`; drag its right edge → `estimated_minutes`; tap → dialog (date, start, estimated hours,
+  mechanic, "Take off the plan" = planned_at NULL, open). Tap an empty spot → "+ New work order here"
+  (`newWorkOrderDialog(car, {planned, assigned_to, onDone})`), "+ Absence", or put a job from "Not planned" there.
+  **Not planned** (card under the board): active work orders without a time / person on this planner; drag onto a line
+  (pointer events, works with touch) or tap to plan.
+- **Absences:** holiday / away / course / other (purple / teal / grey blocks); **no "sick"** on purpose (health data): the
+  dialog says not to write why someone is away. Deleted by the worker a year after they end (`purge_old_absences`).
+- **Capacity:** under each name, planned / available hours over the days shown (available = working day − breaks −
+  absences; red when over). Red "now" line on today. Views: one day, three days, one week (from Monday).
+
 **Language: English and Norwegian (0.14.0)** (`frontend/js/i18n.js`):
 - **The rule:** no Norwegian in the English version, no English in the Norwegian one.
 - **How it's chosen:** per user (`staff.language`, default `en` for existing accounts),
@@ -1724,6 +1750,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.48.6 | Parts import reads importers' fixed-width text price lists (.txt), with a make for the file and sales / cost price choice; replaced parts get "Replaced by …" |
 | 0.49.0 | **Work orders + work hours:** work orders (car from Vehicles or the customer register, work as text and / or a task list, mechanic's reply, labour clock, parts orders tied to it; PDIs get a number from here when the date is confirmed); ⏱ start / end of the working day and one running clock per person; fixed breaks taken off; #/hours for admins with corrections and CSV export (migration 047) |
 | 0.50.0 | **Invoices:** parts and labour (hours × rate) and other charges on the work order; "Make invoice" issues a Norwegian invoice (unbroken number series, all required details, never changed or deleted; parts leave the stock), credit notes, mark as paid, invoice list + CSV export for the accountant; Invoicing settings on the System page (migration 048) |
+| 0.51.0 | **Planner:** a calendar per team with a line per person, work orders laid out over the working day (breaks, evenings, weekends skipped), drag to move / change mechanic / stretch, "Not planned" list, absences (holiday / away / course / other), planned vs. available hours; working day start / end on the System page (migration 049) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
