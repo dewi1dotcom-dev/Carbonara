@@ -37,17 +37,24 @@ def _check_team(conn, staff: dict, team_id: int) -> dict:
     team = conn.execute("SELECT id, name FROM teams WHERE id = %s", (team_id,)).fetchone()
     if not team:
         raise not_found("Team")
-    if not (staff.get("is_admin") or staff.get("team_id") == team_id):
+    if not (staff.get("is_admin") or team_id in _my_teams(staff)):
         raise HTTPException(403, "You can only plan your own team")
     return team
 
 
+def _my_teams(staff: dict) -> list[int]:
+    """Own team + teams whose planner has a line for this person (0.56.2, the user's rule: everyone on a team's
+    planner sees it, its places included, also people added from another team or without a team)."""
+    return [t for t in [staff.get("team_id"), *(staff.get("planner_teams") or [])] if t]
+
+
 @router.get("/planner/teams")
 def teams(conn=Depends(get_conn), staff=Depends(require_work_orders)):
-    """The teams this person can plan: every team for admins, else their own."""
+    """The teams this person can plan: every team for admins, else their own and those they have a line on."""
     if staff.get("is_admin"):
         return conn.execute("SELECT id, name FROM teams ORDER BY lower(name)").fetchall()
-    return conn.execute("SELECT id, name FROM teams WHERE id = %s", (staff.get("team_id"),)).fetchall()
+    return conn.execute("SELECT id, name FROM teams WHERE id = ANY(%s) ORDER BY lower(name)",
+                        (_my_teams(staff),)).fetchall()
 
 
 def rows(conn, team_id: int) -> list[dict]:
@@ -340,8 +347,7 @@ def _check_person(conn, staff: dict, staff_id: int) -> None:
     """Absences are set for people with a line in a planner the user can change."""
     if staff.get("is_admin"):
         return
-    team_id = staff.get("team_id")
-    if not team_id or staff_id not in {r["staff_id"] for r in rows(conn, team_id)}:
+    if not any(staff_id in {r["staff_id"] for r in rows(conn, t)} for t in _my_teams(staff)):
         raise HTTPException(403, "You can only plan your own team")
 
 

@@ -246,6 +246,13 @@ const NO = {
   'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
   'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
   'Sales price ex VAT': 'Utsalgspris eks. mva.',
+  // PDI order dialog buttons (0.56.1)
+  'Save and send to the workshop': 'Lagre og send til verkstedet',
+  'Save and send again': 'Lagre og send på nytt',
+  'Pause': 'Pause',
+  'PDI order saved – send it again when ready': 'Bestillingen er lagret – send den på nytt når den er klar',
+  'PDI order saved – not sent yet': 'Bestillingen er lagret – ikke sendt ennå',
+  'Cancel this PDI order? Its work order leaves the planner too, unless work has started on it.': 'Avbestille denne nybilklargjøringen? Arbeidsordren fjernes også fra planleggeren, med mindre arbeidet er startet.',
   // PDI orders to the planner (0.56.0)
   'Sent again – the work order is updated': 'Sendt på nytt – arbeidsordren er oppdatert',
   'Sent to the workshop planner': 'Sendt til verkstedets planlegger',

@@ -170,7 +170,34 @@ export function editDialog(v, o, opts, done) {
   mode.addEventListener('change', drawTyres);
   drawTyres();
   const note = h('textarea', { rows: 2, maxlength: 1000, placeholder: 'Note to the workshop (optional)' }, o?.note ?? '');
-  const save = h('button', { class: 'btn primary', type: 'submit' }, 'Save order');
+  // 0.56.1 (the user's request): "Save and send to the workshop" sends it straight to the planner; "Pause" saves it
+  // without sending (send it later from the PDI card); "Cancel" closes a new one unsaved, or cancels an existing order.
+  const save = h('button', { class: 'btn primary', type: 'submit' }, o?.sent_at ? 'Save and send again' : 'Save and send to the workshop');
+  const pause = h('button', { class: 'btn', type: 'button' }, 'Pause');
+  const drop = h('button', { class: 'link danger', type: 'button' }, o ? 'Cancel order' : 'Cancel');
+  const body = () => ({
+    items: rows.filter((r) => r.box.checked).map((r) => ({ label: r.it.label, choice: r.sel ? r.sel.value : null })),
+    other: other.value,
+    tyres: { mode: mode.value, company: company.value || null, expected_date: expected.value || null, note: tyreNote.value || null },
+    note: note.value,
+  });
+  pause.addEventListener('click', () => busy(pause, async () => {
+    await api.put(`/vehicles/${v.id}/pdi`, body());
+    close();
+    toast(o?.sent_at ? 'PDI order saved – send it again when ready' : 'PDI order saved – not sent yet', 'success');
+    await done();
+  }));
+  drop.addEventListener('click', async () => {
+    if (!o) { close(); return; }
+    if (!confirm('Cancel this PDI order? Its work order leaves the planner too, unless work has started on it.')) return;
+    await busy(drop, async () => {
+      await api.post(`/pdi/${o.id}/cancel`);
+      window.dispatchEvent(new Event('carbonara:pdi-changed'));
+      close();
+      toast('PDI order cancelled', 'success');
+      await done();
+    });
+  });
 
   const form = h('form', {},
     h('h3', {}, 'Ordered by the customer'),
@@ -180,18 +207,15 @@ export function editDialog(v, o, opts, done) {
     h('div', { class: 'field' }, mode),
     tyreSlot,
     h('div', { class: 'field' }, h('label', {}, 'Note'), note),
-    h('div', { class: 'actions' }, save));
+    h('div', { class: 'actions spread' }, drop, h('span', { class: 'row' }, pause, save)));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(save, async () => {
-      await api.put(`/vehicles/${v.id}/pdi`, {
-        items: rows.filter((r) => r.box.checked).map((r) => ({ label: r.it.label, choice: r.sel ? r.sel.value : null })),
-        other: other.value,
-        tyres: { mode: mode.value, company: company.value || null, expected_date: expected.value || null, note: tyreNote.value || null },
-        note: note.value,
-      });
+      const saved = await api.put(`/vehicles/${v.id}/pdi`, body());
+      await api.post(`/pdi/${saved.id}/send`, { via: 'planner' });
+      window.dispatchEvent(new Event('carbonara:pdi-changed'));
       close();
-      toast('PDI order saved', 'success');
+      toast(o?.sent_at ? 'Sent again – the work order is updated' : 'Sent to the workshop planner', 'success');
       await done();
     });
   });

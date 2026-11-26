@@ -68,7 +68,10 @@ def menu_for(staff: dict) -> list[str]:
     off = modules_off()
     if staff.get("is_superadmin"):
         return ["today", *[m for m in MENU_ITEMS if m not in off], "system"]
-    return ["today", *[m for m in MENU_ITEMS if m in (staff.get("team_menu") or []) and m not in off]]
+    items = set(staff.get("team_menu") or [])
+    if staff.get("planner_teams"):  # a line on another team's planner (0.56.2): that planner and its work orders
+        items |= {"planner", "work_orders"}
+    return ["today", *[m for m in MENU_ITEMS if m in items and m not in off]]
 
 
 def valid_pin(pin: str) -> bool:
@@ -117,7 +120,9 @@ def session_staff(conn, token: str | None) -> dict | None:
         return None
     row = conn.execute(
         """SELECT s.id, s.name, s.active, s.is_admin, s.is_superadmin, s.language, s.theme, s.created_at, s.last_login_at,
-                  (s.pin_hash IS NOT NULL) AS has_pin, s.team_id, t.name AS team_name, t.menu AS team_menu
+                  (s.pin_hash IS NOT NULL) AS has_pin, s.team_id, t.name AS team_name, t.menu AS team_menu,
+                  (SELECT coalesce(array_agg(r.team_id ORDER BY r.team_id), '{}') FROM planner_rows r
+                    WHERE r.staff_id = s.id AND NOT r.hidden AND r.team_id IS DISTINCT FROM s.team_id) AS planner_teams
               FROM sessions x JOIN staff s ON s.id = x.staff_id
               LEFT JOIN teams t ON t.id = s.team_id
              WHERE x.token_hash = %s AND x.expires_at > now() AND s.active""",

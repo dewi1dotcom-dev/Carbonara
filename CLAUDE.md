@@ -1473,6 +1473,10 @@ removed) of work orders lined up after each other per day; one calendar for each
 team"):
 - **Top menu "Planner" / "Planlegger"** (team key `planner`, Workshop module; migration 049 gave it to teams with Work
   orders). Admins plan every team (team dropdown); others their own team only (`_check_team`), and need work order access.
+  **0.56.2 (the user's rule: everyone in the team sees its places):** "the team" = everyone with a line on its planner.
+  `auth.session_staff` loads `planner_teams` (teams whose planner has a visible line for the person, other than their
+  own); `menu_for` then adds `planner` + `work_orders` (also for people without a team), and `planner._my_teams` (own
+  team + those) decides which planners they can open (team dropdown) and whose absences they can set.
 - **Lines** = the team's members + people added − people taken off (`planner_rows`; "Lines" dialog: order ↑↓, remove,
   add anyone active).
 - **Jobs** = work orders assigned to a line's person with a planned start (not cancelled), length = the estimate (1 h when
@@ -1829,6 +1833,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.55.0 | **Planner, bigger:** fills the screen width, "Open in its own window" (no top bar, refreshes itself), month calendar coloured by how booked each day is, chart of the next 7 working days, **job types with colours** (admins) + status marks (edge, 🔑 ⏱ 📦), legend, **workshop places** (lifts / bays) as lines; job type on work orders (migration 053) |
 | 0.55.1 | Work orders: "✓ Parts arrived and ready" at the top (else "Waiting for parts" when it has parts), also in the planner; the planner job dialog has the planning boxes at the top and the kiosk delivery folded at the bottom (migration 054) |
 | 0.56.0 | **PDI orders go to the planner:** "Send" makes the work order under "Not planned" (no e-mail any more; printing still possible); planning or moving it in the planner sets and confirms the PDI date, and changing the PDI date moves the job; cancelling the PDI cancels its open work order (migration 055) |
+| 0.56.1 | PDI order dialog: "Save and send to the workshop" (straight to the planner), "Pause" (save without sending) and "Cancel" / "Cancel order" |
+| 0.56.2 | Planner: everyone with a line on a team's planner can open it (its places included), also people added from another team or without a team; they get Planner + Work orders in the menu |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
