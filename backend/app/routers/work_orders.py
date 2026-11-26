@@ -29,6 +29,7 @@ from ..worktime import OSLO, local
 from .customers import ORDERS_SELECT, touch
 from .hours import enabled as hours_enabled, start_day, stop_running
 from .parts import CENT
+from . import recalls
 
 router = APIRouter(tags=["work orders"])
 
@@ -258,10 +259,12 @@ class WorkOrderIn(BaseModel):
 
 @router.post("/work-orders", status_code=201)
 def new_order(body: WorkOrderIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
-    return create_work_order(conn, staff["id"], vehicle_id=body.vehicle_id, customer_car_id=body.customer_car_id,
+    row = create_work_order(conn, staff["id"], vehicle_id=body.vehicle_id, customer_car_id=body.customer_car_id,
                              title=body.title, description=body.description, tasks=body.tasks,
                              estimated_minutes=body.estimated_minutes, planned_at=_planned(body.planned_at),
                              assigned_to=body.assigned_to, job_type_id=body.job_type_id, place_id=body.place_id)
+    info = recall_info(conn, row["id"])
+    return {**row, "recall_due": bool(info and info["due"])}  # the dialog says to check for recalls (0.57.0)
 
 
 def _order(conn, wo_id: int, lock: bool = False) -> dict:
@@ -335,7 +338,8 @@ def get_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_ord
             "expected_done": _expected_done(conn, o, labour), "parts_orders": parts, "parts_lines": lines,
             "parts_total_ex": parts_total, "events": events, "hours_enabled": hours_enabled(),
             "km": o["km"], "extra_lines": o["extra_lines"], "billing": invoices.billing(conn, o),
-            "invoices": invoices.work_order_invoices(conn, wo_id)}
+            "invoices": invoices.work_order_invoices(conn, wo_id),
+            "recall": recall_info(conn, wo_id)}
 
 
 class WorkOrderPatch(BaseModel):
@@ -594,3 +598,76 @@ def set_parts_ready(wo_id: int, body: PartsReadyIn, conn=Depends(get_conn), staf
                  (body.ready, body.ready, staff["id"], wo_id))
     _event(conn, wo_id, "parts_ready" if body.ready else "parts_not_ready", staff["id"])
     return {"id": wo_id}
+
+
+# --------------------------------------------------------------------------- #
+# recall check (0.57.0, the user's request: "when creating a work order, check for recalls if the car brand is
+# covered by the recall sources")
+# --------------------------------------------------------------------------- #
+
+def recall_info(conn, wo_id: int) -> Optional[dict]:
+    """The recall check of a work order: the sources that cover the car's make (None when none do and the car has no
+    open recalls), whether it was checked, and for a car in stock its open recalls."""
+    r = conn.execute(
+        """SELECT w.vehicle_id, w.status, w.recall_checked_at, w.recall_result, s.name AS checked_by_name,
+                  coalesce(cc.make, v.make) AS make, coalesce(cc.vin, v.vin) AS vin,
+                  coalesce(cc.registration_number, v.registration_number) AS registration_number
+             FROM work_orders w LEFT JOIN vehicles v ON v.id = w.vehicle_id
+             LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id
+             LEFT JOIN staff s ON s.id = w.recall_checked_by
+            WHERE w.id = %s""", (wo_id,)).fetchone()
+    if not r:
+        return None
+    sources = recalls.sources_for_make(conn, r["make"])
+    open_recalls = conn.execute(
+        "SELECT id, code, title, certainty FROM vehicle_recalls WHERE vehicle_id = %s AND status = 'open' "
+        "ORDER BY created_at", (r["vehicle_id"],)).fetchall() if r["vehicle_id"] else []
+    if not sources and not open_recalls:
+        return None
+    return {"sources": sources, "vin": r["vin"], "registration_number": r["registration_number"],
+            "checked_at": r["recall_checked_at"], "result": r["recall_result"], "checked_by_name": r["checked_by_name"],
+            "due": bool(sources) and not r["recall_checked_at"] and r["status"] in ACTIVE, "open_recalls": open_recalls}
+
+
+class RecallFoundIn(BaseModel):
+    code: Optional[str] = Field(None, max_length=60)
+    title: str = Field(min_length=1, max_length=200)
+
+
+class RecallCheckIn(BaseModel):
+    result: Literal["none", "found"]
+    source_id: Optional[int] = None
+    recalls: list[RecallFoundIn] = Field(default_factory=list, max_length=20)
+
+
+@router.post("/work-orders/{wo_id}/recall-check")
+def recall_check(wo_id: int, body: RecallCheckIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
+    """The result of the recall check: none, or the recalls found (each becomes a task on the work order; a car in
+    stock also gets them as recalls and the check on the car, as on the car page)."""
+    o = _order(conn, wo_id, lock=True)
+    _not_locked(o)
+    source_id = recalls._source_id(conn, body.source_id)
+    found = [x for x in body.recalls if x.title.strip()]
+    if body.result == "found" and not found:
+        raise bad_request("Add the recalls that were found")
+    conn.execute("UPDATE work_orders SET recall_checked_at = now(), recall_checked_by = %s, recall_result = %s, "
+                 "updated_at = now(), updated_by = %s WHERE id = %s", (staff["id"], body.result, staff["id"], wo_id))
+    if found:
+        texts = [f"Recall {x.code.strip()}: {x.title.strip()}" if (x.code or "").strip() else f"Recall: {x.title.strip()}"
+                 for x in found]
+        add_tasks(conn, wo_id, texts, o["description"], staff["id"])
+    v = conn.execute("SELECT * FROM vehicles WHERE id = %s AND deleted_at IS NULL", (o["vehicle_id"],)).fetchone() \
+        if o["vehicle_id"] else None
+    if v:
+        from ..common import log_event
+        for x in found:
+            code = (x.code or "").strip() or None
+            if code and conn.execute("SELECT 1 FROM vehicle_recalls WHERE vehicle_id = %s AND status = 'open' "
+                                     "AND lower(code) = lower(%s)", (v["id"], code)).fetchone():
+                continue
+            conn.execute("INSERT INTO vehicle_recalls (vehicle_id, source_id, code, title, created_by) "
+                         "VALUES (%s, %s, %s, %s, %s)", (v["id"], source_id, code, x.title.strip(), staff["id"]))
+            log_event(conn, v["id"], "recall_added", staff_id=staff["id"], data={"code": code, "title": x.title.strip()})
+        recalls._record_check(conn, v, source_id, body.result, staff["id"], None)
+    _event(conn, wo_id, "recall_check", staff["id"], {"result": body.result, "count": len(found)})
+    return {"id": wo_id, "recall": recall_info(conn, wo_id)}

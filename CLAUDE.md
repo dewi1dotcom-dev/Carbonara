@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…055
+  migrations/           001…056
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -333,6 +333,7 @@ frontend/               no build step; plain ES modules
 | 053 | `job_types_places` | `job_types` (name EN + NO, `color`, sort, active; 7 generic types seeded), `workshop_places` (team, name, sort, `deleted_at`: lifts / bays as planner lines); `work_orders.job_type_id / place_id`; existing PDI work orders get the PDI type |
 | 054 | `parts_ready` | `work_orders.parts_ready_at / parts_ready_by` ("Parts arrived and ready", ticked by hand) |
 | 055 | `pdi_to_planner` | `pdi_orders.sent_via` also allows `'planner'` |
+| 056 | `work_order_recall_check` | `work_orders.recall_checked_at / recall_checked_by / recall_result` (none / found) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1130,6 +1131,14 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
 - **A recall:** code, title, details, `certainty` confirmed / possible (later sources), status open → ✓ Done / Doesn't
   apply (reason) → Reopen; deleted only by whoever added it or an admin. Events `recall_check / _added / _closed /
   _reopened / _deleted` (no personal data).
+- **On work orders (0.57.0, the user's request: check for recalls when a work order is made, if the make is covered by
+  the recall sources):** `work_orders.recall_info` (`recalls.sources_for_make` on the car's make, cars in stock and customer
+  register alike) → `recall` in `GET /work-orders/{id}`; the work order page shows "Recalls and campaigns" at the top
+  (`workOrderRecallCard` in `recalls.js`): "⚠ Check for recalls" with the sources' links + Copy VIN / reg. no, "✓ No open
+  recalls" / "⚠ Found recalls" (code + title per recall) → `POST /work-orders/{id}/recall-check`: stored on the work order
+  (`recall_checked_at / _by`, `recall_result`), each recall found becomes a task "Recall {code}: {title}", and for a car in
+  stock also a `vehicle_recalls` row + the car's check (`_record_check`). Creating a work order answers `recall_due` (a toast);
+  the planner marks unchecked jobs ⚠ (`recall_due` in `ORDER_SELECT`, `recalls.covered_sql`).
 - **Where they show:** "⚠ Open recall" badge (car header, Vehicles list and storage cards: `open_recalls` count); Today:
   "Recall checks due" (Today/tomorrow) and "Open recalls" (Needs attention); the morning `daily_due` notification counts
   them; **PDI orders** carry `open_recalls` (`OPEN_RECALLS_JSON` in `ORDER_SELECT`): in the e-mail ("TILBAKEKALLINGER /
@@ -1835,6 +1844,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.56.0 | **PDI orders go to the planner:** "Send" makes the work order under "Not planned" (no e-mail any more; printing still possible); planning or moving it in the planner sets and confirms the PDI date, and changing the PDI date moves the job; cancelling the PDI cancels its open work order (migration 055) |
 | 0.56.1 | PDI order dialog: "Save and send to the workshop" (straight to the planner), "Pause" (save without sending) and "Cancel" / "Cancel order" |
 | 0.56.2 | Planner: everyone with a line on a team's planner can open it (its places included), also people added from another team or without a team; they get Planner + Work orders in the menu |
+| 0.57.0 | Work orders: recall check when the car's make is covered by a recall source (any car, also from the customer register): box at the top of the work order, recalls found become tasks, ⚠ in the planner, a reminder when the work order is created (migration 056) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

@@ -246,6 +246,13 @@ const NO = {
   'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
   'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
   'Sales price ex VAT': 'Utsalgspris eks. mva.',
+  // Recall check on work orders (0.57.0)
+  'A recall source covers this make. Look the car up and record the result.': 'En kilde for tilbakekallinger dekker dette merket. Slå opp bilen og registrer resultatet.',
+  'Open recalls on this car:': 'Åpne tilbakekallinger på denne bilen:',
+  'Check again': 'Sjekk på nytt',
+  'Add each recall the brand’s system shows for this car. They are added to the work order’s tasks.': 'Legg inn hver tilbakekalling merkets system viser for denne bilen. De legges til i arbeidsordrens oppgaver.',
+  'Another recall': 'En tilbakekalling til',
+  'Add the recalls that were found': 'Legg inn tilbakekallingene som ble funnet',
   // PDI order dialog buttons (0.56.1)
   'Save and send to the workshop': 'Lagre og send til verkstedet',
   'Save and send again': 'Lagre og send på nytt',
@@ -1398,6 +1405,7 @@ const NO = {
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
+  ['Check for recalls on work order #{n}', 'Sjekk tilbakekallinger på arbeidsordre #{1}'], ['Checked {}', 'Sjekket {1}'],
   ['Sent to the planner {} by {}', 'Sendt til planleggeren {1} av {2}'], ['Sent to the planner {}', 'Sendt til planleggeren {1}'],
   ['sent to the planner {}', 'sendt til planleggeren {1}'], ['{} (planner)', '{1} (planlegger)'],
   ['Not planned ({n})', 'Ikke planlagt ({1})'], ['Plan work order #{n}', 'Planlegg arbeidsordre #{1}'], ['Lines · {}', 'Linjer · {1}'],

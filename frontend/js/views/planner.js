@@ -239,6 +239,7 @@ function legendBox(data) {
     h('h3', {}, 'Status'),
     h('ul', { class: 'pl-legend-list' },
       Object.entries(STATUS_MARK).map(([k, t]) => h('li', {}, h('span', { class: `pl-edge st-${k}` }), h('span', {}, t))),
+      h('li', {}, h('span', { class: 'pl-icon' }, '⚠️'), h('span', {}, 'Check for recalls')),
       h('li', {}, h('span', { class: 'pl-icon' }, '🔑'), h('span', {}, 'Car arrived')),
       h('li', {}, h('span', { class: 'pl-icon' }, '⏱'), h('span', {}, 'Clock running')),
       h('li', {}, h('span', { class: 'pl-icon' }, '📦'), h('span', {}, 'Waiting for parts')),
@@ -383,6 +384,7 @@ function jobBar(p, data, rerender) {
   const who = [o.registration_number, o.customer_name].filter(Boolean).join(' · ');
   const what = [type ? jobTypeName(type) : null, o.title].filter(Boolean).join(' · ');
   const icons = [
+    o.recall_due ? h('span', { title: 'Check for recalls' }, '⚠️') : null,
     o.arrived_at ? h('span', { title: 'Car arrived' }, '🔑') : null,
     Number(o.clocks_running) > 0 ? h('span', { title: 'Clock running' }, '⏱') : null,
     o.parts_ready_at ? h('span', { title: 'Parts arrived and ready' }, '✅') : o.has_parts ? h('span', { title: 'Waiting for parts' }, '📦') : null,
@@ -590,6 +592,7 @@ function jobDialog(o, data, rerender) {
     o.title ? h('p', { translate: 'no' }, o.title) : null,
     h('p', { class: 'muted small' }, h('span', {}, 'Done about'), ` ${isoNo(o.end_local.slice(0, 10))} ${o.end_local.slice(11, 16)}`),
     partsReadyBar(o, data.can_edit, async () => { close(); await rerender(); }),
+    o.recall_due ? h('p', {}, h('a', { class: 'badge warn', href: `#/work-orders/${o.id}`, onClick: () => close() }, '⚠ Check for recalls')) : null,
     h('p', {}, o.arrived_at ? h('span', { class: 'badge good' }, h('span', {}, 'Arrived'), ` ${fmtDate(o.arrived_at)}`)
       : h('span', { class: 'badge' }, 'Not arrived yet'), ' ', data.can_edit ? arrived : null),
     h('p', {}, h('a', { href: `#/work-orders/${o.id}`, onClick: () => close() }, 'Open the work order')),

@@ -31,11 +31,25 @@ def _norm(sql: str) -> str:
     return f"lower(regexp_replace(coalesce({sql}, ''), '[^A-Za-z0-9]', '', 'g'))"
 
 
-# An active source covers the car (alias v): no makes listed = every car; else the car's make starts with one.
-COVERED_SQL = f"""EXISTS (SELECT 1 FROM recall_sources s
+def covered_sql(make_sql: str) -> str:
+    """SQL: an active source covers a car with this make: no makes listed = every car; else the make starts with one."""
+    return f"""EXISTS (SELECT 1 FROM recall_sources s
      WHERE s.active AND (cardinality(s.makes) = 0 OR EXISTS (
-           SELECT 1 FROM unnest(s.makes) m WHERE {_norm('m')} <> '' AND {_norm('v.make')} LIKE {_norm('m')} || '%%')))"""
+           SELECT 1 FROM unnest(s.makes) m WHERE {_norm('m')} <> '' AND {_norm(make_sql)} LIKE {_norm('m')} || '%%')))"""
+
+
+COVERED_SQL = covered_sql("v.make")   # (alias v = vehicles)
 # ('%%': always run with parameters, where a literal % is written twice)
+
+
+def sources_for_make(conn, make: Optional[str]) -> list[dict]:
+    """The active sources that cover a make (work orders, 0.57.0: any car, also from the customer register)."""
+    return conn.execute(
+        f"""SELECT s.id, s.name, s.url, s.note FROM recall_sources s
+             WHERE s.active AND (cardinality(s.makes) = 0 OR EXISTS (
+                   SELECT 1 FROM unnest(s.makes) m
+                    WHERE {_norm('m')} <> '' AND {_norm('%(make)s::text')} LIKE {_norm('m')} || '%%'))
+             ORDER BY lower(s.name)""", {"make": make or ""}).fetchall()
 
 # The latest check that gave an answer (not an error), per car.
 LAST_CHECK_SQL = """(SELECT max(c.checked_at) FROM recall_checks c WHERE c.vehicle_id = v.id AND c.result <> 'error')"""

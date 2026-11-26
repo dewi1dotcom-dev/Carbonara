@@ -7,6 +7,7 @@ import { entryDialog, fmtDuration, fmtLocal } from './hours.js';
 import { field, fmtMoney, fmtQty, money2, parseNum, qtyText } from './parts.js';
 import { lineDialog } from './partsorders.js';
 import { lang } from '../i18n.js';
+import { workOrderRecallCard } from './recalls.js';
 
 export const WO_STATUS = { open: 'Open', in_progress: 'In progress', done: 'Done', invoiced: 'Invoiced', cancelled: 'Cancelled' };
 const WO_CLS = { open: '', in_progress: 'warn', done: 'good', invoiced: '', cancelled: 'bad' };
@@ -223,6 +224,8 @@ export async function newWorkOrderDialog(car = null, prefill = {}) {
         job_type_id: type.value ? Number(type.value) : null, place_id: prefill.place_id || null,
       });
       close();
+      // The make is covered by a recall source: say so (the work order page shows the check at the top).
+      if (r.recall_due) toast(`Check for recalls on work order #${r.number}`, prefill.onDone ? 'error' : 'info');
       if (prefill.onDone) await prefill.onDone(r); else location.hash = `#/work-orders/${r.id}`;
     });
   });
@@ -340,6 +343,7 @@ export async function workOrderView(el, [id], host = el) {
         editable ? h('button', { class: 'btn', type: 'button', onClick: () => editDialog(o, rerender) }, 'Edit') : null)),
     actions.length ? h('div', { class: 'actions left no-print' }, actions) : null,
     partsReadyBar(o, editable, rerender),
+    workOrderRecallCard(o, editable, rerender),
     h('section', { class: 'card clock-card no-print' },
       h('div', { class: 'clock-line' },
         h('div', {},

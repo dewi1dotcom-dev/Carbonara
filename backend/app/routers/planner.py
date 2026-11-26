@@ -24,6 +24,9 @@ from ..common import bad_request, not_found
 from ..db import get_conn
 from ..worktime import OSLO, local
 from .work_orders import HAS_PARTS_SQL, _access as work_order_access, require_work_orders
+from .recalls import covered_sql
+
+RECALL_COVERED = covered_sql("coalesce(cc.make, v.make)")
 
 router = APIRouter(tags=["planner"])
 
@@ -83,6 +86,8 @@ ORDER_SELECT = """SELECT w.id, w.number, w.status, w.title, w.assigned_to, w.pla
                              AS clocks_running,
                          -- parts (0.55.1): "waiting for parts" until someone ticks "Parts arrived and ready"
                          w.parts_ready_at, """ + HAS_PARTS_SQL + """ AS has_parts,
+                         -- the car's make is covered by a recall source and the work order isn't checked yet (0.57.0)
+                         (w.recall_checked_at IS NULL AND w.status IN ('open', 'in_progress') AND """ + RECALL_COVERED + """) AS recall_due,
                          -- the kiosk delivery tied to this job: where the customer parked and left the key
                          (SELECT jsonb_build_object('id', d.id, 'created_at', d.created_at, 'map_id', d.map_id,
                                      'map_name', m.name, 'map_name_no', m.name_no, 'pin_x', d.pin_x, 'pin_y', d.pin_y,

@@ -1068,3 +1068,8 @@ body.planner-full .pl-page-head h1 { font-size: 1.3rem; margin: 0; }
 .pl-kiosk summary { cursor: pointer; font-weight: 600; }
 .pl-kiosk .pl-delivery-map { margin-bottom: .25rem; }
 .pl-job-dialog .grid select { min-width: 0; }
+
+/* Work orders 0.57.0: recall check */
+.card.recall-due { border-color: var(--warn); }
+.recall-found-list { display: grid; gap: .4rem; margin-bottom: .5rem; }
+.recall-found-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .5rem; }
