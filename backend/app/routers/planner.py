@@ -24,7 +24,7 @@ from ..common import bad_request, not_found
 from ..db import get_conn
 from ..worktime import OSLO, local
 from .work_orders import HAS_PARTS_SQL, _access as work_order_access, require_work_orders
-from .recalls import covered_sql
+from .recalls import covered_sql, sources_for_make
 
 RECALL_COVERED = covered_sql("coalesce(cc.make, v.make)")
 
@@ -79,6 +79,7 @@ def places(conn, team_id: int) -> list[dict]:
 ORDER_SELECT = """SELECT w.id, w.number, w.status, w.title, w.assigned_to, w.planned_at, w.estimated_minutes,
                          coalesce(cc.registration_number, v.registration_number) AS registration_number,
                          coalesce(cc.make, v.make) AS make, coalesce(cc.model, v.model) AS model,
+                         coalesce(cc.vin, v.vin) AS vin,
                          c.name AS customer_name, w.pdi_order_id, w.arrived_at, w.place_id, w.job_type_id,
                          jsonb_array_length(w.tasks) AS task_count,
                          (SELECT count(*) FROM jsonb_array_elements(w.tasks) x WHERE (x->>'done')::boolean) AS tasks_done,
@@ -200,6 +201,12 @@ def planner(team_id: int, start: Optional[str] = None, days: int = 1, conn=Depen
                            ORDER BY w.created_at LIMIT 100""", (ids, pids, ids, pids)).fetchall()
     for o in unplanned:
         o["planned_local"] = local(o.pop("planned_at"))
+    # jobs that need a recall check get their sources, so "Check for recalls" opens the source's site (0.57.1)
+    by_make: dict = {}
+    for o in [*lay["orders"], *unplanned]:
+        if o.get("recall_due"):
+            key = (o.get("make") or "").lower()
+            o["recall_sources"] = by_make.setdefault(key, [s for s in sources_for_make(conn, o.get("make")) if s["url"]])
     lines = [{"kind": "staff", "key": f"s{r['staff_id']}", **r} for r in lay["people"]] + \
             [{"kind": "place", "key": f"p{p['place_id']}", **p} for p in lay["places"]]
     return {"team": team, "rows": lines, "days": lay["days"], "window": lay["window"],

@@ -12,6 +12,7 @@ import { lang } from '../i18n.js';
 import { fmtDuration } from './hours.js';
 import { jobTypeName, jobTypes, newWorkOrderDialog, partsReadyBar, woBadge } from './workorders.js';
 import { mapWithPin, optText } from './deliveries.js';
+import { lookupUrl } from './recalls.js';
 
 const GAP = 14;          // between days
 const SNAP = 15;         // minutes
@@ -592,7 +593,12 @@ function jobDialog(o, data, rerender) {
     o.title ? h('p', { translate: 'no' }, o.title) : null,
     h('p', { class: 'muted small' }, h('span', {}, 'Done about'), ` ${isoNo(o.end_local.slice(0, 10))} ${o.end_local.slice(11, 16)}`),
     partsReadyBar(o, data.can_edit, async () => { close(); await rerender(); }),
-    o.recall_due ? h('p', {}, h('a', { class: 'badge warn', href: `#/work-orders/${o.id}`, onClick: () => close() }, '⚠ Check for recalls')) : null,
+    // Opens the recall source's website with the car filled in (0.57.1); the result is recorded on the work order.
+    o.recall_due ? h('p', { class: 'row' }, o.recall_sources?.length
+      ? o.recall_sources.map((s) => h('a', { class: 'btn small primary', href: lookupUrl(s, o), target: '_blank', rel: 'noopener noreferrer' },
+        o.recall_sources.length > 1 ? `🔍 ${s.name}` : '🔍 Check for recalls'))
+      : h('span', { class: 'badge warn' }, '⚠ Check for recalls'),
+    h('a', { class: 'small', href: `#/work-orders/${o.id}`, onClick: () => close() }, 'Record the result on the work order')) : null,
     h('p', {}, o.arrived_at ? h('span', { class: 'badge good' }, h('span', {}, 'Arrived'), ` ${fmtDate(o.arrived_at)}`)
       : h('span', { class: 'badge' }, 'Not arrived yet'), ' ', data.can_edit ? arrived : null),
     h('p', {}, h('a', { href: `#/work-orders/${o.id}`, onClick: () => close() }, 'Open the work order')),

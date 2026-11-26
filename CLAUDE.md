@@ -1156,6 +1156,11 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
     `chrome.storage.local` `job` (status + lines as English keys with arguments; the popup translates and shows it,
     "cut off" after 15 min). The portal's answer is read inside the page (`checkVin`, self-contained: a service
     worker has no DOMParser). One check at a time.
+  - **Work order cars (0.57.1, Sidekick 1.6.0):** the car list also has the cars on open work orders whose make a source
+    covers and that aren't checked on the work order yet (`?all=1`: every open one), with `work_order_id` (a car in stock
+    already listed gets it attached); the result is sent with `work_order_id` (`vehicle_id` null for a customer register
+    car): each open campaign becomes a task "Recall {code}: {title}" (once) and the work order counts as checked
+    (`_helper_work_order`). Older Sidekick versions stop at such a car (no `work_order_id`): update Sidekick.
   - Run: on the portal's campaign page, "Check cars" → `GET /api/recall-helper/cars` (due, or `?all=1` every covered
     car here, each with its sources); only cars whose source `url` is on the **open tab's origin** are checked (so no
     portal address in code). For each VIN, `chrome.scripting` (activeTab, world MAIN) runs the portal's own request:
@@ -1845,6 +1850,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.56.1 | PDI order dialog: "Save and send to the workshop" (straight to the planner), "Pause" (save without sending) and "Cancel" / "Cancel order" |
 | 0.56.2 | Planner: everyone with a line on a team's planner can open it (its places included), also people added from another team or without a team; they get Planner + Work orders in the menu |
 | 0.57.0 | Work orders: recall check when the car's make is covered by a recall source (any car, also from the customer register): box at the top of the work order, recalls found become tasks, ⚠ in the planner, a reminder when the work order is created (migration 056) |
+| 0.57.1 | Recalls: Sidekick 1.6.0 also checks the cars on open work orders (customer register cars too; campaigns found become tasks, the work order counts as checked); "🔍 Check for recalls" on the work order and in the planner opens the recall source's website with the car filled in |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

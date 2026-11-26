@@ -17,7 +17,7 @@ export const recallBadge = (n) => (n > 0
   ? h('span', { class: 'badge bad' }, n === 1 ? '⚠ Open recall' : `⚠ Open recalls: ${n}`) : null);
 
 /** The source's lookup address with the car filled in ({vin}, {reg}). */
-const lookupUrl = (s, v) => (s.url || '')
+export const lookupUrl = (s, v) => (s.url || '')
   .replaceAll('{vin}', encodeURIComponent(v.vin || ''))
   .replaceAll('{reg}', encodeURIComponent(v.registration_number || ''));
 
@@ -229,10 +229,18 @@ export function workOrderRecallCard(o, editable, rerender) {
     h('strong', {}, `✓ Checked ${fmtDate(r.checked_at)}`),
     r.checked_by_name && h('span', { translate: 'no' }, r.checked_by_name),
     h('span', {}, RESULT[r.result] ?? r.result))) : null;
+  // "Check for recalls" opens the recall source's website in a new tab with the car filled in (0.57.1, the user's
+  // request); with Sidekick installed, its "Check cars" there also checks the work orders' cars.
+  const first = r.sources.find((s) => s.url);
+  const openBtn = first ? h('a', {
+    class: 'btn primary', href: lookupUrl(first, car), target: '_blank', rel: 'noopener noreferrer',
+  }, '🔍 Check for recalls') : null;
   return h('section', { class: `card no-print${r.due ? ' recall-due' : ''}`, id: 'recalls' },
     h('h2', {}, 'Recalls and campaigns'),
-    r.due ? h('div', { class: 'notice warn' }, h('strong', {}, '⚠ Check for recalls'), ' · ',
-      h('span', {}, 'A recall source covers this make. Look the car up and record the result.')) : checked,
+    r.due ? h('div', { class: 'notice warn recall-due-line' },
+      h('span', {}, h('strong', {}, '⚠ Check for recalls'), ' · ',
+        h('span', {}, 'A recall source covers this make. Look the car up and record the result.')),
+      openBtn) : checked,
     r.open_recalls.length ? h('div', { class: 'notice' }, h('strong', {}, 'Open recalls on this car:'),
       h('ul', { class: 'plain' }, r.open_recalls.map((x) => h('li', {},
         x.code ? [h('span', { class: 'mono', translate: 'no' }, x.code), ' '] : null, h('span', { translate: 'no' }, x.title))))) : null,

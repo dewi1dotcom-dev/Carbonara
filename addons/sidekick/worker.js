@@ -2,7 +2,8 @@
 // going when the small popup window closes (Chrome closes it as soon as you click anywhere else; in 1.0.0 the
 // check ran in the popup and stopped half way). Progress is kept in chrome.storage.local "job"; the popup shows it.
 //
-// - Which cars: GET /api/recall-helper/cars (due ones, or all cars here), each with its recall sources. Only cars
+// - Which cars: GET /api/recall-helper/cars (due ones, or all cars here; from 1.6.0 also cars on open work orders,
+//   sent back with their work_order_id), each with its recall sources. Only cars
 //   whose source address is on the portal tab's site are checked, so the tab decides the portal.
 // - The portal: a campaign search page with window.url_AsyncMethods; POST AsyncMethod=CampaignByVIN returns an
 //   HTML table, one row (tr.rowCampaign, data-id = campaign no.) per operation; a campaign is done on the car when
@@ -140,7 +141,7 @@ async function run(tabId, origin, all) {
         : answer.status !== undefined ? { key: 'portal error {0}', args: [answer.status] }
           : answer.unreadable ? { key: 'could not read the portal\'s answer', args: [] } : null;
       const saved = await carbonara(base, '/api/recall-helper/result', {
-        vehicle_id: car.id, source_id: car.source.id,
+        vehicle_id: car.id, work_order_id: car.work_order_id ?? null, source_id: car.source.id,
         error: error ? error.key.replace('{0}', error.args[0] ?? '') : null,
         open: error ? [] : answer.open, done: error ? [] : answer.done,
       });

@@ -246,6 +246,8 @@ const NO = {
   'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
   'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
   'Sales price ex VAT': 'Utsalgspris eks. mva.',
+  // Recall check opens the source (0.57.1)
+  'Record the result on the work order': 'Registrer resultatet på arbeidsordren',
   // Recall check on work orders (0.57.0)
   'A recall source covers this make. Look the car up and record the result.': 'En kilde for tilbakekallinger dekker dette merket. Slå opp bilen og registrer resultatet.',
   'Open recalls on this car:': 'Åpne tilbakekallinger på denne bilen:',

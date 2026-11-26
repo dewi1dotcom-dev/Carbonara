@@ -334,6 +334,29 @@ def helper_cars(all: bool = False, conn=Depends(get_conn)):
                         {"days": settings.recall_check_days}).fetchall()
     for r in rows:
         r["sources"] = _sources_for(conn, r["id"])
+        r["work_order_id"] = None
+    # 0.57.1 (the user's request): cars on open work orders whose make a source covers, also customer register cars;
+    # the due ones = not checked on the work order yet (all=1: every open work order). A car in stock that is
+    # already listed gets its work order attached instead of a second row.
+    by_vehicle = {r["id"]: r for r in rows}
+    orders = conn.execute(
+        f"""SELECT w.id AS work_order_id, w.number AS work_order_number, w.vehicle_id,
+                   coalesce(cc.vin, v.vin) AS vin, coalesce(cc.registration_number, v.registration_number) AS registration_number,
+                   coalesce(cc.make, v.make) AS make, coalesce(cc.model, v.model) AS model,
+                   coalesce(cc.model_year, v.model_year) AS model_year
+              FROM work_orders w LEFT JOIN vehicles v ON v.id = w.vehicle_id
+              LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id
+             WHERE w.status IN ('open', 'in_progress') AND coalesce(cc.vin, v.vin) IS NOT NULL
+               AND {covered_sql('coalesce(cc.make, v.make)')} {'' if all else 'AND w.recall_checked_at IS NULL'}
+             ORDER BY w.planned_at NULLS LAST, w.id""", {}).fetchall()
+    for o in orders:
+        if o["vehicle_id"] in by_vehicle:
+            by_vehicle[o["vehicle_id"]]["work_order_id"] = o["work_order_id"]
+            continue
+        rows.append({"id": o["vehicle_id"], "work_order_id": o["work_order_id"],
+                     "work_order_number": o["work_order_number"], "vin": o["vin"],
+                     "registration_number": o["registration_number"], "make": o["make"], "model": o["model"],
+                     "model_year": o["model_year"], "sources": sources_for_make(conn, o["make"])})
     return rows
 
 
@@ -344,7 +367,8 @@ class HelperCampaign(BaseModel):
 
 
 class HelperResult(BaseModel):
-    vehicle_id: int
+    vehicle_id: Optional[int] = None      # a car in stock
+    work_order_id: Optional[int] = None   # a car on a work order (0.57.1; also customer register cars)
     source_id: Optional[int] = None
     error: Optional[str] = Field(None, max_length=300)  # the portal couldn't be asked / read: nothing changes
     open: list[HelperCampaign] = Field(default_factory=list, max_length=100)  # campaigns still to do on the car
@@ -355,9 +379,13 @@ class HelperResult(BaseModel):
 def helper_result(body: HelperResult, request: Request, conn=Depends(get_conn)):
     """One car's answer from the portal: add the open campaigns not on the car yet, close the open ones the
     portal shows as done, and record the check (an error is recorded but keeps the check due)."""
-    v = _vehicle(conn, body.vehicle_id)
     me = request.state.staff["id"]
     source_id = _source_id(conn, body.source_id)
+    if body.vehicle_id is None:
+        if body.work_order_id is None:
+            raise bad_request("Which car?")
+        return _helper_work_order(conn, body, source_id, me)
+    v = _vehicle(conn, body.vehicle_id)
     if body.error:
         conn.execute("""INSERT INTO recall_checks (vehicle_id, source_id, checked_by, result, reason, note)
                         VALUES (%s, %s, %s, 'error', %s, %s)""", (v["id"], source_id, me, _reason(conn, v), _text(body.error)))
@@ -385,7 +413,29 @@ def helper_result(body: HelperResult, request: Request, conn=Depends(get_conn)):
     still_open = conn.execute("SELECT count(*) AS n FROM vehicle_recalls WHERE vehicle_id = %s AND status = 'open'",
                               (v["id"],)).fetchone()["n"]
     _record_check(conn, v, source_id, "found" if still_open else "none", me, None)
+    if body.work_order_id:  # the car's work order: its open campaigns become tasks, and it counts as checked
+        _helper_work_order(conn, body, source_id, me)
     return {"added": added, "closed": closed, "open": still_open}
+
+
+def _helper_work_order(conn, body: HelperResult, source_id: Optional[int], me: int) -> dict:
+    """Sidekick's answer for a car on a work order (0.57.1): each open campaign becomes a task "Recall {code}: {title}"
+    (once), and the work order counts as checked. An error changes nothing (it stays due)."""
+    from .work_orders import add_tasks, _event  # work_orders imports this module
+    o = conn.execute("SELECT id, status, description, tasks FROM work_orders WHERE id = %s FOR UPDATE",
+                     (body.work_order_id,)).fetchone()
+    if not o:
+        raise not_found("Work order")
+    if body.error or o["status"] not in ("open", "in_progress"):
+        return {"added": 0, "closed": 0, "open": None}
+    before = len(o["tasks"] or [])
+    add_tasks(conn, o["id"], [f"Recall {_text(c.code)}: {_text(c.title)}" for c in body.open], o["description"], me)
+    after = len(conn.execute("SELECT tasks FROM work_orders WHERE id = %s", (o["id"],)).fetchone()["tasks"] or [])
+    result = "found" if body.open else "none"
+    conn.execute("UPDATE work_orders SET recall_checked_at = now(), recall_checked_by = %s, recall_result = %s "
+                 "WHERE id = %s", (me, result, o["id"]))
+    _event(conn, o["id"], "recall_check", me, {"result": result, "count": len(body.open), "helper": True})
+    return {"added": after - before, "closed": 0, "open": len(body.open)}
 
 
 @router.delete("/recalls/{recall_id}")
