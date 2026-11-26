@@ -17,6 +17,7 @@ from ..common import org_no
 from ..config import settings
 from ..db import get_conn
 from . import pdi_sheets, recalls
+from ..worktime import OSLO
 
 log = logging.getLogger("carbonara.pdi")
 router = APIRouter(tags=["pdi"])
@@ -53,8 +54,8 @@ class OrderIn(BaseModel):
 
 
 class SendIn(BaseModel):
-    recipient_id: Optional[int] = None  # not used for 'print'
-    via: Literal["smtp", "mail_app", "print"]
+    recipient_id: Optional[int] = None  # only for the old e-mail ways
+    via: Literal["planner", "print", "smtp", "mail_app"] = "planner"
 
 
 class BookingIn(BaseModel):
@@ -296,11 +297,17 @@ def preview_email(order_id: int, recipient_id: int, request: Request, conn=Depen
 
 @router.post("/pdi/{order_id}/send")
 def send_order(order_id: int, body: SendIn, request: Request, conn=Depends(get_conn)):
-    """Send by SMTP, or record that staff sent it from their own e-mail app, or
-    printed it / saved it as a PDF for the workshop (via 'print', no address)."""
+    """Send the order to the workshop (0.56.0, the user's rule): it goes straight into the workshop planner as a work
+    order under "Not planned" (via 'planner', or 'print' when it was also printed); planning it there sets the PDI date.
+    The old e-mail ways (SMTP / own e-mail app) are still accepted but no longer offered."""
     row = _open_order(conn, order_id)
-    if body.via == "print":
+    if body.via in ("planner", "print"):
         to = None
+        number = _carbonara_work_order(conn, row, _me(request))
+        if not row["work_order"]:
+            conn.execute("UPDATE pdi_orders SET work_order = %s WHERE id = %s", (number, order_id))
+            log_event(conn, row["vehicle_id"], "pdi_work_order_changed", staff_id=_me(request),
+                      data={"from": None, "to": number})
     elif body.recipient_id is None:
         raise bad_request("Choose who to send it to")
     else:
@@ -333,6 +340,7 @@ def set_booking(order_id: int, body: BookingIn, request: Request, conn=Depends(g
                      "pdi_confirmed_at = NULL, pdi_confirmed_by = NULL, "
                      "status = CASE WHEN sent_at IS NULL THEN 'draft' ELSE 'sent' END WHERE id = %s", (order_id,))
         log_event(conn, row["vehicle_id"], "pdi_booking_cleared", staff_id=_me(request))
+        _move_work_order(conn, row, _me(request))
         return _order(conn, order_id)
     expected = body.expected_done or body.date + dt.timedelta(days=1)
     if expected < body.date:
@@ -351,7 +359,52 @@ def set_booking(order_id: int, body: BookingIn, request: Request, conn=Depends(g
               data={"pdi_at": local, "expected_done": expected})
     recalls.request_check(conn, row["vehicle_id"], "pdi")  # a fresh recall check before the car goes to the workshop
     pdi_sheets.save_work_order(conn, order_id, _me(request), body.work_order)
+    _move_work_order(conn, row, _me(request))
     return _order(conn, order_id)
+
+
+def _move_work_order(conn, row: dict, staff_id: Optional[int]) -> None:
+    """The PDI date was entered / changed / cleared here: its work order in the planner follows (0.56.0)."""
+    if not row.get("work_order_id"):
+        return
+    from .work_orders import follow_pdi  # work_orders imports this module only inside functions
+    at = conn.execute("SELECT pdi_at FROM pdi_orders WHERE id = %s", (row["id"],)).fetchone()["pdi_at"]
+    follow_pdi(conn, row["work_order_id"], at, staff_id)
+
+
+def follow_work_order(conn, pdi_order_id: int, planned_at, staff_id: Optional[int], number) -> None:
+    """The PDI's work order was planned, moved or taken off the plan in the planner (0.56.0, the user's rule): the PDI
+    date follows it and counts as confirmed (expected done = the day after); taken off = back to waiting for a date."""
+    row = conn.execute("SELECT * FROM pdi_orders WHERE id = %s FOR UPDATE", (pdi_order_id,)).fetchone()
+    if not row or row["status"] not in ("draft", "sent", "booked"):
+        return
+    if planned_at is None:
+        if row["pdi_at"] is None:
+            return
+        conn.execute("UPDATE pdi_orders SET pdi_at = NULL, booked_by = NULL, expected_done_date = NULL, "
+                     "pdi_confirmed_at = NULL, pdi_confirmed_by = NULL, "
+                     "status = CASE WHEN sent_at IS NULL THEN 'draft' ELSE 'sent' END WHERE id = %s", (pdi_order_id,))
+        log_event(conn, row["vehicle_id"], "pdi_booking_cleared", staff_id=staff_id, data={"source": "planner"})
+        return
+    if row["pdi_at"] == planned_at and row["pdi_confirmed_at"]:
+        return
+    local = planned_at.astimezone(OSLO)
+    expected = local.date() + dt.timedelta(days=1)
+    conn.execute(
+        """UPDATE pdi_orders SET pdi_at = %s, booked_by = %s, status = 'booked', expected_done_date = %s,
+                  pdi_confirmed_at = now(), pdi_confirmed_by = %s, work_order = coalesce(work_order, %s)
+            WHERE id = %s""", (planned_at, staff_id, expected, staff_id, str(number), pdi_order_id))
+    log_event(conn, row["vehicle_id"], "pdi_booked", staff_id=staff_id,
+              data={"pdi_at": local.strftime("%Y-%m-%d %H:%M"), "expected_done": expected, "source": "planner"})
+    log_event(conn, row["vehicle_id"], "pdi_date_confirmed", staff_id=staff_id,
+              data={"pdi_at": planned_at.isoformat(), "work_order": row["work_order"] or str(number),
+                    "source": "planner"})
+    if row["pdi_at"] is None:
+        recalls.request_check(conn, row["vehicle_id"], "pdi")
+    o = _order(conn, pdi_order_id)
+    when = local.strftime("%d.%m.%Y %H:%M")
+    _notify_status(conn, o, staff_id, en=("PDI date confirmed", f"{push.car_text(o)} · {when}"),
+                   no=("Dato for nybilklargjøring bekreftet", f"{push.car_text(o)} · {when}"))
 
 
 class WorkOrderIn(BaseModel):
@@ -372,15 +425,16 @@ class ConfirmIn(BaseModel):
 
 def _carbonara_work_order(conn, row: dict, staff_id: int) -> str:
     """The PDI's work order in Carbonara (made now if it has none): the order items become its list of tasks."""
-    from .work_orders import create_work_order  # work_orders imports nothing from here
-    if row.get("work_order_id"):
-        wo = conn.execute("SELECT number FROM work_orders WHERE id = %s", (row["work_order_id"],)).fetchone()
-        if wo:
-            return str(wo["number"])
+    from .work_orders import add_tasks, create_work_order  # work_orders imports this module only inside functions
     tasks = [f"{i.get('label')}: {i['choice']}" if i.get("choice") else str(i.get("label") or "")
              for i in row["items"] or []]
     if row.get("other"):
         tasks.append(row["other"])
+    if row.get("work_order_id"):
+        wo = conn.execute("SELECT id, number FROM work_orders WHERE id = %s", (row["work_order_id"],)).fetchone()
+        if wo:  # sent again after a change: items added to the order are added to the work order's tasks
+            add_tasks(conn, wo["id"], tasks, row.get("note"), staff_id)
+            return str(wo["number"])
     wo = create_work_order(conn, staff_id, vehicle_id=row["vehicle_id"], title="PDI", tasks=tasks,
                            description=row.get("note"), planned_at=row["pdi_at"], pdi_order_id=row["id"])
     conn.execute("UPDATE pdi_orders SET work_order_id = %s WHERE id = %s", (wo["id"], row["id"]))
@@ -595,6 +649,12 @@ def cancel(order_id: int, request: Request, conn=Depends(get_conn)):
     conn.execute("UPDATE pdi_orders SET status = 'cancelled', cancelled_at = now() WHERE id = %s", (order_id,))
     if row["sent_at"]:
         log_event(conn, row["vehicle_id"], "pdi_cancelled", staff_id=_me(request))
+    if row.get("work_order_id"):  # its work order leaves the planner too, unless work has started on it
+        wo = conn.execute("UPDATE work_orders SET status = 'cancelled', updated_at = now(), updated_by = %s "
+                          "WHERE id = %s AND status = 'open' RETURNING id", (_me(request), row["work_order_id"])).fetchone()
+        if wo:
+            conn.execute("INSERT INTO work_order_events (work_order_id, kind, data, created_by) VALUES (%s, 'status', %s, %s)",
+                         (wo["id"], Jsonb({"from": "open", "to": "cancelled", "source": "pdi"}), _me(request)))
     return _order(conn, order_id)
 
 

@@ -11,8 +11,8 @@ import {
 const WHEELS_AT_DEALER = ['in_stock', 'sales_ordered']; // the dealer has the winter wheels
 
 /** "Sent 10.11.2026 14:00 to post@…" or "Printed / PDF 10.11.2026 14:00". */
-const sentText = (o, withTime = true) => (o.sent_via === 'print'
-  ? `printed / PDF ${fmtDate(o.sent_at, withTime)}`
+const sentText = (o, withTime = true) => (o.sent_via === 'planner' ? `sent to the planner ${fmtDate(o.sent_at, withTime)}`
+  : o.sent_via === 'print' ? `printed / PDF ${fmtDate(o.sent_at, withTime)}`
   : `sent ${fmtDate(o.sent_at, withTime)} to ${o.sent_to}`);
 
 export const STATUS_TEXT = { draft: 'Not sent', sent: 'Sent – waiting for date', booked: 'PDI booked', done: 'PDI done', cancelled: 'Cancelled' };
@@ -94,8 +94,9 @@ export function pdiCard(v, data, opts, rerender) {
         o.status === 'booked' ? h('strong', {}, fmtDate(o.pdi_at)) : null,
         o.status === 'booked' && o.expected_done_date ? h('span', { class: 'small' }, `expected done ${fmtDate(o.expected_done_date, false)}`) : null,
         confirmedText(o),
-        o.sent_at ? h('span', { class: 'muted small' }, o.sent_via === 'print'
-          ? `Printed / PDF ${fmtDate(o.sent_at)}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}`
+        o.sent_at ? h('span', { class: 'muted small' }, o.sent_via === 'planner'
+          ? `Sent to the planner ${fmtDate(o.sent_at)}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}`
+          : o.sent_via === 'print' ? `Printed / PDF ${fmtDate(o.sent_at)}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}`
           : `Sent ${fmtDate(o.sent_at)} to ${o.sent_to}${o.sent_by_name ? ` by ${o.sent_by_name}` : ''}${o.sent_via === 'mail_app' ? ' (e-mail app)' : ''}`) : null),
       workOrderLine(o, rerender),
       o.changed_since_sent ? h('div', { class: 'notice warn small' }, 'Changed since it was sent — send it again so the workshop has the latest order.') : null,
@@ -240,36 +241,6 @@ function pdiSheet(o, opts) {
       h('div', {}, 'Dato')));
 }
 
-/** "Did you give it to the workshop?" as an in-app Yes/No, with the PDI date
- *  and time if the workshop already gave one. onYes(booking | null). */
-function givenDialog(question, o, onYes) {
-  const [d0, t0] = (o.pdi_local || '').split('T');
-  const date = dateInput({ id: 'given-date', value: d0 || '' });
-  const time = timeInput({ id: 'given-time', value: (t0 || '').slice(0, 5) || '08:00' });
-  const wo = o.pdi_at ? null : workOrderInput(o, 'given-wo'); // first PDI date: also the work order no.
-  const yes = h('button', { class: 'btn primary', type: 'submit' }, 'Yes');
-  const form = h('form', {},
-    h('p', {}, question),
-    h('h3', {}, 'PDI date (optional)'),
-    h('p', { class: 'muted small' }, 'Fill in if the workshop has already given a date and time.'),
-    h('div', { class: 'grid' },
-      h('div', { class: 'field' }, h('label', { for: 'given-date' }, 'Date'), date),
-      h('div', { class: 'field' }, h('label', { for: 'given-time' }, 'Time'), time)),
-    wo ? workOrderField(wo) : null,
-    h('div', { class: 'actions' },
-      h('button', { class: 'btn', type: 'button', onClick: () => close() }, 'No'),
-      yes));
-  form.addEventListener('submit', (e) => {
-    e.preventDefault();
-    busy(yes, async () => {
-      await onYes(date.value
-        ? { date: date.value, time: time.value || '08:00', work_order: wo?.value.trim() || null } : null);
-      close();
-    });
-  });
-  const { close } = openDialog('Order given to the workshop?', form);
-}
-
 /** Get the car ready the day before the PDI: trade plates, where the car is
  *  (spot + short message), and where the winter wheels are if the dealer has them. */
 export async function prepDialog(o, done) {
@@ -333,90 +304,27 @@ export async function prepDialog(o, done) {
   const { close } = openDialog('Prepare for PDI', form);
 }
 
-/** Send the order to the workshop: by e-mail, or printed / saved as a PDF. */
+/** Send the order to the workshop (0.56.0, the user's rule): it goes straight into the workshop planner as a work
+ *  order under "Not planned"; planning it there sets and confirms the PDI date. E-mail is no longer offered;
+ *  the order sheet can still be printed or saved as a PDF. */
 function sendDialog(o, opts, done) {
-  const hasRecipients = opts.recipients.length > 0;
-  const recipient = h('select', { id: 'pdi-to' }, opts.recipients.map((r) => h('option', { value: r.id }, `${r.label} – ${r.email}`)));
-  if (hasRecipients) recipient.value = String((opts.recipients.find((r) => r.is_default) || opts.recipients[0]).id);
-  const preview = h('div', { class: 'pdi-mail', translate: 'no' }); // the e-mail is always Norwegian
-  let mail = null;
-  const load = async () => {
-    if (!hasRecipients) return;
-    try {
-      mail = await api.get(`/pdi/${o.id}/email?recipient_id=${recipient.value}`);
-      preview.textContent = `Til: ${mail.to}\nEmne: ${mail.subject}\n\n${mail.body}`;
-    } catch (e) { showError(e); }
-  };
-  recipient.addEventListener('change', load);
-
-  // booking: {date, time} when the workshop already gave a date (from givenDialog).
-  const record = async (via, booking = null) => {
-    await api.post(`/pdi/${o.id}/send`, { recipient_id: via === 'print' ? null : Number(recipient.value), via });
-    if (booking) {
-      await api.post(`/pdi/${o.id}/booking`, booking);
-      window.dispatchEvent(new Event('carbonara:pdi-changed'));
-    }
+  const send = async (via) => {
+    await api.post(`/pdi/${o.id}/send`, { via });
+    window.dispatchEvent(new Event('carbonara:pdi-changed'));
     close();
-    toast(via === 'smtp' ? `Sent to ${mail?.to ?? 'the workshop'}` : via === 'print' ? 'Marked as given to the workshop' : 'Marked as sent', 'success');
+    toast(o.work_order_id ? 'Sent again – the work order is updated' : 'Sent to the workshop planner', 'success');
     await done();
   };
-  const smtpBtn = h('button', { class: 'btn primary', type: 'button', onClick: (e) => busy(e.currentTarget, () => record('smtp')) },
-    'Send from Carbonara');
-  const appBtn = h('button', {
-    class: opts.smtp_configured ? 'btn' : 'btn primary', type: 'button',
-    onClick: () => {
-      if (!mail) return;
-      location.href = `mailto:${mail.to}?subject=${encodeURIComponent(mail.subject)}&body=${encodeURIComponent(mail.body)}`;
-      setTimeout(() => givenDialog('Did you send the e-mail from your e-mail app?', o, (b) => record('mail_app', b)), 800);
-    },
-  }, 'Open in e-mail app');
-  const copyBtn = h('button', {
-    class: 'btn', type: 'button',
-    onClick: async () => {
-      try { await navigator.clipboard.writeText(`${mail.subject}\n\n${mail.body}`); toast('Copied', 'success'); } catch { toast('Copy not allowed here – select the text instead', 'error'); }
-    },
-  }, 'Copy text');
-
-  const emailPanel = hasRecipients
-    ? h('div', {},
-      h('div', { class: 'field' }, h('label', { for: 'pdi-to' }, 'Send to'), recipient),
-      preview,
-      opts.smtp_configured ? null : h('p', { class: 'muted small' },
-        'Sending directly from Carbonara is not set up yet (a system admin can add the mail server on the System page → E-mail), so use your own e-mail app.'),
-      h('div', { class: 'actions' }, copyBtn, appBtn, opts.smtp_configured ? smtpBtn : null))
-    : h('div', { class: 'notice warn' }, 'No e-mail recipients yet. An administrator can add them under Settings → PDI order lists.');
-
-  // Print / PDF: the browser's print dialog also offers "Save as PDF".
-  const printBtn = h('button', {
-    class: 'btn primary', type: 'button',
-    onClick: () => {
-      window.print();
-      setTimeout(() => givenDialog('Did you give the order to the workshop (printed or as a PDF)?', o, (b) => record('print', b)), 500);
-    },
-  }, '🖨 Print / save as PDF');
-  const printPanel = h('div', {},
-    h('p', { class: 'muted small no-print' }, 'Print the order for the workshop, or choose “Save as PDF” in the print window to send or store it as a file.'),
-    pdiSheet(o, opts),
-    h('div', { class: 'actions no-print' },
-      h('button', {
-        class: 'btn', type: 'button',
-        onClick: () => givenDialog('Did you give the order to the workshop (printed or as a PDF)?', o, (b) => record('print', b)),
-      }, 'Already given – mark as sent'),
-      printBtn));
-
-  // E-mail or print: one panel at a time.
-  const slot = h('div');
-  const modeBtns = {};
-  const show = (mode) => {
-    slot.replaceChildren(mode === 'print' ? printPanel : emailPanel);
-    Object.entries(modeBtns).forEach(([m, b]) => { b.className = m === mode ? 'btn primary' : 'btn'; });
-  };
-  modeBtns.email = h('button', { type: 'button', onClick: () => show('email') }, '✉ E-mail');
-  modeBtns.print = h('button', { type: 'button', onClick: () => show('print') }, '🖨 Print or PDF');
-  const body = h('div', {}, h('div', { class: 'send-modes no-print' }, modeBtns.email, modeBtns.print), slot);
+  const sendBtn = h('button', { class: 'btn primary', type: 'button', onClick: (e) => busy(e.currentTarget, () => send('planner')) },
+    o.sent_at ? 'Send again to the planner' : 'Send to the workshop planner');
+  const printBtn = h('button', { class: 'btn', type: 'button', onClick: () => window.print() }, '🖨 Print / save as PDF');
+  const body = h('div', {},
+    h('p', { class: 'no-print' }, o.work_order_id
+      ? 'The work order in the planner gets the items added to the order.'
+      : 'The order becomes a work order under “Not planned” in the workshop planner. When the workshop puts it on the plan, that date and time becomes the confirmed PDI date, and it follows if the job is moved.'),
+    h('div', { class: 'actions no-print' }, printBtn, sendBtn),
+    pdiSheet(o, opts));
   const { close } = openDialog('Send PDI order', body, { wide: true, doc: true });
-  show(hasRecipients ? 'email' : 'print');
-  load();
 }
 
 // ---------------------------------------------------------------- booking / done / cancel

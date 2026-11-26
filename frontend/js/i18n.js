@@ -246,6 +246,14 @@ const NO = {
   'Make for parts without one in the file': 'Merke for deler som ikke har merke i filen',
   'The price in a text price list (.txt) is': 'Prisen i en prisliste som tekst (.txt) er',
   'Sales price ex VAT': 'Utsalgspris eks. mva.',
+  // PDI orders to the planner (0.56.0)
+  'Sent again – the work order is updated': 'Sendt på nytt – arbeidsordren er oppdatert',
+  'Sent to the workshop planner': 'Sendt til verkstedets planlegger',
+  'Send to the workshop planner': 'Send til verkstedets planlegger',
+  'Send again to the planner': 'Send på nytt til planleggeren',
+  'Print / save as PDF': 'Skriv ut / lagre som PDF',
+  'The work order in the planner gets the items added to the order.': 'Arbeidsordren i planleggeren får punktene som er lagt til i bestillingen.',
+  'The order becomes a work order under “Not planned” in the workshop planner. When the workshop puts it on the plan, that date and time becomes the confirmed PDI date, and it follows if the job is moved.': 'Bestillingen blir en arbeidsordre under «Ikke planlagt» i verkstedets planlegger. Når verkstedet legger den inn i planen, blir den datoen og tiden bekreftet dato for nybilklargjøringen, og den følger med hvis jobben flyttes.',
   // Parts arrived and ready (0.55.1)
   'Parts arrived and ready': 'Deler kommet og klare',
   'Parts not ready after all': 'Deler likevel ikke klare',
@@ -1383,6 +1391,8 @@ const NO = {
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
+  ['Sent to the planner {} by {}', 'Sendt til planleggeren {1} av {2}'], ['Sent to the planner {}', 'Sendt til planleggeren {1}'],
+  ['sent to the planner {}', 'sendt til planleggeren {1}'], ['{} (planner)', '{1} (planlegger)'],
   ['Not planned ({n})', 'Ikke planlagt ({1})'], ['Plan work order #{n}', 'Planlegg arbeidsordre #{1}'], ['Lines · {}', 'Linjer · {1}'],
   ['Invoice no. {n} issued', 'Faktura nr. {1} utstedt'], ['Invoice no. {n}', 'Faktura nr. {1}'],
   ['Credit note no. {n} made', 'Kreditnota nr. {1} laget'], ['Credit note no. {n}', 'Kreditnota nr. {1}'],

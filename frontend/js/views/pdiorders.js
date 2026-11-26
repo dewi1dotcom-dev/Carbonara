@@ -128,7 +128,7 @@ function orderCard(o, opts, rerender) {
       ['PDI date', o.pdi_at && fmtDate(o.pdi_at)],
       ['Expected completion', o.expected_done_date && fmtDate(o.expected_done_date, false)],
       ['Ordered', `${fmtDate(o.created_at, false)}${o.created_by_name ? ` (${o.created_by_name})` : ''}`],
-      ['Sent to the workshop', o.sent_at && (o.sent_via === 'print' ? `${fmtDate(o.sent_at)} (printed / PDF)` : fmtDate(o.sent_at))],
+      ['Sent to the workshop', o.sent_at && (o.sent_via === 'planner' ? `${fmtDate(o.sent_at)} (planner)` : o.sent_via === 'print' ? `${fmtDate(o.sent_at)} (printed / PDF)` : fmtDate(o.sent_at))],
       ['PDI done', o.done_at && `${fmtDate(o.done_at)}${o.done_by_name ? ` (${o.done_by_name})` : ''}`],
       ['Mileage at the PDI', o.done_km != null && fmtKm(o.done_km)],
     ]),

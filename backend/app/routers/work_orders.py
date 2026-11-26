@@ -404,7 +404,38 @@ def edit_order(wo_id: int, body: WorkOrderPatch, conn=Depends(get_conn), staff=D
             data[f] = {"from": o[f], "to": new[f]}
     _event(conn, wo_id, "updated", staff["id"], data)
     touch(conn, o["customer_id"])
+    if o["pdi_order_id"] and "planned_at" in changed:  # a PDI's date follows the planner (0.56.0)
+        from . import pdi  # pdi imports this module only inside functions
+        pdi.follow_work_order(conn, o["pdi_order_id"], new["planned_at"], staff["id"], o["number"])
     return {"id": wo_id}
+
+
+def follow_pdi(conn, wo_id: int, planned_at, staff_id) -> None:
+    """The PDI date was entered / changed / cleared on the PDI order: its work order's planned start follows (0.56.0).
+    Only open / in-progress work orders; never calls back into the PDI."""
+    o = conn.execute("SELECT id, status, planned_at FROM work_orders WHERE id = %s FOR UPDATE", (wo_id,)).fetchone()
+    if not o or o["status"] not in ACTIVE or o["planned_at"] == planned_at:
+        return
+    conn.execute("UPDATE work_orders SET planned_at = %s, updated_at = now(), updated_by = %s WHERE id = %s",
+                 (planned_at, staff_id, wo_id))
+    _event(conn, wo_id, "updated", staff_id, {"fields": ["planned_at"], "source": "pdi",
+                                              "planned_at": {"from": o["planned_at"], "to": planned_at}})
+
+
+def add_tasks(conn, wo_id: int, texts: list[str], description: Optional[str], staff_id) -> None:
+    """A PDI order sent again after a change: new items are added to the work order's tasks (ticked ones are kept)."""
+    o = conn.execute("SELECT status, tasks, description FROM work_orders WHERE id = %s FOR UPDATE", (wo_id,)).fetchone()
+    if not o or o["status"] not in ACTIVE:
+        return
+    have = {str(t.get("text") or "").strip().lower() for t in o["tasks"] or []}
+    new = [t for t in texts if t.strip() and t.strip().lower() not in have]
+    desc = _text(description, 5000)
+    if not new and desc == o["description"]:
+        return
+    tasks = list(o["tasks"] or []) + _tasks(new)
+    conn.execute("UPDATE work_orders SET tasks = %s, description = %s, updated_at = now(), updated_by = %s WHERE id = %s",
+                 (Jsonb(tasks[:MAX_TASKS]), desc, staff_id, wo_id))
+    _event(conn, wo_id, "tasks", staff_id, {"added": len(new), "source": "pdi"})
 
 
 class TaskIn(BaseModel):

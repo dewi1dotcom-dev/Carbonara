@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…054
+  migrations/           001…055
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -332,6 +332,7 @@ frontend/               no build step; plain ES modules
 | 052 | `older_chassis_numbers` | `vehicles.vin_nonstandard` (the VIN check now allows 4–30 letters / digits when it is set), `customer_cars.vin_nonstandard` |
 | 053 | `job_types_places` | `job_types` (name EN + NO, `color`, sort, active; 7 generic types seeded), `workshop_places` (team, name, sort, `deleted_at`: lifts / bays as planner lines); `work_orders.job_type_id / place_id`; existing PDI work orders get the PDI type |
 | 054 | `parts_ready` | `work_orders.parts_ready_at / parts_ready_by` ("Parts arrived and ready", ticked by hand) |
+| 055 | `pdi_to_planner` | `pdi_orders.sent_via` also allows `'planner'` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -808,7 +809,20 @@ the server is LAN-only, so no customer phones / public internet).
   - a note
 - **Status:** draft → sent → booked (`pdi_at`) → done, or cancelled. One open order per car.
   Editing after sending shows "changed since sent".
-- **E-mail to RBV** (Norwegian, `compose()`):
+- **Sent to the workshop planner (0.56.0, the user's rule: "the e-mail option is obsolete"):** "Send to workshop…" opens
+  the order sheet with "Send to the workshop planner" (+ "🖨 Print / save as PDF"); `POST /pdi/{id}/send {via: 'planner'}`
+  makes the PDI's work order (`_carbonara_work_order`: title "PDI", job type PDI, tasks = the items, unplanned, no
+  mechanic, so it shows under "Not planned" in every team's planner) and puts its number on the order. Sent again after a
+  change: new items are added to the work order's tasks (`work_orders.add_tasks`).
+  - **The date follows the planner:** planning / moving the job (`PATCH /work-orders/{id}` with `planned_at`) →
+    `pdi.follow_work_order`: PDI date = the job's start, confirmed (by whoever moved it; events `pdi_booked` +
+    `pdi_date_confirmed` with `source: planner`, the orderer gets the "PDI date confirmed" notification), expected done =
+    the day after. Taken off the plan → back to "Sent – waiting for date".
+  - **And the other way:** "Enter / Change PDI date" on the PDI moves the work order (`work_orders.follow_pdi`, open /
+    in progress only); clearing the date takes it off the plan. Cancelling the PDI cancels its work order while it is
+    still open.
+  - The e-mail code below (`compose`, SMTP, recipients) is still there but no longer offered; old orders show "sent … to …".
+- **E-mail to RBV (before 0.56.0)** (Norwegian, `compose()`):
   - Subject: "Bestilling av nybilklargjøring – …"; it asks RBV to reply with a date and time.
   - Sent by SMTP if configured (it isn't yet). Otherwise via **"Open in e-mail app"**
     (mailto) plus a "did you send it?" confirmation, or "Copy text".
@@ -1814,6 +1828,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.54.2 | Kiosk: booked cars listed by registration number only; tapping one fills in the owner's name and phone (fetched for that car only), cleared again if another reg. no. is typed |
 | 0.55.0 | **Planner, bigger:** fills the screen width, "Open in its own window" (no top bar, refreshes itself), month calendar coloured by how booked each day is, chart of the next 7 working days, **job types with colours** (admins) + status marks (edge, 🔑 ⏱ 📦), legend, **workshop places** (lifts / bays) as lines; job type on work orders (migration 053) |
 | 0.55.1 | Work orders: "✓ Parts arrived and ready" at the top (else "Waiting for parts" when it has parts), also in the planner; the planner job dialog has the planning boxes at the top and the kiosk delivery folded at the bottom (migration 054) |
+| 0.56.0 | **PDI orders go to the planner:** "Send" makes the work order under "Not planned" (no e-mail any more; printing still possible); planning or moving it in the planner sets and confirms the PDI date, and changing the PDI date moves the job; cancelling the PDI cancels its open work order (migration 055) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
