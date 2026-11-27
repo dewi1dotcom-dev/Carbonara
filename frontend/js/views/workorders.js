@@ -394,6 +394,36 @@ export async function workOrderView(el, [id], host = el) {
           detail ? h('span', { class: 'block' }, detail) : null,
           h('span', { class: 'muted small block', translate: 'no' }, [fmtDate(e.created_at), e.staff_name].filter(Boolean).join(' · '))));
       })) : h('p', { class: 'empty' }, 'No history yet.')));
+  watchRecalls(o, rerender);
+}
+
+// The work order page follows a recall check done elsewhere (0.58.2, the user's request): "Check for recalls" opens
+// the recall source in another tab, where Sidekick records the result. Coming back to this tab (or every 20 s while a
+// check is due) fetches the work order again and redraws it when the recall check or the tasks changed, so the
+// warning turns into "Recalls found – create new work order". Never while a dialog is open or a field has focus.
+let recallWatch = null; // { id, sig, rerender }
+const recallSig = (o) => JSON.stringify([o.recall, (o.tasks || []).length]);
+
+function watchRecalls(o, rerender) {
+  recallWatch = o.recall ? { id: o.id, sig: recallSig(o), due: !!o.recall.due, rerender } : null;
+  if (watchRecalls.hooked) return;
+  watchRecalls.hooked = true;
+  let checking = false;
+  const check = async () => {
+    const w = recallWatch;
+    if (!w || checking || document.visibilityState !== 'visible') return;
+    if (location.hash.split(/[?/]/)[2] !== String(w.id) || !location.hash.startsWith('#/work-orders/')) { recallWatch = null; return; }
+    const el = document.activeElement;
+    if (document.querySelector('dialog[open]') || (el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+    checking = true;
+    try {
+      const fresh = await api.get(`/work-orders/${w.id}`);
+      if (recallWatch === w && recallSig(fresh) !== w.sig) await w.rerender();
+    } catch { /* the next check tries again */ } finally { checking = false; }
+  };
+  document.addEventListener('visibilitychange', check);
+  window.addEventListener('focus', check);
+  setInterval(() => { if (recallWatch?.due) check(); }, 20 * 1000);
 }
 
 /** The task list: tick off (saved at once), add, remove. */

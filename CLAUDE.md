@@ -1149,6 +1149,9 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
     and the line "Recalls: see work order #n." in its description; both recall boxes link to each other (`work_order` /
     `from_work_order`; events `recall_work_order` / `recall_from`). (`new_work_order` in `RecallCheckIn` does the same
     in one step; the dialog no longer offers it.)
+  - **The page follows Sidekick (0.58.2):** the work order page fetches itself again when its tab is shown / focused, and
+    every 20 s while a check is due (`watchRecalls` in `workorders.js`), and redraws when the recall check or the tasks
+    changed (not while a dialog is open or a field has focus).
   - **A work order of their own (0.58.0, the user's request):** "⚠ Found recalls" asks "Make a new work order for the
 - **Where they show:** "⚠ Open recall" badge (car header, Vehicles list and storage cards: `open_recalls` count); Today:
   "Recall checks due" (Today/tomorrow) and "Open recalls" (Needs attention); the morning `daily_due` notification counts
@@ -1864,6 +1867,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.57.1 | Recalls: Sidekick 1.6.0 also checks the cars on open work orders (customer register cars too; campaigns found become tasks, the work order counts as checked); "🔍 Check for recalls" on the work order and in the planner opens the recall source's website with the car filled in |
 | 0.58.0 | Work orders: recalls found can go on a new work order of their own (asked when saving them), linked from the work order that was checked (migration 057) |
 | 0.58.1 | Recalls: "Recalls found – create new work order" button moves the recall tasks (from the dialog or Sidekick) to a new work order; the first one says "Recalls: see work order #n." |
+| 0.58.2 | Work order page refreshes itself when you come back to its tab (and every 20 s while a recall check is due), so Sidekick's result shows without reloading |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
