@@ -156,6 +156,9 @@ def registry_values(reg: str, vin: Optional[str] = None) -> dict:
         "eu_control_due": s["eu_control_due"], "eu_control_last_approved": s["eu_control_last_approved"],
         "registration_status": s["registration_status"], "registration_status_code": s.get("status_code"),
         "first_registered": f["first_registered"] or f["first_registered_norway"],
+        # customer register cars (0.59.0)
+        "first_registered_norway": f["first_registered_norway"],
+        "owner_since": vegvesen._date(vegvesen.dig(item, "registrering", "registrertForstegangPaEierskap")),
     }
 
 

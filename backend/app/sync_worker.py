@@ -96,6 +96,13 @@ def housekeeping() -> None:
     except Exception:
         log.exception("rental car registry refresh failed")
 
+    # Customer register cars: EU-kontroll and the owner date from Statens vegvesen every vegvesen_sync_days (0.59.0).
+    try:
+        from .routers.customers import refresh_due_customer_cars
+        refresh_due_customer_cars(lambda: psycopg.connect(settings.database_url, row_factory=dict_row))
+    except Exception:
+        log.exception("customer car registry refresh failed")
+
     # Customer car deliveries (name, phone, message) received more than TRASH_DAYS ago.
     with psycopg.connect(settings.database_url, row_factory=dict_row) as conn:
         gone = conn.execute("DELETE FROM car_deliveries WHERE received_at < now() - make_interval(days => %s) "

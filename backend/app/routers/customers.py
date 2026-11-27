@@ -8,7 +8,9 @@ the car stock (System → Customer register). Customers are personal data:
 - customers with no activity for retention_years are deleted by the worker (`purge_inactive`).
 """
 import json
+import logging
 import re
+import time
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -22,6 +24,7 @@ from ..config import settings
 from ..db import get_conn
 from .rentals import registry_values
 
+log = logging.getLogger(__name__)
 router = APIRouter(tags=["customers"])
 
 LIST_LIMIT = 100
@@ -349,7 +352,71 @@ def lookup(reg: str, _staff=Depends(require_register)):
     except vegvesen.RegistryError as exc:
         raise HTTPException(502, f"Statens vegvesen: {exc}")
     return {"registration_number": v["registration_number"], "vin": v["vin"], "make": v["make"], "model": v["model"],
-            "color": v["color"], "fuel_type": v["fuel"], "first_registered": v["first_registered"]}
+            "color": v["color"], "fuel_type": v["fuel"], "first_registered": v["first_registered"],
+            **{k: v[k] for k in REGISTRY_ONLY}}
+
+
+# Dates only Statens vegvesen sets (0.59.0, the user's request: "not changeable"): never in the car form, taken from
+# the registry when a car is added or its reg. no. / VIN changes, with "Look up again" and by the worker.
+REGISTRY_ONLY = ("first_registered_norway", "owner_since", "eu_control_due", "eu_control_last_approved")
+
+
+def refresh_registry(conn, car_id: int) -> Optional[str]:
+    """Update a register car's Statens vegvesen dates. Returns None when it worked, else the reason (also saved on
+    the car as registry_error; earlier dates are kept). First registered is only filled when empty."""
+    car = conn.execute("SELECT id, registration_number, vin FROM customer_cars WHERE id = %s FOR UPDATE",
+                       (car_id,)).fetchone()
+    if not car or not vegvesen.is_configured():
+        return "Statens vegvesen is not set up (API key on the System page)" if car else None
+    vin = car["vin"] if car["vin"] and vinlib.is_valid_format(car["vin"]) else None
+    if not (car["registration_number"] or vin):
+        return None
+    try:
+        # by reg. no. when there is one (also older chassis numbers); else by VIN (a car not registered yet)
+        v = registry_values(car["registration_number"] or "", vin=None if car["registration_number"] else vin)
+    except vegvesen.NotFound:
+        error = "Not found at Statens vegvesen"
+    except vegvesen.RegistryError as exc:
+        error = str(exc)[:300]
+    else:
+        conn.execute(
+            """UPDATE customer_cars SET first_registered_norway = %s, owner_since = %s, eu_control_due = %s,
+                      eu_control_last_approved = %s, first_registered = coalesce(first_registered, %s),
+                      registry_checked_at = now(), registry_error = NULL WHERE id = %s""",
+            (*[v[k] for k in REGISTRY_ONLY], v["first_registered"], car_id))
+        return None
+    conn.execute("UPDATE customer_cars SET registry_checked_at = now(), registry_error = %s WHERE id = %s",
+                 (error, car_id))
+    return error
+
+
+def refresh_due_customer_cars(conn_factory) -> int:
+    """Worker: re-check register cars every vegvesen_sync_days (EU-kontroll moves on after a car has passed, and the
+    owner date changes with a new owner). At most 100 a day; conn_factory() gives a new connection per car."""
+    if not vegvesen.is_configured():
+        return 0
+    with conn_factory() as conn:
+        ids = [r["id"] for r in conn.execute(
+            """SELECT id FROM customer_cars
+                WHERE registry_checked_at IS NULL OR registry_checked_at < now() - make_interval(days => %s)
+                ORDER BY registry_checked_at NULLS FIRST LIMIT 100""", (settings.vegvesen_sync_days,)).fetchall()]
+    for car_id in ids:
+        try:
+            with conn_factory() as conn:
+                refresh_registry(conn, car_id)
+        except Exception:  # e.g. deleted meanwhile: carry on with the next car
+            log.exception("customer car %s: registry refresh failed", car_id)
+            continue
+        time.sleep(settings.vegvesen_call_interval_s)
+    return len(ids)
+
+
+@router.post("/customer-cars/{car_id}/registry")
+def registry_again(car_id: int, conn=Depends(get_conn), staff=Depends(require_register)):
+    """"↻ Look up again" on the car page."""
+    _car(conn, car_id)
+    error = refresh_registry(conn, car_id)
+    return {**_car(conn, car_id), "registry_result": error}
 
 
 def _find(conn, reg: str, vin: str) -> Optional[dict]:
@@ -386,7 +453,7 @@ def list_cars(q: str = "", conn=Depends(get_conn), _staff=Depends(require_regist
             params.append(digits)
         where.append("(" + " OR ".join(conds) + ")")
     rows = conn.execute(
-        f"""SELECT cc.id, cc.registration_number, cc.vin, cc.make, cc.model, cc.model_year, cc.vehicle_id,
+        f"""SELECT cc.id, cc.registration_number, cc.vin, cc.make, cc.model, cc.model_year, cc.vehicle_id, cc.eu_control_due,
                    c.id AS owner_id, c.name AS owner_name, c.customer_no AS owner_no,
                    (SELECT count(*) FROM work_orders w WHERE w.customer_car_id = cc.id
                        AND w.status IN ('open', 'in_progress')) AS open_work_orders,
@@ -415,6 +482,7 @@ def add_car(customer_id: int, body: CarIn, conn=Depends(get_conn), staff=Depends
             RETURNING id""", (*f.values(), staff["id"])).fetchone()
     event(conn, "car_created", staff["id"], car_id=row["id"])
     set_owner(conn, row["id"], customer_id, staff["id"])
+    refresh_registry(conn, row["id"])  # never blocks adding: a failure is kept as registry_error
     return {"id": row["id"]}
 
 
@@ -448,6 +516,8 @@ def edit_car(car_id: int, body: CarIn, conn=Depends(get_conn), staff=Depends(req
     conn.execute(f"UPDATE customer_cars SET {', '.join(f'{k} = %s' for k in f)}, updated_at = now() WHERE id = %s",
                  (*f.values(), car_id))
     event(conn, "car_updated", staff["id"], car_id=car_id)
+    if (f["registration_number"], f["vin"]) != (old["registration_number"], old["vin"]) or not old["registry_checked_at"]:
+        refresh_registry(conn, car_id)
     return _car(conn, car_id)
 
 
@@ -559,6 +629,7 @@ def transfer(vehicle_id: int, body: TransferIn, conn=Depends(get_conn), staff=De
             (v["registration_number"], v["vin"], v.get("vin_nonstandard", False), v["make"], v["model"], v["color"],
              v["fuel_type"], v["model_year"], vehicle_id, sid, sid)).fetchone()["id"]
         event(conn, "car_created", sid, car_id=car_id)
+        refresh_registry(conn, car_id)  # the Statens vegvesen dates (0.59.0)
     set_owner(conn, car_id, customer["id"], sid)
     event(conn, "transferred_from_car_database", sid, car_id=car_id, data={"vehicle_id": vehicle_id, "consent": True})
     event(conn, "transferred_from_car_database", sid, customer_id=customer["id"],

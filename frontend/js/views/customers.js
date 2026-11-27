@@ -2,7 +2,8 @@
 // owned each car when, with history. A car from the car database can be copied in when the customer agrees.
 // Server: routers/customers.py. Parts orders: views/partsorders.js.
 import {
-  api, append, busy, canOpen, canSee, dateInput, debounce, fmtDate, h, nameInput, openDialog, session, showError, toast,
+  api, append, busy, canOpen, canSee, dateInput, debounce, euStatus, fmtDate, h, nameInput, openDialog, session, showError,
+  toast,
 } from '../ui.js';
 import { field, fmtMoney } from './parts.js';
 import { workOrdersCard } from './workorders.js';
@@ -224,6 +225,7 @@ function carForm(customerId, car, done) {
   const lookupBtn = h('button', { class: 'btn small', type: 'button' }, 'Look up at Statens vegvesen');
   // The first field takes a registration number or a VIN (0.58.4, the user's request); an empty one looks up the VIN
   // field instead. A VIN typed there moves to the VIN field, and the reg. no. comes from Statens vegvesen.
+  const svvSlot = h('div', { class: 'svv-preview' }, car ? registryDates(c) : null); // the dates Statens vegvesen keeps (0.59.0)
   const isVin = (v) => /^[A-HJ-NPR-Z0-9]{17}$/.test(v.toUpperCase().replace(/[\s\-.]/g, ''));
   lookupBtn.addEventListener('click', () => busy(lookupBtn, async () => {
     const typed = inputs.registration_number.value.trim() || inputs.vin.value.trim();
@@ -234,6 +236,9 @@ function carForm(customerId, car, done) {
       inputs.vin.value = r.vin || typed.toUpperCase().replace(/[\s\-.]/g, '');
     }
     for (const k of CAR_FIELDS) if (r[k] != null && k in inputs && k !== 'note') inputs[k].value = r[k];
+    // the dates staff can't change (0.59.0): shown here, saved from Statens vegvesen with the car
+    const dates = registryDates(r);
+    svvSlot.replaceChildren(...(dates ? [h('p', { class: 'muted small' }, 'From Statens vegvesen (saved with the car, not changeable):'), dates] : []));
     toast('Filled in from Statens vegvesen', 'success');
     syncChassis();
   }));
@@ -255,6 +260,7 @@ function carForm(customerId, car, done) {
       h('div', { class: 'toolbar' }, inputs.registration_number, lookupBtn)),
     field('VIN (chassis number)', inputs.vin),
     chassisBox,
+    svvSlot,
     h('div', { class: 'grid' }, field('Make', inputs.make), field('Model', inputs.model), field('Model year', inputs.model_year),
       field('Colour', inputs.color), field('Fuel', inputs.fuel_type), field('First registered', inputs.first_registered)),
     field('Note', inputs.note),
@@ -353,6 +359,45 @@ export async function customersView(el) {
   draw(first);
 }
 
+/** EU-kontroll from Statens vegvesen as a badge, the same limits as Vehicles and Rental cars (euStatus); `quiet` hides
+ *  it while the deadline is far off (lists). 0.59.0 */
+function euBadge(due, quiet = false) {
+  const st = euStatus(due);
+  if (!st || (quiet && st.cls === 'good')) return null;
+  return h('span', { class: `badge ${st.cls}` }, h('span', {}, 'EU-kontroll'), ' ', fmtDate(due, false), ' · ', h('span', {}, st.text));
+}
+
+/** The Statens vegvesen dates as a list (null when there are none); also the read-only preview in the car form. */
+function registryDates(car) {
+  const imported = car.first_registered_norway && car.first_registered && car.first_registered_norway !== car.first_registered;
+  const row = (label, value) => (value ? [h('dt', {}, label), h('dd', {}, value)] : null);
+  const d = (v) => v && fmtDate(v, false);
+  if (!(car.first_registered_norway || car.owner_since || car.eu_control_due || car.eu_control_last_approved)) return null;
+  return h('dl', { class: 'kv' },
+    row('First registered in Norway', car.first_registered_norway && h('span', {}, d(car.first_registered_norway),
+      imported ? [' ', h('span', { class: 'badge' }, 'Imported')] : null)),
+    row('Current owner registered', d(car.owner_since)),
+    row('EU-kontroll last approved', d(car.eu_control_last_approved)),
+    row('EU-kontroll deadline', car.eu_control_due && euBadge(car.eu_control_due)));
+}
+
+/** The car's Statens vegvesen dates (0.59.0, the user's request): set by the registry only, never in the car form. */
+function registryCard(car, rerender) {
+  const again = h('button', { class: 'btn small', type: 'button' }, '↻ Look up again');
+  again.addEventListener('click', () => busy(again, async () => {
+    const r = await api.post(`/customer-cars/${car.id}/registry`, {});
+    if (r.registry_result) toast(r.registry_result, 'error'); else toast('Updated from Statens vegvesen', 'success');
+    await rerender();
+  }));
+  const dates = registryDates(car);
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-head' }, h('h2', {}, 'Statens vegvesen'), again),
+    dates,
+    car.registry_error ? h('p', { class: 'notice warn small', translate: 'no' }, car.registry_error) : null,
+    !dates && !car.registry_error ? h('p', { class: 'empty' }, car.registry_checked_at ? 'No dates from Statens vegvesen.' : 'Not looked up yet.') : null,
+    car.registry_checked_at ? h('p', { class: 'muted small' }, `Looked up ${fmtDate(car.registry_checked_at)}`) : null);
+}
+
 /** The register's cars: reg. no., car, owner, open work orders. */
 function carTable(data) {
   if (!data.cars.length) return h('p', { class: 'empty' }, 'No cars found.');
@@ -360,7 +405,8 @@ function carTable(data) {
     const tr = h('tr', { class: 'click-row', tabindex: '0' },
       h('td', {}, h('a', { href: `#/customer-cars/${car.id}`, class: 'mono' }, car.registration_number || '–'),
         car.vin ? h('span', { class: 'muted small block mono' }, car.vin) : null),
-      h('td', { translate: 'no' }, [carTitle(car), car.model_year].filter(Boolean).join(' ')),
+      h('td', {}, h('span', { translate: 'no' }, [carTitle(car), car.model_year].filter(Boolean).join(' ')),
+        car.eu_control_due ? h('span', { class: 'block' }, euBadge(car.eu_control_due, true)) : null),
       h('td', {}, car.owner_id ? [h('a', { href: `#/customers/${car.owner_id}`, translate: 'no' }, car.owner_name), ' ',
         h('span', { class: 'muted' }, `(${car.owner_no})`)] : h('span', { class: 'muted' }, 'No owner')),
       h('td', { class: 'num' }, Number(car.open_work_orders) ? String(car.open_work_orders) : '–'));
@@ -440,6 +486,7 @@ export async function customerView(el, [id], host = el) {
       current.length ? h('ul', { class: 'rows' }, current.map((car) => h('li', {},
         h('span', {}, h('a', { href: `#/customer-cars/${car.id}`, translate: 'no' }, carTitle(car)),
           ' ', h('span', { class: 'mono' }, car.registration_number || ''),
+          euBadge(car.eu_control_due, true) ? [' ', euBadge(car.eu_control_due, true)] : null,
           h('span', { class: 'muted small block' }, `Owner since ${fmtDate(car.owned_from, false)}`)))))
         : h('p', { class: 'empty' }, 'No cars.'),
       earlier.length ? h('details', {}, h('summary', {}, `Earlier cars (${earlier.length})`),
@@ -510,6 +557,7 @@ export async function customerCarView(el, [id], host = el) {
           ? h('span', {}, canOpen(`#/vehicles/${car.vehicle_id}`) ? h('a', { href: `#/vehicles/${car.vehicle_id}` }, 'Open in Vehicles') : 'Yes',
             car.consent_at ? h('span', { class: 'muted small block' }, `Customer agreed ${fmtDate(car.consent_at)}`) : null)
           : null))),
+    registryCard(car, rerender),
     h('section', { class: 'card' }, h('h2', {}, 'Owners'),
       car.owners.length ? h('ul', { class: 'rows' }, car.owners.map((o) => h('li', {},
         h('span', {}, h('a', { href: `#/customers/${o.customer_id}`, translate: 'no' }, o.name), ' ', h('span', { class: 'muted' }, `(${o.customer_no})`),
