@@ -1152,6 +1152,9 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
   - **The page follows Sidekick (0.58.2):** the work order page fetches itself again when its tab is shown / focused, and
     every 20 s while a check is due (`watchRecalls` in `workorders.js`), and redraws when the recall check or the tasks
     changed (not while a dialog is open or a field has focus).
+  - **When the button shows (0.58.3, `_movable_tasks`):** only recall tasks not done and not already on another
+    (not cancelled) work order of the same car; never on the recall work order itself or once moved. Otherwise the box
+    shows the last check and the folded "Check again".
   - **A work order of their own (0.58.0, the user's request):** "⚠ Found recalls" asks "Make a new work order for the
 - **Where they show:** "⚠ Open recall" badge (car header, Vehicles list and storage cards: `open_recalls` count); Today:
   "Recall checks due" (Today/tomorrow) and "Open recalls" (Needs attention); the morning `daily_due` notification counts
@@ -1868,6 +1871,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.58.0 | Work orders: recalls found can go on a new work order of their own (asked when saving them), linked from the work order that was checked (migration 057) |
 | 0.58.1 | Recalls: "Recalls found – create new work order" button moves the recall tasks (from the dialog or Sidekick) to a new work order; the first one says "Recalls: see work order #n." |
 | 0.58.2 | Work order page refreshes itself when you come back to its tab (and every 20 s while a recall check is due), so Sidekick's result shows without reloading |
+| 0.58.3 | "Recalls found – create new work order" no longer shows on the recall work order itself, nor for recalls already on another work order of the car (the box shows the last check and "Check again") |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

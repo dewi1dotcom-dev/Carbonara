@@ -609,7 +609,8 @@ def recall_info(conn, wo_id: int) -> Optional[dict]:
     """The recall check of a work order: the sources that cover the car's make (None when none do and the car has no
     open recalls), whether it was checked, and for a car in stock its open recalls."""
     r = conn.execute(
-        """SELECT w.vehicle_id, w.status, w.recall_checked_at, w.recall_result, w.recall_work_order_id, w.tasks,
+        """SELECT w.id, w.vehicle_id, w.customer_car_id, w.status, w.recall_checked_at, w.recall_result,
+                  w.recall_work_order_id, w.tasks,
                   s.name AS checked_by_name,
                   coalesce(cc.make, v.make) AS make, coalesce(cc.vin, v.vin) AS vin,
                   coalesce(cc.registration_number, v.registration_number) AS registration_number
@@ -635,8 +636,25 @@ def recall_info(conn, wo_id: int) -> Optional[dict]:
             "due": bool(sources) and not r["recall_checked_at"] and r["status"] in ACTIVE, "open_recalls": open_recalls,
             "work_order": moved_to, "from_work_order": made_from,
             # recall tasks that "Recalls found – create new work order" can move (0.58.1)
-            "movable": 0 if moved_to or r["status"] not in ACTIVE
-            else sum(1 for t in r["tasks"] or [] if _is_recall_task(t) and not t.get("done"))}
+            "movable": 0 if moved_to or made_from else len(_movable_tasks(conn, r))}
+
+
+def _movable_tasks(conn, w: dict) -> list[dict]:
+    """The recall tasks a work order can move to a recall work order (0.58.3): not done, and not already on another
+    work order of the same car (e.g. a recall work order made from an earlier check, when Sidekick added the same
+    recalls here again). None on a work order that is not open / in progress."""
+    if w["status"] not in ACTIVE:
+        return []
+    mine = [t for t in w["tasks"] or [] if _is_recall_task(t) and not t.get("done")]
+    if not mine:
+        return []
+    col = "vehicle_id" if w["vehicle_id"] else "customer_car_id"
+    others = conn.execute(
+        f"""SELECT lower(x->>'text') AS text FROM work_orders o, jsonb_array_elements(o.tasks) x
+             WHERE o.{col} = %s AND o.id <> %s AND o.status <> 'cancelled'""",
+        (w[col], w["id"])).fetchall()
+    have = {o["text"].strip() for o in others if o["text"]}
+    return [t for t in mine if str(t.get("text") or "").strip().lower() not in have]
 
 
 class RecallFoundIn(BaseModel):
@@ -691,7 +709,8 @@ def recall_work_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_
     if o["recall_work_order_id"]:
         raise conflict("The recalls are already on their own work order")
     tasks = list(o["tasks"] or [])
-    move = [t for t in tasks if _is_recall_task(t) and not t.get("done")]
+    made_from = conn.execute("SELECT 1 FROM work_orders WHERE recall_work_order_id = %s", (wo_id,)).fetchone()
+    move = [] if made_from else _movable_tasks(conn, o)
     if not move:
         raise bad_request("This work order has no recall tasks to move")
     keep = [t for t in tasks if t not in move]
