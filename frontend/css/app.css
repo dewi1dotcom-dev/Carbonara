@@ -157,12 +157,8 @@ section { margin-bottom: 1rem; }
 .clock { display: flex; align-items: baseline; gap: .45rem; line-height: 1.1; white-space: nowrap; }
 .clock-time { font-weight: 700; font-variant-numeric: tabular-nums; }
 .clock-date { font-size: .78rem; color: var(--topbar-muted); }
-/* Wide screens: the clock's right edge lines up with the content column of <main> (max 980px incl.
-   16px padding, centred). Percent padding is of the body width, so the scrollbar doesn't skew it.
-   Only from 1440px: narrower, the extra padding would squeeze the nav into scrolling. */
-@media (min-width: 1440px) {
-  .topbar { padding-right: calc((100% - 948px) / 2); }
-}
+/* 0.59.11 (the user's request): the clock and the ⏱ 📝 💬 👤 buttons sit at the right edge of the page on every
+   screen (0.23.3–0.59.10 lined them up with the 980px content column on wide screens). */
 @media (max-width: 640px) {
   .topbar { gap: .6rem; }
   .brand-logo { height: 24px; }

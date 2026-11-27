@@ -1896,6 +1896,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.8 | Planner: no "Planner" heading; "Not planned" moved to the top row between the calendar and the chart, jobs in two rows (scroll sideways) with a search |
 | 0.59.9 | Planner toolbar: "Options" first (left); the pinned legend in two rows right after the days dropdown |
 | 0.59.10 | Planner toolbar: the legend sits against the right edge |
+| 0.59.11 | Top bar: the clock and the ⏱ 📝 💬 👤 buttons at the right edge of the page on wide screens too (no longer lined up with the content column) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
