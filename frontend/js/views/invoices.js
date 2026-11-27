@@ -71,7 +71,8 @@ function table(data) {
       h('td', {}, fmtDate(i.issue_date)),
       h('td', {}, h('span', { translate: 'no' }, i.buyer_name || '–'),
         i.registration_number ? h('span', { class: 'muted small block mono' }, i.registration_number) : null),
-      h('td', {}, i.work_order_number ? `#${i.work_order_number}` : '–'),
+      h('td', {}, i.work_order_number ? `#${i.work_order_number}`
+        : i.parts_order_number ? h('span', {}, h('span', {}, 'Parts order'), ` #${i.parts_order_number}`) : '–'),
       h('td', { class: 'num' }, kr(i.total_inc)),
       h('td', {}, stateBadge(i, data.today), i.kind === 'invoice' && !i.paid_at && !i.credited_by_number
         ? h('span', { class: 'muted small block' }, h('span', {}, 'Due'), ` ${fmtDate(i.due_date)}`) : null));
@@ -81,7 +82,7 @@ function table(data) {
     return tr;
   });
   return h('div', {}, summary, h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
-    h('thead', {}, h('tr', {}, h('th', {}, 'No.'), h('th', {}, 'Date'), h('th', {}, 'Customer'), h('th', {}, 'Work order'),
+    h('thead', {}, h('tr', {}, h('th', {}, 'No.'), h('th', {}, 'Date'), h('th', {}, 'Customer'), h('th', {}, 'Order'),
       h('th', { class: 'num' }, 'Total inc VAT'), h('th', {}, 'Status'))),
     h('tbody', {}, rows))));
 }
@@ -108,7 +109,9 @@ export async function invoiceView(el, [id], host = el) {
   append(el,
     h('div', { class: 'no-print' },
       h('p', { class: 'small' }, h('a', { href: '#/invoices' }, '← Invoices'),
-        inv.work_order_id ? [' · ', h('a', { href: `#/work-orders/${inv.work_order_id}` }, `Work order #${inv.car?.work_order ?? ''}`)] : null),
+        inv.work_order_id ? [' · ', h('a', { href: `#/work-orders/${inv.work_order_id}` }, `Work order #${inv.car?.work_order ?? ''}`)] : null,
+        !inv.work_order_id && inv.car?.parts_order && inv.parts_order_ids?.length
+          ? [' · ', h('a', { href: `#/parts-orders/${inv.parts_order_ids[0]}` }, `Parts order #${inv.car.parts_order}`)] : null),
       h('div', { class: 'page-head' },
         h('div', {}, h('h1', {}, `${isInvoice ? 'Invoice' : 'Credit note'} no. ${inv.number}`), stateBadge(inv, inv.today)),
         h('div', { class: 'row-actions' },
@@ -149,6 +152,7 @@ function invoiceDoc(inv) {
           isInvoice ? meta('Forfallsdato', no(inv.due_date)) : null,
           meta('Kundenr.', b.customer_no ? String(b.customer_no) : null),
           meta('Arbeidsordre', c.work_order ? String(c.work_order) : null),
+          meta('Delebestilling', c.parts_order ? String(c.parts_order) : null),
           isInvoice ? meta('KID', inv.kid) : null)))),
     h('div', { class: 'inv-buyer' },
       h('div', { class: 'inv-label' }, 'Kunde'),

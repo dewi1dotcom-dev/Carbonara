@@ -78,8 +78,11 @@ PART_COLS = """p.id, p.part_number, p.part_key, p.name, p.make, p.supplier, p.lo
                p.min_quantity, p.cost_price, p.sale_price, p.vat_rate, p.note, p.created_at, p.updated_at"""
 
 # Parts on parts orders that are not handed out or cancelled yet (routers/parts_orders.py).
+# Reserved = on the shelf for an open order: lines taken from stock or arrived (0.60.0: lines still to order / ordered
+# aren't on the shelf yet, so they don't hold back the stock).
 RESERVED_SQL = """(SELECT coalesce(sum(l.quantity), 0) FROM parts_order_lines l JOIN parts_orders o ON o.id = l.order_id
-                    WHERE l.part_id = p.id AND o.status IN ('open', 'ordered', 'arrived'))"""
+                    WHERE l.part_id = p.id AND o.status IN ('open', 'ordered', 'arrived')
+                      AND l.supply IN ('stock', 'arrived'))"""
 
 
 def _move(conn, part_id: int, kind: str, change, after, staff_id, *, unit_cost=None, reference=None, note=None,

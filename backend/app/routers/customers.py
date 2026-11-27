@@ -206,7 +206,8 @@ EVENTS_SELECT = """SELECT e.id, e.kind, e.data, e.created_at, e.customer_id, e.c
 ORDERS_SELECT = """SELECT o.id, o.order_no, o.status, o.created_at, o.done_at, o.reference, o.customer_id, o.car_id,
                           c.name AS customer_name, c.customer_no, cc.registration_number, cc.make, cc.model,
                           o.work_order_id, (SELECT w.number FROM work_orders w WHERE w.id = o.work_order_id)
-                              AS work_order_number,
+                              AS work_order_number, o.invoice_id,
+                          (SELECT i.number FROM invoices i WHERE i.id = o.invoice_id) AS invoice_number,
                           (SELECT count(*) FROM parts_order_lines l WHERE l.order_id = o.id) AS lines,
                           (SELECT coalesce(sum(l.quantity * l.unit_price * (1 + l.vat_rate / 100)), 0)
                              FROM parts_order_lines l WHERE l.order_id = o.id) AS total_inc

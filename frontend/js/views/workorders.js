@@ -5,7 +5,7 @@ import { api, append, busy, canOpen, canSee, dateInput, debounce, fmtDate, h, op
 import { carTitle, orderBadge, pickCustomer } from './customers.js';
 import { entryDialog, fmtDuration, fmtLocal } from './hours.js';
 import { field, fmtMoney, fmtQty, money2, parseNum, qtyText } from './parts.js';
-import { lineDialog } from './partsorders.js';
+import { allArrivedButton, lineDialog, supplyCell } from './partsorders.js';
 import { lang } from '../i18n.js';
 import { workOrderRecallCard } from './recalls.js';
 
@@ -108,9 +108,11 @@ export async function workOrdersCard(filter, newArgs, { hideEmpty = false } = {}
 
 // ---------------------------------------------------------------- parts ready (0.55.1)
 
-/** "Parts arrived and ready" (ticked by hand) or "Waiting for parts" (the work order has parts, not ticked yet). */
+/** "Parts arrived and ready" or "Waiting for parts". Since 0.60.0 a work order with parts lines follows them (every line
+ *  in stock or arrived = ready); the button to tick it by hand is only there when it has no lines (parts handled
+ *  outside Carbonara). */
 export function partsReadyBar(o, editable, onChange) {
-  const btn = editable ? h('button', { class: o.parts_ready_at ? 'link small' : 'btn primary', type: 'button' },
+  const btn = editable && !o.has_parts ? h('button', { class: o.parts_ready_at ? 'link small' : 'btn primary', type: 'button' },
     o.parts_ready_at ? 'Undo' : '✓ Parts arrived and ready') : null;
   btn?.addEventListener('click', () => busy(btn, async () => {
     await api.post(`/work-orders/${o.id}/parts-ready`, { ready: !o.parts_ready_at });
@@ -122,7 +124,8 @@ export function partsReadyBar(o, editable, onChange) {
       o.parts_ready_by_name ? h('span', { class: 'muted small', translate: 'no' }, ` · ${o.parts_ready_by_name}`) : null)
     : o.has_parts ? h('span', { class: 'badge warn' }, '📦 Waiting for parts')
       : h('span', { class: 'muted small' }, 'No parts on this work order yet.');
-  return h('div', { class: 'parts-ready-bar no-print' }, state, btn);
+  const hint = o.has_parts ? h('span', { class: 'muted small' }, 'Follows the parts below: ready when every part is in stock or has arrived.') : null;
+  return h('div', { class: 'parts-ready-bar no-print' }, state, hint, btn);
 }
 
 // ---------------------------------------------------------------- job types (0.55.0)
@@ -245,6 +248,7 @@ function eventDetail(e) {
   const d = e.data || {};
   if (e.kind === 'invoiced') return h('a', { href: `#/invoices/${d.invoice_id}` }, `Invoice no. ${d.number}`);
   if (e.kind === 'arrived' && d.kiosk) return h('span', {}, 'Registered on the delivery kiosk');
+  if ((e.kind === 'parts_ready' || e.kind === 'parts_not_ready') && d.auto) return h('span', {}, 'Follows the parts');
   if (e.kind === 'credited') {
     return [h('a', { href: `#/invoices/${d.invoice_id}` }, `Invoice no. ${d.number}`), ' → ',
       h('a', { href: `#/invoices/${d.credit_note_id}` }, `Credit note no. ${d.credit_note_number}`)];
@@ -547,6 +551,8 @@ function partsCard(o, editable, rerender) {
           l.part_deleted ? h('span', {}, 'Deleted from the parts store')
             : [h('span', {}, 'In stock:'), ' ', qtyText(l.stock, l.unit), l.location ? [' · ', h('span', { translate: 'no' }, l.location)] : null])
           : null),
+      h('td', {}, l.order_status === 'done' ? h('span', { class: 'muted small' }, 'Handed out')
+        : supplyCell(l.order_id, l, canChange, rerender)),
       h('td', { class: 'num' }, qtyText(l.quantity, l.unit)),
       h('td', { class: 'num' }, fmtMoney(l.unit_price)),
       h('td', { class: 'no-print nowrap' }, canChange ? [
@@ -559,18 +565,20 @@ function partsCard(o, editable, rerender) {
           },
         }, 'remove')] : null));
   });
+  // 0.60.0: the parts are handled here only (the parts order behind them is no longer shown); "All arrived" per order.
+  const waitingOrders = editable ? [...new Set(lines.filter((l) => OPEN_PARTS.includes(l.order_status)
+    && (l.supply === 'order' || l.supply === 'ordered')).map((l) => l.order_id))] : [];
   return h('section', { class: 'card' },
     h('h2', {}, 'Parts on the work order'),
+    waitingOrders.map((id) => allArrivedButton(id, lines.filter((l) => l.order_id === id), rerender)),
     lines.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
-      h('thead', {}, h('tr', {}, h('th', {}, 'Part number'), h('th', {}, 'Name'), h('th', { class: 'num' }, 'Quantity'),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Part number'), h('th', {}, 'Name'), h('th', {}, 'Supply'), h('th', { class: 'num' }, 'Quantity'),
         h('th', { class: 'num' }, 'Price ex VAT'), h('th', { class: 'no-print' }))),
       h('tbody', {}, rows)))
       : h('p', { class: 'empty' }, 'No parts on this work order.'),
     editable ? h('div', { class: 'add-line no-print' },
       h('div', { class: 'toolbar' }, search, free), results,
-      h('p', { class: 'muted small' }, 'The parts are reserved now and taken out of the stock when the invoice is made.')) : null,
-    o.parts_orders.length && canOpen('#/parts-orders') ? h('p', { class: 'muted small no-print' },
-      o.parts_orders.map((p, i) => [i ? ' · ' : '', h('a', { href: `#/parts-orders/${p.id}` }, `Parts order #${p.order_no}`), ' ', orderBadge(p.status)])) : null);
+      h('p', { class: 'muted small' }, 'A part is “In stock” when there is enough on the shelf, else “To order”. Set it to Ordered and Arrived as it comes in. The parts leave the stock when the invoice is made.')) : null);
 }
 
 /** "2,5" → 150 minutes; "0" → 0; '' → null; NaN when not a number. */

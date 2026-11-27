@@ -38,7 +38,10 @@ const EVENT = {
   order_car_changed: 'Car changed', order_updated: 'Order details changed',
   customer_delivery: 'Delivered at the kiosk', customer_delivery_received: 'Delivery received',
   registration_number_changed: 'New registration number from Statens vegvesen',
+  order_line_supply: 'Part supply changed', order_arrived: 'All parts arrived', order_invoiced: 'Invoiced',
+  order_credited: 'Invoice credited',
 };
+const SUPPLY_TEXT = { stock: 'In stock', order: 'To order', ordered: 'Ordered', arrived: 'Arrived' };  // as in partsorders.js
 const qty = (n) => Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 });
 
 function eventDetail(e) {
@@ -51,7 +54,16 @@ function eventDetail(e) {
     case 'registration_number_changed':
       return h('span', { class: 'mono', translate: 'no' }, `${d.from || '–'} → ${d.to}`);
     case 'order_status':
-      return [h('span', {}, ORDER_STATUS[d.from] ?? d.from), ' → ', h('span', {}, ORDER_STATUS[d.to] ?? d.to)];
+      return [h('span', {}, ORDER_STATUS[d.from] ?? d.from), ' → ', h('span', {}, ORDER_STATUS[d.to] ?? d.to),
+        d.auto ? [' ', h('span', { class: 'muted small' }, '(follows the parts)')] : null];
+    case 'order_line_supply':
+      return [h('span', { translate: 'no' }, d.part_number || ''), ' ', h('span', {}, SUPPLY_TEXT[d.from] ?? d.from), ' → ',
+        h('span', {}, SUPPLY_TEXT[d.to] ?? d.to), d.expected ? [' · ', h('span', {}, 'expected'), ` ${fmtDate(d.expected)}`] : null];
+    case 'order_arrived':
+      return h('span', {}, `${d.lines} line(s)`);
+    case 'order_invoiced':
+    case 'order_credited':
+      return h('span', {}, `Invoice no. ${d.number}`);
     case 'order_line_added':
     case 'order_line_removed':
       return [h('span', { translate: 'no' }, d.part_number || ''), ' ', `× ${qty(d.quantity)}`];

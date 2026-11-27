@@ -7,7 +7,7 @@ const UNITS = ['pcs', 'set', 'l', 'm', 'kg'];
 const UNIT_NAME = { pcs: 'Pieces (pcs)', set: 'Sets (set)', l: 'Litres (l)', m: 'Metres (m)', kg: 'Kilograms (kg)' };
 const KIND = {
   created: 'Added', received: 'Received', out: 'Taken out', count: 'Stock counted', import: 'Imported', price: 'Price changed',
-  order: 'Handed out on parts order', order_return: 'Hand-out undone',
+  order: 'Handed out on parts order', order_return: 'Hand-out undone', order_received: 'Arrived for a parts order',
 };
 
 export const money2 = (n) => Number(n).toLocaleString('nb-NO', { minimumFractionDigits: 2, maximumFractionDigits: 2 });

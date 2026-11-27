@@ -29,7 +29,8 @@ from ..config import settings
 from ..db import get_conn
 from ..worktime import OSLO, today
 from . import customers
-from .parts_orders import change_status
+from .parts import require_parts_editor
+from .parts_orders import change_status, sync as sync_parts_order
 from .work_orders import _event, _labour, _order as _work_order, require_work_orders
 
 router = APIRouter(tags=["invoices"])
@@ -102,6 +103,35 @@ def _totals(lines: list[dict]) -> dict:
     return {"vat_lines": vat_lines, "total_ex": total_ex, "vat": vat, "total_inc": total_ex + vat}
 
 
+def _seller_missing(s: dict) -> list[str]:
+    missing = []
+    if not s["name"]:
+        missing.append("the company name (System page)")
+    if not s["org_no"]:
+        missing.append("the organisation number (System page)")
+    if not s["address"]:
+        missing.append("the company's postal address (System page)")
+    return missing
+
+
+def parts_billing(conn, order: dict) -> dict:
+    """What an invoice for a counter sale (a parts order without a work order, 0.60.0) would hold now."""
+    rows = conn.execute("SELECT * FROM parts_order_lines WHERE order_id = %s ORDER BY id", (order["id"],)).fetchall()
+    lines = [_line("part", p["name"], p["quantity"], UNIT_NO.get(p["unit"], p["unit"]) if p["unit"] else "stk",
+                   p["unit_price"], p["vat_rate"], p["part_number"]) for p in rows]
+    s = seller()
+    missing = _seller_missing(s)
+    if not order["customer_id"]:
+        missing.append("the customer")
+    if not rows:
+        missing.append("parts on the order")
+    if any(p["unit_price"] is None for p in rows):
+        missing.append("a price on every line")
+    if any(p["supply"] in ("order", "ordered") for p in rows):
+        missing.append("parts that haven't arrived yet")
+    return {"lines": lines, **_totals(lines), "missing": missing, "vat_registered": vat_on(), "seller": s}
+
+
 def billing(conn, wo: dict) -> dict:
     """What an invoice for this work order would hold now: labour, parts, other charges, VAT and totals."""
     clocked = _labour(conn, [wo["id"]]).get(wo["id"], 0)
@@ -122,17 +152,13 @@ def billing(conn, wo: dict) -> dict:
         lines.append(_line("other", x.get("text") or "", x.get("quantity") or 1, x.get("unit") or "stk",
                            x.get("unit_price") or 0, x.get("vat_rate", 25)))
     s = seller()
-    missing = []
-    if not s["name"]:
-        missing.append("the company name (System page)")
-    if not s["org_no"]:
-        missing.append("the organisation number (System page)")
-    if not s["address"]:
-        missing.append("the company's postal address (System page)")
+    missing = _seller_missing(s)
     if not wo["customer_id"]:
         missing.append("the customer")
     if minutes and not rate:
         missing.append("the hourly rate for labour")
+    if any(p["supply"] in ("order", "ordered") and p["order_status"] != "done" for p in parts):
+        missing.append("parts that haven't arrived yet")
     if not lines:
         missing.append("labour, parts or other charges")
     return {"clocked_seconds": clocked, "suggested_minutes": suggested, "minutes": minutes,
@@ -199,6 +225,48 @@ def issue(wo_id: int, body: IssueIn, conn=Depends(get_conn), staff=Depends(requi
     return {"id": row["id"], "number": number}
 
 
+@router.post("/parts-orders/{order_id}/invoice", status_code=201)
+def issue_parts(order_id: int, body: IssueIn, conn=Depends(get_conn), staff=Depends(require_parts_editor)):
+    """Invoice a counter sale (0.60.0): the parts are handed out (out of the stock) and the order is locked; a credit
+    note puts them back, as for work orders."""
+    order = conn.execute("SELECT * FROM parts_orders WHERE id = %s FOR UPDATE", (order_id,)).fetchone()
+    if not order:
+        raise not_found("Parts order")
+    if order["work_order_id"]:
+        raise conflict("This parts order belongs to a work order: invoice the work order")
+    if order["invoice_id"]:
+        raise conflict("The order is already invoiced")
+    if order["status"] == "cancelled":
+        raise conflict("A cancelled order can't be invoiced")
+    b = parts_billing(conn, order)
+    if b["missing"]:
+        raise bad_request("Missing before invoicing: " + ", ".join(b["missing"]))
+    sid = staff["id"]
+    if order["status"] != "done":
+        change_status(conn, order_id, "done", sid)   # refused (nothing saved) when a part has too little stock
+    number = _next_number(conn)
+    issued = today()
+    car = {"parts_order": order["order_no"]}
+    if order["car_id"]:
+        cc = conn.execute("SELECT registration_number, make, model, vin FROM customer_cars WHERE id = %s",
+                          (order["car_id"],)).fetchone()
+        car.update(cc or {})
+    row = conn.execute(
+        """INSERT INTO invoices (number, kind, customer_id, issue_date, delivery_date, due_date, seller, buyer, car,
+                                 lines, vat_lines, total_ex, vat, total_inc, kid, note, parts_order_ids, created_by)
+           VALUES (%s, 'invoice', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
+        (number, order["customer_id"], issued, issued, issued + timedelta(days=settings.invoice_due_days),
+         _jsonb(b["seller"]), _jsonb(_buyer(conn, order["customer_id"])), _jsonb(car), _jsonb(b["lines"]),
+         _jsonb(b["vat_lines"]), b["total_ex"], b["vat"], b["total_inc"],
+         kid(number) if settings.invoice_kid == "on" else None, (body.note or "").strip() or None, [order_id],
+         sid)).fetchone()
+    conn.execute("UPDATE parts_orders SET invoice_id = %s, updated_at = now() WHERE id = %s", (row["id"], order_id))
+    customers.event(conn, "order_invoiced", sid, order_id=order_id,
+                    data={"invoice_id": row["id"], "number": number, "total_inc": b["total_inc"]})
+    customers.touch(conn, order["customer_id"])
+    return {"id": row["id"], "number": number}
+
+
 def _invoice(conn, invoice_id: int) -> dict:
     row = conn.execute("SELECT * FROM invoices WHERE id = %s", (invoice_id,)).fetchone()
     if not row:
@@ -223,9 +291,16 @@ def credit(invoice_id: int, body: CreditIn, conn=Depends(get_conn), staff=Depend
         raise conflict("This invoice has already been credited")
     sid = staff["id"]
     for po in inv["parts_order_ids"] or []:
-        row = conn.execute("SELECT status FROM parts_orders WHERE id = %s", (po,)).fetchone()
-        if row and row["status"] == "done":
+        row = conn.execute("SELECT status, invoice_id FROM parts_orders WHERE id = %s", (po,)).fetchone()
+        if not row:
+            continue
+        if row["status"] == "done":
             change_status(conn, po, "arrived", sid)
+        if row["invoice_id"] == invoice_id:   # a counter sale: open again, can be changed and invoiced again
+            conn.execute("UPDATE parts_orders SET invoice_id = NULL, updated_at = now() WHERE id = %s", (po,))
+            customers.event(conn, "order_credited", sid, order_id=po,
+                            data={"invoice_id": invoice_id, "number": inv["number"]})
+        sync_parts_order(conn, po, sid)   # the open status follows the lines again (0.60.0)
     neg = lambda x: -Decimal(str(x))  # noqa: E731
     lines = [{**ln, "quantity": neg(ln["quantity"]), "total_ex": neg(ln["total_ex"])} for ln in inv["lines"]]
     vat_lines = [{**v, "base": neg(v["base"]), "vat": neg(v["vat"])} for v in inv["vat_lines"]]
@@ -271,7 +346,7 @@ def set_paid(invoice_id: int, body: PaidIn, conn=Depends(get_conn), staff=Depend
 LIST_SELECT = """SELECT i.id, i.number, i.kind, i.issue_date, i.due_date, i.total_ex, i.vat, i.total_inc, i.paid_at,
                         i.work_order_id, i.credits_invoice_id, i.buyer->>'name' AS buyer_name,
                         i.buyer->>'customer_no' AS customer_no, i.car->>'registration_number' AS registration_number,
-                        (i.car->>'work_order') AS work_order_number,
+                        (i.car->>'work_order') AS work_order_number, (i.car->>'parts_order') AS parts_order_number,
                         (SELECT c.number FROM invoices c WHERE c.credits_invoice_id = i.id) AS credited_by_number,
                         (SELECT c.number FROM invoices c WHERE c.id = i.credits_invoice_id) AS credits_number
                    FROM invoices i"""
@@ -295,8 +370,9 @@ def list_invoices(show: Literal["unpaid", "paid", "all"] = "all", q: str = "", c
         conds = ["i.buyer->>'name' ILIKE %s", "i.car->>'registration_number' LIKE %s"]
         params += [like, f"%{key}%"]
         if digits:
-            conds += ["i.number::text = %s", "i.buyer->>'customer_no' = %s", "i.car->>'work_order' = %s"]
-            params += [digits, digits, digits]
+            conds += ["i.number::text = %s", "i.buyer->>'customer_no' = %s", "i.car->>'work_order' = %s",
+                      "i.car->>'parts_order' = %s"]
+            params += [digits, digits, digits, digits]
         where.append("(" + " OR ".join(conds) + ")")
     rows = conn.execute(LIST_SELECT + (" WHERE " + " AND ".join(where) if where else "")
                         + f" ORDER BY i.number DESC LIMIT {LIST_LIMIT}", params).fetchall()
@@ -323,12 +399,12 @@ def export(start: Optional[str] = None, end: Optional[str] = None, conn=Depends(
     rows = conn.execute(LIST_SELECT + " WHERE i.issue_date BETWEEN %s AND %s ORDER BY i.number", (d1, d2)).fetchall()
     buf = io.StringIO()
     w = csv.writer(buf, delimiter=";")
-    w.writerow(["Nummer", "Type", "Fakturadato", "Forfall", "Kunde", "Kundenr", "Reg.nr", "Arbeidsordre",
+    w.writerow(["Nummer", "Type", "Fakturadato", "Forfall", "Kunde", "Kundenr", "Reg.nr", "Arbeidsordre", "Delebestilling",
                 "Eks. mva", "Mva", "Inkl. mva", "Betalt", "Krediterer"])
     for r in rows:
         w.writerow([r["number"], "Faktura" if r["kind"] == "invoice" else "Kreditnota",
                     r["issue_date"].strftime("%d.%m.%Y"), r["due_date"].strftime("%d.%m.%Y"), r["buyer_name"] or "",
-                    r["customer_no"] or "", r["registration_number"] or "", r["work_order_number"] or "",
+                    r["customer_no"] or "", r["registration_number"] or "", r["work_order_number"] or "", r["parts_order_number"] or "",
                     _nok(r["total_ex"]), _nok(r["vat"]), _nok(r["total_inc"]),
                     r["paid_at"].strftime("%d.%m.%Y") if r["paid_at"] else "", r["credits_number"] or ""])
     name = f"invoices-{d1.isoformat()}-{d2.isoformat()}.csv"

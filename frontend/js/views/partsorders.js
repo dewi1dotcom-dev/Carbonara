@@ -1,6 +1,8 @@
 // Parts orders (0.48.0): parts collected for a customer's car. Open → ordered from the supplier → arrived → handed out
 // (the stock goes down then), or cancelled; with history. Server: routers/parts_orders.py.
-import { api, append, busy, canOpen, debounce, fmtDate, h, nameInput, openDialog, showError, toast, upperInput } from '../ui.js';
+// 0.60.0: each line has a supply state (In stock / To order / Ordered / Arrived) and the order's status follows the lines;
+// the list shows counter sales (no work order) by default, and a counter sale is invoiced from its page.
+import { api, append, busy, canOpen, dateInput, debounce, fmtDate, h, nameInput, openDialog, showError, toast, upperInput } from '../ui.js';
 import {
   ORDER_STATUS, canEditOrders, carTitle, historyList, newOrderDialog, orderBadge, pickCustomer,
 } from './customers.js';
@@ -12,8 +14,12 @@ const ACTIVE = ['open', 'ordered', 'arrived'];
 
 export async function partsOrdersView(el) {
   const saved = new URLSearchParams(location.hash.split('?')[1] || '');
-  const state = { show: saved.get('show') || 'active', q: saved.get('q') || '' };
-  const query = () => new URLSearchParams(Object.entries(state).filter(([k, v]) => v && !(k === 'show' && v === 'active'))).toString();
+  const state = { show: saved.get('show') || 'active', scope: saved.get('scope') || 'counter', q: saved.get('q') || '' };
+  const query = () => new URLSearchParams(Object.entries(state)
+    .filter(([k, v]) => v && !(k === 'show' && v === 'active') && !(k === 'scope' && v === 'counter'))).toString();
+  const scopeSel = h('select', { 'aria-label': 'Which orders' },
+    [['counter', 'Counter sales'], ['workshop', 'For work orders'], ['all', 'All parts orders']]
+      .map(([v, t]) => h('option', { value: v, selected: v === state.scope }, t)));
   const showSel = h('select', { 'aria-label': 'Show' },
     [['active', 'Not handed out yet'], ['done', 'Handed out'], ['cancelled', 'Cancelled'], ['all', 'All orders']]
       .map(([v, t]) => h('option', { value: v, selected: v === state.show }, t)));
@@ -24,19 +30,20 @@ export async function partsOrdersView(el) {
     const my = ++seq;
     const q = query();
     if (location.hash.startsWith('#/parts-orders')) history.replaceState(null, '', `#/parts-orders${q ? `?${q}` : ''}`);
-    const data = await api.get(`/parts-orders?show=${state.show}&q=${encodeURIComponent(state.q)}`);
+    const data = await api.get(`/parts-orders?show=${state.show}&scope=${state.scope}&q=${encodeURIComponent(state.q)}`);
     if (my === seq) listSlot.replaceChildren(ordersTable(data));
   };
   const reload = () => load().catch(showError);
   showSel.addEventListener('change', () => { state.show = showSel.value; reload(); });
+  scopeSel.addEventListener('change', () => { state.scope = scopeSel.value; reload(); });
   search.addEventListener('input', debounce(() => { state.q = search.value.trim(); reload(); }, 300));
   append(el,
     h('p', { class: 'small' }, canOpen('#/parts') ? h('a', { href: '#/parts' }, '← Parts') : null),
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Parts orders'),
-        h('div', { class: 'muted' }, 'Parts collected for a customer’s car. The stock goes down when an order is handed out.')),
+        h('div', { class: 'muted' }, 'Parts sold to a customer over the counter. The parts for a job are added on its work order.')),
       canEditOrders() ? h('button', { class: 'btn primary', type: 'button', onClick: () => newOrderDialog() }, '+ New parts order') : null),
-    h('div', { class: 'toolbar' }, search, showSel),
+    h('div', { class: 'toolbar' }, search, scopeSel, showSel),
     listSlot);
   await load();
 }
@@ -55,7 +62,7 @@ function ordersTable(data) {
         o.customer_no ? h('span', { class: 'muted small block' }, String(o.customer_no)) : null),
       h('td', {}, o.registration_number ? h('span', { class: 'mono' }, o.registration_number) : '–',
         o.make ? h('span', { class: 'muted small block', translate: 'no' }, carTitle(o)) : null),
-      h('td', {}, orderBadge(o.status)),
+      h('td', {}, o.invoice_id ? h('span', { class: 'badge good' }, 'Invoiced') : orderBadge(o.status)),
       h('td', { class: 'num' }, String(o.lines)),
       h('td', { class: 'num' }, fmtMoney(o.total_inc)),
       h('td', {}, fmtDate(o.created_at, false), o.reference ? h('span', { class: 'muted small block', translate: 'no' }, o.reference) : null));
@@ -83,7 +90,7 @@ export async function partsOrderView(el, [id], host = el) {
     } catch (e) { showError(e); }
   };
   const edit = canEditOrders();
-  const editable = edit && ACTIVE.includes(o.status);
+  const editable = edit && ACTIVE.includes(o.status) && !o.invoice_id;
   const status = (to, label, cls = 'btn', ask = null) => {
     const b = h('button', { class: cls, type: 'button' }, label);
     b.addEventListener('click', () => busy(b, async () => {
@@ -94,17 +101,18 @@ export async function partsOrderView(el, [id], host = el) {
     }));
     return b;
   };
-  const actions = !edit ? [] : {
-    open: [status('ordered', 'Ordered from supplier'), status('arrived', 'Parts arrived'),
-      status('done', '✓ Hand out', 'btn primary', 'Hand out the parts? They are taken out of the stock.'),
-      status('cancelled', 'Cancel order', 'link danger', 'Cancel this order? The reserved parts are released.')],
-    ordered: [status('arrived', 'Parts arrived'), status('done', '✓ Hand out', 'btn primary', 'Hand out the parts? They are taken out of the stock.'),
-      status('open', 'Back to open', 'link'), status('cancelled', 'Cancel order', 'link danger', 'Cancel this order? The reserved parts are released.')],
-    arrived: [status('done', '✓ Hand out', 'btn primary', 'Hand out the parts? They are taken out of the stock.'),
-      status('ordered', 'Not arrived after all', 'link'), status('cancelled', 'Cancel order', 'link danger', 'Cancel this order? The reserved parts are released.')],
-    done: [status('arrived', 'Undo hand-out', 'link danger', 'Undo the hand-out? The parts are put back into the stock.')],
-    cancelled: [],
-  }[o.status];
+  // 0.60.0: the open statuses follow the lines (In stock / To order / Ordered / Arrived), so only hand out, undo and
+  // cancel are left here. A work order's parts are handed out when the work order is invoiced.
+  const cancel = status('cancelled', 'Cancel order', 'link danger', 'Cancel this order? The reserved parts are released.');
+  const actions = !edit || o.invoice_id ? [] : o.work_order_id
+    ? (ACTIVE.includes(o.status) ? [cancel] : [])
+    : {
+      open: [cancel],
+      ordered: [cancel],
+      arrived: [status('done', '✓ Hand out without invoice', 'btn', 'Hand out the parts without an invoice? They are taken out of the stock.'), cancel],
+      done: [status('arrived', 'Undo hand-out', 'link danger', 'Undo the hand-out? The parts are put back into the stock.')],
+      cancelled: [],
+    }[o.status];
 
   const custLink = o.customer_id
     ? h('span', {}, canOpen(`#/customers/${o.customer_id}`) ? h('a', { href: `#/customers/${o.customer_id}`, translate: 'no' }, o.customer_name)
@@ -120,10 +128,14 @@ export async function partsOrderView(el, [id], host = el) {
   append(el,
     h('p', { class: 'small no-print' }, h('a', { href: '#/parts-orders' }, '← Parts orders')),
     h('div', { class: 'page-head' },
-      h('div', {}, h('h1', {}, `Parts order #${o.order_no}`), orderBadge(o.status)),
+      h('div', {}, h('h1', {}, `Parts order #${o.order_no}`),
+        o.invoice_id ? h('span', { class: 'badge good' }, 'Invoiced') : orderBadge(o.status)),
       h('div', { class: 'row-actions no-print' },
         h('button', { class: 'btn', type: 'button', onClick: () => window.print() }, '🖨 Print'),
         editable ? h('button', { class: 'btn', type: 'button', onClick: () => orderEditDialog(o, rerender) }, 'Edit') : null)),
+    o.work_order_id ? h('div', { class: 'notice no-print' },
+      h('span', {}, 'These parts belong to a work order. Add, change and receive them on the work order; they leave the stock when it is invoiced.'),
+      ' ', canOpen(`#/work-orders/${o.work_order_id}`) ? h('a', { href: `#/work-orders/${o.work_order_id}` }, `Work order #${o.work_order_number}`) : null) : null,
     actions.length ? h('div', { class: 'actions left no-print' }, actions) : null,
     h('section', { class: 'card' },
       h('dl', { class: 'kv' },
@@ -139,6 +151,7 @@ export async function partsOrderView(el, [id], host = el) {
       h('h2', {}, 'Parts on the order'),
       linesTable(o, editable, rerender),
       editable ? addLine(o, rerender) : null),
+    o.work_order_id ? null : invoiceCard(o, edit, rerender),
     h('section', { class: 'card no-print' }, h('h2', {}, 'History'), historyList(o.events, { orderLinks: false })));
 }
 
@@ -153,6 +166,7 @@ function linesTable(o, editable, rerender) {
     return h('tr', {},
       h('td', {}, h('span', { class: 'mono', translate: 'no' }, l.part_number || '–')),
       h('td', {}, h('span', { translate: 'no' }, l.name), o.status === 'done' ? null : stock),
+      h('td', {}, o.status === 'done' ? h('span', { class: 'muted small' }, 'Handed out') : supplyCell(o.id, l, editable, rerender)),
       h('td', { class: 'num' }, qtyText(l.quantity, l.unit)),
       h('td', { class: 'num' }, fmtMoney(l.unit_price)),
       h('td', { class: 'num' }, fmtMoney(l.total_ex)),
@@ -167,14 +181,96 @@ function linesTable(o, editable, rerender) {
         }, 'remove')) : null);
   });
   return h('div', {},
+    editable ? allArrivedButton(o.id, o.lines, rerender) : null,
     h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
-      h('thead', {}, h('tr', {}, h('th', {}, 'Part number'), h('th', {}, 'Name'), h('th', { class: 'num' }, 'Quantity'),
+      h('thead', {}, h('tr', {}, h('th', {}, 'Part number'), h('th', {}, 'Name'), h('th', {}, 'Supply'), h('th', { class: 'num' }, 'Quantity'),
         h('th', { class: 'num' }, 'Price ex VAT'), h('th', { class: 'num' }, 'Total ex VAT'), editable ? h('th', { class: 'no-print' }) : null)),
       h('tbody', {}, rows))),
     h('dl', { class: 'kv order-totals' },
       h('dt', {}, 'Total ex VAT'), h('dd', {}, fmtMoney(o.total_ex)),
       h('dt', {}, 'VAT'), h('dd', {}, fmtMoney(o.vat)),
       h('dt', {}, 'Total inc VAT'), h('dd', {}, h('strong', {}, fmtMoney(o.total_inc)))));
+}
+
+// ---------------------------------------------------------------- supply per line (0.60.0)
+
+export const SUPPLY = { stock: 'In stock', order: 'To order', ordered: 'Ordered', arrived: 'Arrived' };
+const SUPPLY_CLASS = { stock: 'good', order: 'warn', ordered: '', arrived: 'good' };
+
+/** A line's supply state: a dropdown when it can be changed (Ordered asks for an expected date), else a badge.
+ *  Shared by the parts order page and the work order page. */
+export function supplyCell(orderId, l, editable, rerender) {
+  const expected = l.supply === 'ordered' && l.expected_date
+    ? h('span', { class: 'muted small block' }, h('span', {}, 'Expected'), ` ${fmtDate(l.expected_date)}`) : null;
+  if (!editable) return h('span', {}, h('span', { class: `badge ${SUPPLY_CLASS[l.supply] || ''}` }, SUPPLY[l.supply] || l.supply), expected);
+  const sel = h('select', { class: `supply-select supply-${l.supply}`, 'aria-label': 'Supply' },
+    Object.entries(SUPPLY).map(([v, t]) => h('option', { value: v, selected: v === l.supply, disabled: v === 'stock' && !l.part_id }, t)));
+  const save = async (supply, expectedDate = null) => {
+    try {
+      await api.put(`/parts-orders/${orderId}/lines/${l.id}/supply`, { supply, expected_date: expectedDate });
+      await rerender();
+    } catch (e) { sel.value = l.supply; showError(e); }
+  };
+  sel.addEventListener('change', () => {
+    if (sel.value !== 'ordered') { save(sel.value); return; }
+    const when = dateInput({});
+    const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
+    const form = h('form', {},
+      h('p', {}, h('strong', { class: 'mono', translate: 'no' }, l.part_number || ''), ' ', h('span', { translate: 'no' }, l.name)),
+      field('Expected (optional)', when),
+      h('div', { class: 'actions' }, ok));
+    let saved = false;
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      saved = true;
+      busy(ok, async () => { close(); await save('ordered', when.value || null); });
+    });
+    const { dialog, close } = openDialog('Ordered from the supplier', form);
+    dialog.addEventListener('close', () => { if (!saved) sel.value = l.supply; });
+  });
+  return h('span', {}, sel, expected);
+}
+
+/** "✓ All arrived" when some lines are still to order or ordered: one tap for the whole delivery. */
+export function allArrivedButton(orderId, lines, rerender) {
+  const waiting = lines.filter((l) => l.supply === 'order' || l.supply === 'ordered').length;
+  if (!waiting) return null;
+  const b = h('button', { class: 'btn', type: 'button' }, `✓ All arrived (${waiting})`);
+  b.addEventListener('click', () => busy(b, async () => {
+    await api.post(`/parts-orders/${orderId}/arrived`);
+    toast('Saved', 'success');
+    await rerender();
+  }));
+  return h('div', { class: 'actions left no-print' }, b,
+    h('span', { class: 'muted small' }, 'Parts from the store that arrive are added to the stock.'));
+}
+
+// ---------------------------------------------------------------- invoice for a counter sale (0.60.0)
+
+function invoiceCard(o, edit, rerender) {
+  if (o.invoice_id) {
+    return h('section', { class: 'card' }, h('h2', {}, 'Invoice'),
+      h('p', {}, canOpen(`#/invoices/${o.invoice_id}`)
+        ? h('a', { href: `#/invoices/${o.invoice_id}` }, `Invoice no. ${o.invoice_number}`) : `Invoice no. ${o.invoice_number}`));
+  }
+  if (o.status === 'cancelled' || !o.billing) return null;
+  const b = o.billing;
+  const btn = edit && !b.missing.length ? h('button', { class: 'btn primary', type: 'button' }, '🧾 Make invoice') : null;
+  btn?.addEventListener('click', () => busy(btn, async () => {
+    if (!confirm('Make the invoice now? The parts are handed out (taken out of the stock) and the order can\'t be changed afterwards.')) return;
+    const r = await api.post(`/parts-orders/${o.id}/invoice`, {});
+    toast(`Invoice no. ${r.number} made`, 'success');
+    location.hash = `#/invoices/${r.id}`;
+  }));
+  return h('section', { class: 'card no-print' },
+    h('h2', {}, 'Invoice'),
+    h('dl', { class: 'kv order-totals' },
+      h('dt', {}, 'Total ex VAT'), h('dd', {}, fmtMoney(b.total_ex)),
+      h('dt', {}, 'VAT'), h('dd', {}, fmtMoney(b.vat)),
+      h('dt', {}, 'Total inc VAT'), h('dd', {}, h('strong', {}, fmtMoney(b.total_inc)))),
+    b.missing.length ? h('div', { class: 'notice warn' }, h('strong', {}, 'Missing before invoicing:'),
+      h('ul', {}, b.missing.map((m) => h('li', {}, m)))) : null,
+    btn ? h('div', { class: 'actions left' }, btn) : null);
 }
 
 /** Add a line: search the parts store, or a free text line for a part that is not in it. */

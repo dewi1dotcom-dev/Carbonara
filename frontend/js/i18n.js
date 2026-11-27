@@ -695,6 +695,33 @@ const NO = {
   'Not handed out yet': 'Ikke utlevert ennå', 'All orders': 'Alle bestillinger', 'Order no., customer, reg. no., reference…': 'Bestillingsnr., kunde, reg.nr., referanse…',
   'Search orders': 'Søk i bestillinger', 'No orders waiting.': 'Ingen bestillinger venter.', 'Deleted customer': 'Slettet kunde',
   'Order': 'Bestilling', 'Lines': 'Linjer', 'Total inc VAT': 'Sum inkl. mva.', 'Total ex VAT': 'Sum eks. mva.', 'VAT': 'Mva.',
+  'Which orders': 'Hvilke bestillinger', 'Counter sales': 'Disksalg', 'For work orders': 'Til arbeidsordrer',
+  'All parts orders': 'Alle delebestillinger',
+  'Parts sold to a customer over the counter. The parts for a job are added on its work order.':
+    'Deler solgt til en kunde over disk. Delene til en jobb legges til på arbeidsordren.',
+  'Hand out without invoice': 'Utlever uten faktura',
+  'Hand out the parts without an invoice? They are taken out of the stock.': 'Utlevere delene uten faktura? De tas ut av lageret.',
+  'These parts belong to a work order. Add, change and receive them on the work order; they leave the stock when it is invoiced.':
+    'Disse delene hører til en arbeidsordre. Legg til, endre og motta dem på arbeidsordren; de går ut av lageret når den faktureres.',
+  'Supply': 'Levering', 'To order': 'Må bestilles', 'Expected': 'Ventet', 'Expected (optional)': 'Ventet (valgfritt)',
+  'Ordered from the supplier': 'Bestilt fra leverandøren',
+  'Parts from the store that arrive are added to the stock.': 'Deler fra delelageret som kommer, legges inn på lager.',
+  'Make the invoice now? The parts are handed out (taken out of the stock) and the order can\'t be changed afterwards.':
+    'Lage fakturaen nå? Delene utleveres (tas ut av lageret), og bestillingen kan ikke endres etterpå.',
+  'Missing before invoicing:': 'Mangler før fakturering:',
+  'a price on every line': 'en pris på hver linje', 'parts that haven\'t arrived yet': 'deler som ikke har kommet ennå',
+  'parts on the order': 'deler på bestillingen', '(follows the parts)': '(følger delene)', 'Follows the parts': 'Følger delene',
+  'Follows the parts below: ready when every part is in stock or has arrived.':
+    'Følger delene nedenfor: klar når alle delene er på lager eller har kommet.',
+  'Part supply changed': 'Levering av del endret', 'All parts arrived': 'Alle delene har kommet', 'Invoice credited': 'Faktura kreditert',
+  'Arrived for a parts order': 'Kommet til en delebestilling', 'expected': 'ventet',
+  'A part is “In stock” when there is enough on the shelf, else “To order”. Set it to Ordered and Arrived as it comes in. The parts leave the stock when the invoice is made.':
+    'En del er «På lager» når det er nok på hylla, ellers «Må bestilles». Sett den til Bestilt og Kommet etter hvert. Delene går ut av lageret når fakturaen lages.',
+  'A part that isn\'t in the parts store can\'t come from our stock': 'En del som ikke er i delelageret, kan ikke tas fra vårt lager',
+  'This parts order belongs to a work order: invoice the work order': 'Denne delebestillingen hører til en arbeidsordre: fakturer arbeidsordren',
+  'The order is already invoiced': 'Bestillingen er allerede fakturert',
+  'A cancelled order can\'t be invoiced': 'En avbrutt bestilling kan ikke faktureres',
+  'The order is invoiced: make a credit note first': 'Bestillingen er fakturert: lag en kreditnota først',
   'Parts arrived': 'Delene har kommet', 'Hand out': 'Utlever', 'Cancel order': 'Avbryt bestillingen', 'Back to open': 'Tilbake til åpen',
   'Not arrived after all': 'Ikke kommet likevel', 'Undo hand-out': 'Angre utlevering',
   'Hand out the parts? They are taken out of the stock.': 'Utlevere delene? De trekkes fra beholdningen.',
@@ -1454,6 +1481,12 @@ const NO_PATTERNS = [
     'Denne bilen er allerede i kunderegisteret, eid av {1}. Gjøre denne kunden til eier?'],
   ['Not enough in stock: {}. Register the parts as received (or count the stock) first.',
     'Ikke nok på lager: {1}. Registrer varemottak (eller tell beholdningen) først.'],
+  // Parts per line, counter sale invoices (0.60.0)
+  ['Not enough in stock: {}. Mark ordered parts as arrived (or count the stock) first.',
+    'Ikke nok på lager: {1}. Merk bestilte deler som kommet (eller tell beholdningen) først.'],
+  ['All arrived ({n})', 'Alt har kommet ({1})'], ['Invoice no. {n} made', 'Faktura nr. {1} er laget'],
+  ['{n} part(s) haven\'t arrived yet: mark them as arrived first', '{1} del(er) har ikke kommet ennå: merk dem som kommet først'],
+  ['Not enough of {} in stock to take the arrival back ({} in stock)', 'Ikke nok {1} på lager til å ta tilbake mottaket ({2} på lager)'],
   // Parts store (0.47.0)
   ['{n} part(s)', '{1} del(er)'], ['{n} low stock', '{1} med lav beholdning'], ['{n} out of stock', '{1} tomt på lager'],
   ['Stock value (cost price): {}', 'Lagerverdi (innpris): {1}'],

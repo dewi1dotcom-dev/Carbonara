@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…058
+  migrations/           001…059
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -336,6 +336,7 @@ frontend/               no build step; plain ES modules
 | 056 | `work_order_recall_check` | `work_orders.recall_checked_at / recall_checked_by / recall_result` (none / found) |
 | 057 | `recall_work_order` | `work_orders.recall_work_order_id` (the recalls' own work order); job type "Recall / campaign" |
 | 058 | `customer_car_registry` | `customer_cars.first_registered_norway / owner_since / eu_control_due / eu_control_last_approved / registry_checked_at / registry_error` |
+| 059 | `parts_supply` | `parts_order_lines.supply` (stock / order / ordered / arrived), `supply_at / _by`, `expected_date`; `parts_orders.invoice_id` (counter sale invoices); movement kind `order_received` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1406,6 +1407,32 @@ customers deleted after `retention_years`, and modules + another company + conse
   count first"); "Undo hand-out" puts them back (`order_return`). Cancelled = final. Parts on orders not done / cancelled
   are **reserved** (`parts.RESERVED_SQL`: shown on the Parts list, the part dialog and the line picker). Totals ex VAT,
   VAT, inc VAT. "🖨 Print" prints the page.
+- **Parts per line + counter sales (0.60.0, migration 059; the user's request: "how are parts orders and work orders
+  connected … parts orders also need to generate an invoice … when parts arrived is clicked it should update the work
+  order"; the user chose all three steps):**
+  - **Supply per line** (`parts_order_lines.supply`): **In stock** (a store part with enough on the shelf not held by other
+    open orders when added) / **To order** (else; free text lines always start here) / **Ordered** (+ optional expected
+    date) / **Arrived**. Changed with the dropdown on each line (`PUT /parts-orders/{id}/lines/{line}/supply`,
+    `supplyCell` in `partsorders.js`, used on both pages) or "✓ All arrived (n)" (`POST /parts-orders/{id}/arrived`).
+    A store part that **arrives is added to the stock** (movement `order_received`, reference "#order no."; undoing it /
+    changing the quantity of an arrived line moves the stock back), so the hand-out never asks to register a receipt
+    first. Only In stock + Arrived lines are **reserved**. The same part again is added to its line only while that line
+    is In stock / To order.
+  - **Statuses follow the lines** (`parts_orders.sync`): open (no lines or something to order) → ordered → arrived (all
+    ready); events `order_status` with `auto`. The page only offers hand out / undo / cancel.
+  - **Work order** (`wo_sync`): "Parts arrived and ready" is set when every line of its parts orders is In stock / Arrived
+    and cleared when one isn't (event `parts_ready` / `parts_not_ready` `{auto: true}`); the manual button only shows
+    when the work order has no lines (parts handled outside Carbonara). The parts card has the Supply column; the parts
+    order itself is no longer linked from the work order (its page says the parts belong to the work order). Invoicing
+    a work order is refused while parts haven't arrived ("parts that haven't arrived yet").
+  - **Counter sale** = a parts order without a work order. `#/parts-orders` lists only those by default ("Counter sales /
+    For work orders / All parts orders", `scope`). Its page has an **Invoice** card (`invoices.parts_billing`: totals +
+    what's missing: seller details, customer, a price on every line, parts not arrived) and "🧾 Make invoice"
+    (`POST /parts-orders/{id}/invoice`, parts team): the same number series and document as work order invoices,
+    `work_order_id` NULL, `parts_order_ids` = [the order], `car` = `{parts_order: no., + the customer car}` (shown as
+    "Delebestilling" on the invoice, "Parts order #n" in the list / CSV), the parts are handed out, `parts_orders.invoice_id`
+    locks the order. A credit note puts the stock back and opens the order again (invoice_id NULL, event `order_credited`).
+    "✓ Hand out without invoice" is still there (e.g. parts for own use).
 - **The car database (Vehicles):** a "Customer" row on the car page overview (`vehicleCustomerRow`): first + last name,
   address, phone typed by sales (`vehicles.customer_*`, `PUT /vehicles/{id}/customer`, any staff; event
   `customer_details_updated` without the values). **"Transfer to the customer register"** (only while the Workshop module
@@ -1449,7 +1476,8 @@ adjust the time, auto-subtracted from the work: a 2 hour job set from 11 goes to
     when only for admins** (Labour card, "+ Add time" / change / delete through `/hours/entries`).
   - **Parts** = parts orders with `work_order_id` ("+ Add parts" → `POST /work-orders/{id}/parts-order` opens the
     order's parts order, made if none is open; reference "#number"). Those don't need a customer (`parts_orders.new_order`);
-    the parts order page shows "Work order #n".
+    the parts order page shows "Work order #n". Since 0.60.0 the parts are handled on the work order only (Supply per
+    line, "Parts arrived and ready" follows them; see *Parts per line + counter sales*).
   - **PDI:** "✓ Confirm PDI date" offers "Make a work order in Carbonara and use its number" (teams that see Work orders,
     while the PDI has no number): `ConfirmIn.create_work_order` → `pdi._carbonara_work_order` (vehicle, title "PDI", tasks =
     the order items "label: choice" + other, description = the order note, planned = PDI date; `pdi_orders.work_order_id`);
@@ -1899,6 +1927,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.11 | Top bar: the clock and the ⏱ 📝 💬 👤 buttons at the right edge of the page on wide screens too (no longer lined up with the content column) |
 | 0.59.12 | Planner: the note under the board ("Planned / available hours …") removed |
 | 0.59.13 | Planner: scroll bars hidden (board, Not planned, legend); scrolling still works, a mouse wheel scrolls Not planned and the legend sideways (Shift + wheel on the board) |
+| 0.60.0 | **Parts per line + counter sale invoices:** each part line is In stock / To order / Ordered / Arrived (arrived parts go into the stock), the parts order status and the work order's "Parts arrived and ready" follow the lines; a work order's parts are handled on the work order only; the Parts orders page lists counter sales, which are invoiced on their own (migration 059) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
