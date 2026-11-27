@@ -944,6 +944,10 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .pl-name { display: flex; flex-direction: column; justify-content: center; gap: .1rem; padding: 0 .5rem; border-bottom: 1px solid var(--border); overflow: hidden; }
 .pl-name strong { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .pl-scroll { flex: 1; overflow-x: auto; overflow-y: hidden; position: relative; }
+/* 0.59.13 (the user's request): no scroll bars in the planner; scrolling still works (touch, trackpad, Shift + wheel on the
+   board; a plain wheel scrolls "Not planned" and the legend sideways, planner.js). */
+.pl-scroll, .pl-unplanned, .pl-legend-strip { scrollbar-width: none; }
+.pl-scroll::-webkit-scrollbar, .pl-unplanned::-webkit-scrollbar, .pl-legend-strip::-webkit-scrollbar { display: none; }
 .pl-head { position: relative; height: 48px; border-bottom: 1px solid var(--border); }
 .pl-day-head { position: absolute; top: 0; height: 48px; }
 .pl-day-title { font-weight: 600; font-size: .85rem; padding: .2rem .3rem; background: var(--panel); border-radius: 4px 4px 0 0; }

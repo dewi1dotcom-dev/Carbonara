@@ -267,6 +267,19 @@ function savePinned(set) {
   try { localStorage.setItem(LEGEND_KEY, JSON.stringify([...set])); } catch { /* not kept, still works now */ }
 }
 
+/** A plain mouse wheel scrolls a sideways-only box sideways (0.59.13: its scroll bar is hidden). Only while it can
+ *  still move that way, so the page scrolls on at either end. */
+function wheelSideways(el) {
+  el.addEventListener('wheel', (e) => {
+    if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY) || el.scrollWidth <= el.clientWidth) return;
+    const max = el.scrollWidth - el.clientWidth;
+    if ((e.deltaY < 0 && el.scrollLeft <= 0) || (e.deltaY > 0 && el.scrollLeft >= max - 1)) return;
+    e.preventDefault();
+    el.scrollLeft += e.deltaY;
+  }, { passive: false });
+  return el;
+}
+
 const legendItem = (it) => h('li', {}, it.marker(), h('span', it.raw ? { translate: 'no' } : {}, it.label));
 
 /** The "Options" button (0.59.7; "Legend" in 0.59.5) with its popup: the actions (Lines, Job types) and the legend; plus
@@ -274,7 +287,7 @@ const legendItem = (it) => h('li', {}, it.marker(), h('span', it.raw ? { transla
 function legend(data, actions = []) {
   const pinned = pinnedKeys(data);
   const groups = legendGroups(data);
-  const strip = h('ul', { class: 'pl-legend-list pl-legend-strip' });
+  const strip = wheelSideways(h('ul', { class: 'pl-legend-list pl-legend-strip' }));
   const drawStrip = () => {
     const items = groups.flatMap((g) => g.items).filter((it) => pinned.has(it.key));
     strip.replaceChildren(...items.map(legendItem));
@@ -549,7 +562,7 @@ function unplannedCard(data, rerender) {
       o.customer_name, o.make, o.model].filter(Boolean).join(' ').toLowerCase();
     return el;
   });
-  const box = h('div', { class: 'pl-unplanned' }, items);
+  const box = wheelSideways(h('div', { class: 'pl-unplanned' }, items));
   const none = h('p', { class: 'muted small', hidden: true }, 'No work orders match the search.');
   const search = h('input', { type: 'search', class: 'pl-un-search', placeholder: 'Search: no., reg. no., title, customer',
     'aria-label': 'Search not planned work orders', value: unplannedQuery });

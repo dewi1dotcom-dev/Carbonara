@@ -1898,6 +1898,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.10 | Planner toolbar: the legend sits against the right edge |
 | 0.59.11 | Top bar: the clock and the ⏱ 📝 💬 👤 buttons at the right edge of the page on wide screens too (no longer lined up with the content column) |
 | 0.59.12 | Planner: the note under the board ("Planned / available hours …") removed |
+| 0.59.13 | Planner: scroll bars hidden (board, Not planned, legend); scrolling still works, a mouse wheel scrolls Not planned and the legend sideways (Shift + wheel on the board) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
