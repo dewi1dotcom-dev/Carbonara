@@ -1380,13 +1380,17 @@ customers deleted after `retention_years`, and modules + another company + conse
   postal code, city, note. `customers.name` = display name. Delete (admins) = for good, not with open orders.
 - **Customer cars** (`customer_cars`, `#/customer-cars/:id`): **kept apart from `vehicles`**. Reg. no., VIN (unique),
   make / model / year / colour / fuel / first registered (Statens vegvesen lookup via `rentals.registry_values`: the first field takes a reg. no. **or a 17-character VIN** (0.58.4), an empty one looks up the VIN field; a VIN typed there moves to the VIN field).
-  **Statens vegvesen dates (0.59.0, the user's request; not changeable):** first registered in Norway ("Imported" when it
+  **Statens vegvesen dates (0.59.0, the user's request; not changeable):** first registered (also out of the car form since 0.59.1; overwritten by each lookup), first registered in Norway ("Imported" when it
   differs from first registered), current owner registered (`registrertForstegangPaEierskap`), EU-kontroll last approved +
-  deadline (`customers.REGISTRY_ONLY`, never in the car form; shown read-only in it after a lookup). `refresh_registry` (by
-  reg. no., else VIN) runs when a car is added / transferred or its reg. no. / VIN changes, with "↻ Look up again" on the
+  deadline (`customers.REGISTRY_ONLY`, never in the car form; shown read-only in it after a lookup). `refresh_registry`
+  (by VIN, else reg. no.; see 0.59.2 below) runs when a car is added / transferred or its reg. no. / VIN changes, with "↻ Look up again" on the
   car page's Statens vegvesen card, and from the worker's `housekeeping()` every `vegvesen_sync_days` (max 100 a day,
   `refresh_due_customer_cars`); failures are kept in `registry_error`. EU-kontroll badge with the shared `euStatus` limits
   (car page; Cars tab and customer page only when amber / red).
+  **0.59.2 (the user's rules: a VIN never changes, plates can):** `refresh_registry` looks up by VIN when the car has a
+  17-character VIN (falls back to the reg. no.), takes Statens vegvesen's **registration number** (a car added by VIN
+  before registration gets its plate; a replaced plate follows; history `registration_number_changed` {from, to}), and
+  fills missing make / model / colour / fuel / VIN (a VIN already on another register car is left out).
   **Owners over time** (`car_ownerships`, one current per car): "Change owner" ends the current one and starts the new
   ("No owner now" = sold elsewhere / scrapped); adding a car that is already in the register (reg. no. or VIN) offers to
   change its owner instead. A customer can own several cars; earlier cars stay listed with their period.
@@ -1882,6 +1886,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.58.3 | "Recalls found – create new work order" no longer shows on the recall work order itself, nor for recalls already on another work order of the car (the box shows the last check and "Check again") |
 | 0.58.4 | Customer register car form: "Registration number or VIN" in one field; the Statens vegvesen lookup works by VIN too |
 | 0.59.0 | Customer register cars: first registered in Norway (imported), current owner registered and EU-kontroll (last approved, deadline with the usual badge) from Statens vegvesen, not changeable; refreshed by the worker (migration 058) |
+| 0.59.1 | Customer register cars: "First registered" is no longer in the car form; Statens vegvesen sets it (shown on the Statens vegvesen card) |
+| 0.59.2 | Customer register cars: Statens vegvesen lookup by VIN first (a VIN never changes); the reg. no. follows Statens vegvesen (new or replaced plates) and missing make / model / colour / fuel are filled in |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

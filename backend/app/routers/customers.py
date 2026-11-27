@@ -275,7 +275,7 @@ class CarIn(BaseModel):
     color: Optional[str] = Field(None, max_length=40)
     fuel_type: Optional[str] = Field(None, max_length=40)
     model_year: Optional[int] = Field(None, ge=1900, le=2100)
-    first_registered: Optional[str] = Field(None, max_length=10)
+    first_registered: Optional[str] = Field(None, max_length=10)  # ignored since 0.59.1 (Statens vegvesen sets it)
     note: Optional[str] = Field(None, max_length=1000)
     chassis_checked: bool = False   # an older chassis number (not the 17-character VIN) was checked on the car
 
@@ -304,8 +304,7 @@ def _car_fields(body: CarIn, keep: Optional[str] = None) -> dict:
         "registration_number": reg, "vin": vin, "vin_nonstandard": older,
         "make": _text(body.make, 60), "model": _text(body.model, 80), "color": _text(body.color, 40),
         "fuel_type": _text(body.fuel_type, 40), "model_year": body.model_year,
-        "first_registered": body.first_registered if re.fullmatch(r"\d{4}-\d{2}-\d{2}", body.first_registered or "")
-        else None,
+        # no first_registered: Statens vegvesen sets it (0.59.1, the user's rule: not changeable)
         "note": (body.note or "").strip()[:1000] or None,
     }
     if not (f["registration_number"] or f["vin"]):
@@ -362,29 +361,52 @@ REGISTRY_ONLY = ("first_registered_norway", "owner_since", "eu_control_due", "eu
 
 
 def refresh_registry(conn, car_id: int) -> Optional[str]:
-    """Update a register car's Statens vegvesen dates. Returns None when it worked, else the reason (also saved on
-    the car as registry_error; earlier dates are kept). First registered is only filled when empty."""
-    car = conn.execute("SELECT id, registration_number, vin FROM customer_cars WHERE id = %s FOR UPDATE",
-                       (car_id,)).fetchone()
+    """Update a register car from Statens vegvesen. Returns None when it worked, else the reason (also saved on the
+    car as registry_error; earlier values are kept).
+    - Looked up by VIN when the car has a 17-character VIN (a VIN never changes; 0.59.2, the user's rule), else by
+      reg. no. (older chassis numbers); a VIN not found falls back to the reg. no.
+    - The registration number follows Statens vegvesen (plates can be replaced, and a car added before it was
+      registered gets its plate); a change is in the car's history.
+    - Make, model, colour and fuel only fill gaps (staff edits win); the dates are always taken (not changeable)."""
+    car = conn.execute("SELECT * FROM customer_cars WHERE id = %s FOR UPDATE", (car_id,)).fetchone()
     if not car or not vegvesen.is_configured():
         return "Statens vegvesen is not set up (API key on the System page)" if car else None
-    vin = car["vin"] if car["vin"] and vinlib.is_valid_format(car["vin"]) else None
+    vin = car["vin"] if car["vin"] and not car["vin_nonstandard"] and vinlib.is_valid_format(car["vin"]) else None
     if not (car["registration_number"] or vin):
         return None
-    try:
-        # by reg. no. when there is one (also older chassis numbers); else by VIN (a car not registered yet)
-        v = registry_values(car["registration_number"] or "", vin=None if car["registration_number"] else vin)
-    except vegvesen.NotFound:
-        error = "Not found at Statens vegvesen"
-    except vegvesen.RegistryError as exc:
-        error = str(exc)[:300]
-    else:
-        conn.execute(
-            """UPDATE customer_cars SET first_registered_norway = %s, owner_since = %s, eu_control_due = %s,
-                      eu_control_last_approved = %s, first_registered = coalesce(first_registered, %s),
-                      registry_checked_at = now(), registry_error = NULL WHERE id = %s""",
-            (*[v[k] for k in REGISTRY_ONLY], v["first_registered"], car_id))
-        return None
+    v, error = None, None
+    for by_vin in ([True, False] if vin else [False]):
+        if not by_vin and not car["registration_number"]:
+            break
+        try:
+            v = registry_values(car["registration_number"] or "", vin=vin if by_vin else None)
+            break
+        except vegvesen.NotFound:
+            error = "Not found at Statens vegvesen"
+        except vegvesen.RegistryError as exc:
+            error = str(exc)[:300]
+            break
+    if v is None:
+        conn.execute("UPDATE customer_cars SET registry_checked_at = now(), registry_error = %s WHERE id = %s",
+                     (error, car_id))
+        return error
+    reg = v["registration_number"] if (vin and v["vin"] == vin) else None  # only from a lookup of this very car
+    new_vin = v["vin"] if not car["vin"] and v["vin"] and vinlib.is_valid_format(v["vin"]) else None
+    if new_vin and conn.execute("SELECT 1 FROM customer_cars WHERE vin = %s AND id <> %s", (new_vin, car_id)).fetchone():
+        new_vin = None  # that VIN is on another car in the register (one car, one VIN): left for staff to sort out
+    conn.execute(
+        """UPDATE customer_cars SET first_registered_norway = %s, owner_since = %s, eu_control_due = %s,
+                  eu_control_last_approved = %s, first_registered = coalesce(%s, first_registered),
+                  registration_number = coalesce(%s, registration_number),
+                  vin = coalesce(vin, %s), make = coalesce(make, %s), model = coalesce(model, %s),
+                  color = coalesce(color, %s), fuel_type = coalesce(fuel_type, %s),
+                  registry_checked_at = now(), registry_error = NULL WHERE id = %s""",
+        (*[v[k] for k in REGISTRY_ONLY], v["first_registered"], reg, new_vin,
+         v["make"], v["model"], v["color"], v["fuel"], car_id))
+    if reg and reg != car["registration_number"]:
+        event(conn, "registration_number_changed", None, car_id=car_id,
+              data={"from": car["registration_number"], "to": reg, "source": "statens_vegvesen"})
+    return None
     conn.execute("UPDATE customer_cars SET registry_checked_at = now(), registry_error = %s WHERE id = %s",
                  (error, car_id))
     return error

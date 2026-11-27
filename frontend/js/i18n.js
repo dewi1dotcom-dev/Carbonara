@@ -1372,6 +1372,7 @@ const NO = {
   'Current owner registered': 'Nåværende eier registrert', 'EU-kontroll last approved': 'EU-kontroll sist godkjent',
   'EU-kontroll deadline': 'EU-kontroll frist', 'Not looked up yet.': 'Ikke slått opp ennå.',
   'No dates from Statens vegvesen.': 'Ingen datoer fra Statens vegvesen.',
+  'New registration number from Statens vegvesen': 'Nytt registreringsnummer fra Statens vegvesen',
   'From Statens vegvesen (saved with the car, not changeable):': 'Fra Statens vegvesen (lagres med bilen, kan ikke endres):',
   'This car is out on rental; register the return first': 'Denne bilen er utleid; registrer innleveringen først',
   'This car is already out on rental': 'Denne bilen er allerede utleid',

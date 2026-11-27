@@ -2,7 +2,7 @@
 // owned each car when, with history. A car from the car database can be copied in when the customer agrees.
 // Server: routers/customers.py. Parts orders: views/partsorders.js.
 import {
-  api, append, busy, canOpen, canSee, dateInput, debounce, euStatus, fmtDate, h, nameInput, openDialog, session, showError,
+  api, append, busy, canOpen, canSee, debounce, euStatus, fmtDate, h, nameInput, openDialog, session, showError,
   toast,
 } from '../ui.js';
 import { field, fmtMoney } from './parts.js';
@@ -37,6 +37,7 @@ const EVENT = {
   order_line_removed: 'Line removed', order_status: 'Status changed', order_customer_changed: 'Customer changed',
   order_car_changed: 'Car changed', order_updated: 'Order details changed',
   customer_delivery: 'Delivered at the kiosk', customer_delivery_received: 'Delivery received',
+  registration_number_changed: 'New registration number from Statens vegvesen',
 };
 const qty = (n) => Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 });
 
@@ -47,6 +48,8 @@ function eventDetail(e) {
     case 'owner_changed':
     case 'order_customer_changed':
       return [name('from_customer_id'), ' → ', name('to_customer_id')];
+    case 'registration_number_changed':
+      return h('span', { class: 'mono', translate: 'no' }, `${d.from || '–'} → ${d.to}`);
     case 'order_status':
       return [h('span', {}, ORDER_STATUS[d.from] ?? d.from), ' → ', h('span', {}, ORDER_STATUS[d.to] ?? d.to)];
     case 'order_line_added':
@@ -208,7 +211,8 @@ export function pickCustomer(title, onPick, { extra = null } = {}) {
 
 // ---------------------------------------------------------------- car form
 
-const CAR_FIELDS = ['registration_number', 'vin', 'make', 'model', 'model_year', 'color', 'fuel_type', 'first_registered', 'note'];
+// first registered is not here: Statens vegvesen sets it (0.59.1, the user's rule)
+const CAR_FIELDS = ['registration_number', 'vin', 'make', 'model', 'model_year', 'color', 'fuel_type', 'note'];
 
 function carForm(customerId, car, done) {
   const c = car || {};
@@ -219,7 +223,6 @@ function carForm(customerId, car, done) {
     make: text(c.make, 60), model: text(c.model, 80),
     model_year: text(c.model_year, 4, { inputmode: 'numeric' }),
     color: text(c.color, 40), fuel_type: text(c.fuel_type, 40),
-    first_registered: dateInput({ value: c.first_registered || '' }),
     note: h('textarea', { rows: 2, maxlength: 1000 }, c.note || ''),
   };
   const lookupBtn = h('button', { class: 'btn small', type: 'button' }, 'Look up at Statens vegvesen');
@@ -262,7 +265,7 @@ function carForm(customerId, car, done) {
     chassisBox,
     svvSlot,
     h('div', { class: 'grid' }, field('Make', inputs.make), field('Model', inputs.model), field('Model year', inputs.model_year),
-      field('Colour', inputs.color), field('Fuel', inputs.fuel_type), field('First registered', inputs.first_registered)),
+      field('Colour', inputs.color), field('Fuel', inputs.fuel_type)),
     field('Note', inputs.note),
     h('div', { class: 'actions' }, ok));
   form.addEventListener('submit', (e) => {
@@ -372,8 +375,10 @@ function registryDates(car) {
   const imported = car.first_registered_norway && car.first_registered && car.first_registered_norway !== car.first_registered;
   const row = (label, value) => (value ? [h('dt', {}, label), h('dd', {}, value)] : null);
   const d = (v) => v && fmtDate(v, false);
-  if (!(car.first_registered_norway || car.owner_since || car.eu_control_due || car.eu_control_last_approved)) return null;
+  if (!(car.first_registered || car.first_registered_norway || car.owner_since || car.eu_control_due
+    || car.eu_control_last_approved)) return null;
   return h('dl', { class: 'kv' },
+    row('First registered', d(car.first_registered)),
     row('First registered in Norway', car.first_registered_norway && h('span', {}, d(car.first_registered_norway),
       imported ? [' ', h('span', { class: 'badge' }, 'Imported')] : null)),
     row('Current owner registered', d(car.owner_since)),
@@ -551,7 +556,6 @@ export async function customerCarView(el, [id], host = el) {
         row('Model year', car.model_year),
         row('Colour', car.color),
         row('Fuel', car.fuel_type),
-        row('First registered', car.first_registered && fmtDate(car.first_registered, false)),
         row('Note', car.note && h('span', { class: 'pre-line', translate: 'no' }, car.note)),
         row('From the car database', car.vehicle_id
           ? h('span', {}, canOpen(`#/vehicles/${car.vehicle_id}`) ? h('a', { href: `#/vehicles/${car.vehicle_id}` }, 'Open in Vehicles') : 'Yes',
