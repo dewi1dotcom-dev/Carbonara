@@ -1547,7 +1547,7 @@ team"):
     bar, menu, 🔔 bar or footer; "⛶ Full screen"). The installed app has a "Planner" shortcut (`manifest.json` shortcuts).
   - **Top row:** a month calendar (pick a day; each day coloured by how booked the team's people are: green < 85 %, amber
     85–100 %, red over; tooltip with % and hours), "Booked, next 7 working days" bars from the day shown (dashed line =
-    100 %; tap a bar to go there). The legend moved out in 0.59.5: a "Legend ▾" popup at the end of the toolbar with every job type, status edge, icon, absence and the break, each with a tick box "always visible"; ticked items show in a line above the board; kept per browser in `localStorage` `carbonara.planner.legend`, default the job types. `GET /planner/load`
+    100 %; tap a bar to go there). The legend moved out in 0.59.5: an "Options ▾" popup (0.59.7; it also holds Lines and Job types, and "Open in its own window" sits at the bottom of the page) at the end of the toolbar with every job type, status edge, icon, absence and the break, each with a tick box "always visible"; ticked items show in a line above the board; kept per browser in `localStorage` `carbonara.planner.legend`, default the job types. `GET /planner/load`
     (people lines only; up to 62 days) gives planned / available seconds per day.
   - **Job types** (`job_types`, migration 053; "Job types" button for admins, `PUT /job-types` saves the list; one not in
     use is kept on old work orders): name EN + NO, colour = the job's fill (text dark / light by brightness). Chosen on
@@ -1891,6 +1891,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.3 | Planner: grid lines placed on the hours (they drifted with the zoom), plus fainter half-hour lines (`.pl-grid` per day) |
 | 0.59.4 | Planner legend: items in equal columns, swatches and icons in one fixed-width slot so the texts line up |
 | 0.59.5 | Planner: the legend is a "Legend" popup; tick items to keep them always visible above the board (per browser, default the job types) |
+| 0.59.6 | Planner legend popup: entries in a fixed 3-column grid, left-aligned |
+| 0.59.7 | Planner head slimmed: no help text or "+ Absence" (an empty spot offers it); Lines + Job types in the "Options" popup (was "Legend"); "Open in its own window" at the bottom |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

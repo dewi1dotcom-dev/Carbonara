@@ -135,17 +135,16 @@ export async function plannerView(el, _params, host = el) {
     else document.documentElement.requestFullscreen?.().catch(() => {});
   };
 
-  const key = legend(data);
+  // 0.59.7 (the user's request, to fit more of the board): no help text or "+ Absence" in the head (tapping an empty spot
+  // offers it); Lines and Job types live in the "Options" popup with the legend; "Open in its own window" at the bottom.
+  const key = legend(data, [
+    ['Lines', () => linesDialog(data, rerender)],
+    data.is_admin ? ['Job types', () => jobTypesDialog(rerender)] : null,
+  ].filter(Boolean));
   append(el,
     h('div', { class: 'page-head pl-page-head' },
-      h('div', {}, h('h1', {}, 'Planner'),
-        full ? null : h('div', { class: 'muted' }, 'Drag a job to move it, drag its right edge to change the time it takes, or tap an empty spot.')),
-      h('div', { class: 'row-actions' },
-        full ? h('button', { class: 'btn', type: 'button', onClick: fullscreen }, '⛶ Full screen')
-          : h('button', { class: 'btn', type: 'button', onClick: openWindow }, '⧉ Open in its own window'),
-        h('button', { class: 'btn', type: 'button', onClick: () => linesDialog(data, rerender) }, 'Lines'),
-        data.is_admin ? h('button', { class: 'btn', type: 'button', onClick: () => jobTypesDialog(rerender) }, 'Job types') : null,
-        h('button', { class: 'btn', type: 'button', onClick: () => absenceDialog(null, data, rerender) }, '+ Absence'))),
+      h('h1', {}, 'Planner'),
+      full ? h('div', { class: 'row-actions' }, h('button', { class: 'btn', type: 'button', onClick: fullscreen }, '⛶ Full screen')) : null),
     h('div', { class: 'pl-top' },
       calendarBox(teamId, start, go, data),
       loadChart(teamId, start, go)),
@@ -159,7 +158,8 @@ export async function plannerView(el, _params, host = el) {
       key.button),
     key.strip,
     data.rows.length ? board(data, rerender) : h('div', { class: 'card notice' }, 'No lines yet. Use "Lines" to add people or places.'),
-    unplannedCard(data, rerender));
+    unplannedCard(data, rerender),
+    full ? null : h('div', { class: 'pl-foot' }, h('button', { class: 'btn', type: 'button', onClick: openWindow }, '⧉ Open in its own window')));
 }
 
 // ---------------------------------------------------------------- calendar, 7-day chart, legend (popup)
@@ -269,8 +269,9 @@ function savePinned(set) {
 
 const legendItem = (it) => h('li', {}, it.marker(), h('span', it.raw ? { translate: 'no' } : {}, it.label));
 
-/** The "Legend" button with its popup, and the line of pinned items (returned separately, placed above the board). */
-function legend(data) {
+/** The "Options" button (0.59.7; "Legend" in 0.59.5) with its popup: the actions (Lines, Job types) and the legend; plus
+ *  the line of pinned items (returned separately, placed above the board). */
+function legend(data, actions = []) {
   const pinned = pinnedKeys(data);
   const groups = legendGroups(data);
   const strip = h('ul', { class: 'pl-legend-list pl-legend-strip' });
@@ -281,7 +282,11 @@ function legend(data) {
   };
   drawStrip();
 
-  const panel = h('div', { class: 'pl-legend-pop', hidden: true, role: 'dialog', 'aria-label': 'Legend' },
+  const panel = h('div', { class: 'pl-legend-pop', hidden: true, role: 'dialog', 'aria-label': 'Options' },
+    actions.length ? h('div', { class: 'pl-pop-actions' }, actions.map(([label, fn]) => h('button', {
+      class: 'btn', type: 'button', onClick: () => { close(); fn(); },
+    }, label))) : null,
+    h('h3', { class: 'pl-pop-title' }, 'Legend'),
     h('p', { class: 'muted small' }, 'Tick what should always be visible on the planner.'),
     groups.map((g) => [
       h('h3', {}, g.title),
@@ -296,7 +301,7 @@ function legend(data) {
       })) : h('p', { class: 'muted small' }, 'No job types.'),
     ]).flat());
 
-  const btn = h('button', { class: 'btn', type: 'button', 'aria-expanded': 'false' }, 'Legend ▾');
+  const btn = h('button', { class: 'btn', type: 'button', 'aria-expanded': 'false' }, 'Options ▾');
   const close = () => {
     panel.hidden = true;
     btn.setAttribute('aria-expanded', 'false');
