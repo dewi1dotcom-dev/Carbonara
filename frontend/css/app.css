@@ -983,9 +983,16 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .pl-job-meta { margin-left: .35rem; font-size: .75rem; opacity: .8; }
 .pl-resize { position: absolute; top: 0; right: 0; bottom: 0; width: 10px; cursor: ew-resize; background: rgb(0 0 0 / .12); }
 .pl-ghost { position: fixed; z-index: 1000; width: 110px; pointer-events: none; }
-.pl-unplanned { display: flex; flex-wrap: wrap; gap: .5rem; }
+/* Not planned (0.59.8): two rows of jobs that scroll sideways, under a search. */
+.pl-unplanned { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-auto-columns: minmax(11rem, 15rem);
+  gap: .4rem; overflow-x: auto; padding-bottom: .3rem; align-content: start; }
+.pl-un-card { min-width: 0; display: flex; flex-direction: column; }
+.pl-un-head { display: flex; align-items: center; gap: .6rem; flex-wrap: wrap; margin-bottom: .4rem; }
+.pl-un-head h3 { margin: 0 !important; white-space: nowrap; }
+.pl-un-head .pl-un-search { flex: 1 1 10rem; width: auto; min-width: 0; padding: .3rem .5rem; font-size: .85rem; }
+.pl-un-item[hidden] { display: none; }
 .pl-un-item { border: 1px solid var(--border); border-radius: 8px; padding: .4rem .6rem; background: var(--surface); cursor: grab; touch-action: none;
-  user-select: none; max-width: 22rem; }
+  user-select: none; min-width: 0; overflow: hidden; font-size: .85rem; white-space: nowrap; text-overflow: ellipsis; }
 .pl-key { display: inline-block; width: 1.2rem; height: .8rem; vertical-align: middle; border: 1px solid var(--border); }
 .pl-key-break { background: repeating-linear-gradient(45deg, rgb(127 127 127 / .3) 0 4px, transparent 4px 9px); }
 .bad-text { color: var(--bad); font-weight: 600; }
@@ -1009,9 +1016,10 @@ body.planner-wide main { max-width: none; }
 body.planner-full .topbar, body.planner-full #notify, body.planner-full .app-footer { display: none; }
 body.planner-full main { padding-top: .5rem; }
 body.planner-full .pl-page-head h1 { font-size: 1.3rem; margin: 0; }
-.pl-top { display: grid; grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); gap: .75rem; align-items: stretch; margin-bottom: .75rem; }
+.pl-top { display: grid; grid-template-columns: minmax(15rem, 17rem) minmax(0, 1.2fr) minmax(0, 1fr); gap: .75rem; align-items: stretch; margin-bottom: .75rem; }
 .pl-top > .card { margin: 0; padding: .6rem .75rem; }
 .pl-top h3 { margin: 0 0 .35rem; font-size: .9rem; }
+@media (max-width: 1100px) { .pl-top { grid-template-columns: minmax(15rem, 17rem) minmax(0, 1fr); } .pl-top > .pl-chart { grid-column: 1 / -1; } }
 @media (max-width: 640px) { .pl-top { grid-template-columns: minmax(0, 1fr); } }
 .pl-cal-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: .3rem; text-transform: capitalize; }
 .pl-cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }

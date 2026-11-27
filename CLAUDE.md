@@ -1532,7 +1532,7 @@ team"):
   `{planned_at, assigned_to}`; drag its right edge → `estimated_minutes`; tap → dialog (date, start, estimated hours,
   mechanic, "Take off the plan" = planned_at NULL, open). Tap an empty spot → "+ New work order here"
   (`newWorkOrderDialog(car, {planned, assigned_to, onDone})`), "+ Absence", or put a job from "Not planned" there.
-  **Not planned** (card under the board): active work orders without a time / person on this planner; drag onto a line
+  **Not planned** (in the top row between the calendar and the chart since 0.59.8: two rows that scroll sideways + a search kept across redraws; before, a card under the board): active work orders without a time / person on this planner; drag onto a line
   (pointer events, works with touch) or tap to plan.
 - **Absences:** holiday / away / course / other (purple / teal / grey blocks); **no "sick"** on purpose (health data): the
   dialog says not to write why someone is away. Deleted by the worker a year after they end (`purge_old_absences`).
@@ -1893,6 +1893,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.5 | Planner: the legend is a "Legend" popup; tick items to keep them always visible above the board (per browser, default the job types) |
 | 0.59.6 | Planner legend popup: entries in a fixed 3-column grid, left-aligned |
 | 0.59.7 | Planner head slimmed: no help text or "+ Absence" (an empty spot offers it); Lines + Job types in the "Options" popup (was "Legend"); "Open in its own window" at the bottom |
+| 0.59.8 | Planner: no "Planner" heading; "Not planned" moved to the top row between the calendar and the chart, jobs in two rows (scroll sideways) with a search |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

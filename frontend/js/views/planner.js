@@ -56,7 +56,7 @@ const pct = (d) => (d && d.available ? Math.round((d.planned / d.available) * 10
 // while a dialog is open or a job is being dragged. One set of listeners for the whole app.
 let current = null;
 const onPlanner = () => location.hash.startsWith('#/planner');
-const busyNow = () => document.querySelector('dialog[open], .pl-job.dragging, .pl-ghost, .pl-legend-pop:not([hidden])');
+const busyNow = () => document.querySelector('dialog[open], .pl-job.dragging, .pl-ghost, .pl-legend-pop:not([hidden]), .pl-un-search:focus');
 let hooked = false;
 function hookOnce() {
   if (hooked) return;
@@ -141,12 +141,11 @@ export async function plannerView(el, _params, host = el) {
     ['Lines', () => linesDialog(data, rerender)],
     data.is_admin ? ['Job types', () => jobTypesDialog(rerender)] : null,
   ].filter(Boolean));
+  // 0.59.8: no "Planner" heading (the menu says where you are); "Not planned" in the top row; Full screen in the toolbar.
   append(el,
-    h('div', { class: 'page-head pl-page-head' },
-      h('h1', {}, 'Planner'),
-      full ? h('div', { class: 'row-actions' }, h('button', { class: 'btn', type: 'button', onClick: fullscreen }, '⛶ Full screen')) : null),
     h('div', { class: 'pl-top' },
       calendarBox(teamId, start, go, data),
+      unplannedCard(data, rerender),
       loadChart(teamId, start, go)),
     h('div', { class: 'toolbar planner-toolbar' },
       teams.length > 1 ? teamSel : h('strong', { translate: 'no' }, data.team.name),
@@ -155,10 +154,10 @@ export async function plannerView(el, _params, host = el) {
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Later', onClick: () => go({ start: addDays(start, step) }) }, '▶'),
       h('button', { class: 'link', type: 'button', onClick: () => go({ start: osloTodayIso() }) }, 'Today'),
       daySel,
-      key.button),
+      key.button,
+      full ? h('button', { class: 'btn', type: 'button', onClick: fullscreen }, '⛶ Full screen') : null),
     key.strip,
     data.rows.length ? board(data, rerender) : h('div', { class: 'card notice' }, 'No lines yet. Use "Lines" to add people or places.'),
-    unplannedCard(data, rerender),
     full ? null : h('div', { class: 'pl-foot' }, h('button', { class: 'btn', type: 'button', onClick: openWindow }, '⧉ Open in its own window')));
 }
 
@@ -539,13 +538,37 @@ function jobBar(p, data, rerender) {
 
 const jobText = (o) => [o.registration_number, o.title || o.customer_name].filter(Boolean).join(' · ');
 
+// 0.59.8 (the user's request): "Not planned" sits in the top row between the calendar and the chart, the jobs in two
+// rows that scroll sideways, with a search (number, reg. no., title, customer). The search survives the page's redraws.
+let unplannedQuery = '';
 function unplannedCard(data, rerender) {
   const list = data.unplanned;
-  return h('section', { class: 'card' },
-    h('h2', {}, `Not planned (${list.length})`),
-    h('p', { class: 'muted small' }, 'Work orders that are not done, without a time or a line on this planner. Drag one onto a line, or tap it.'),
-    list.length ? h('div', { class: 'pl-unplanned' }, list.map((o) => unplannedItem(o, data, rerender)))
-      : h('p', { class: 'empty' }, 'Everything is planned.'));
+  const items = list.map((o) => {
+    const el = unplannedItem(o, data, rerender);
+    el.dataset.find = [o.number, o.registration_number, (o.registration_number || '').replace(/\s/g, ''), o.title,
+      o.customer_name, o.make, o.model].filter(Boolean).join(' ').toLowerCase();
+    return el;
+  });
+  const box = h('div', { class: 'pl-unplanned' }, items);
+  const none = h('p', { class: 'muted small', hidden: true }, 'No work orders match the search.');
+  const search = h('input', { type: 'search', class: 'pl-un-search', placeholder: 'Search: no., reg. no., title, customer',
+    'aria-label': 'Search not planned work orders', value: unplannedQuery });
+  const filter = () => {
+    unplannedQuery = search.value;
+    const words = search.value.toLowerCase().replace(/^#/, '').split(/\s+/).filter(Boolean);
+    let shown = 0;
+    items.forEach((el) => {
+      const hit = words.every((w) => el.dataset.find.includes(w));
+      el.hidden = !hit;
+      if (hit) shown += 1;
+    });
+    none.hidden = shown > 0 || !items.length;
+  };
+  search.addEventListener('input', filter);
+  filter();
+  return h('section', { class: 'card pl-un-card', title: 'Work orders that are not done, without a time or a line on this planner. Drag one onto a line, or tap it.' },
+    h('div', { class: 'pl-un-head' }, h('h3', {}, `Not planned (${list.length})`), list.length ? search : null),
+    list.length ? [box, none] : h('p', { class: 'empty' }, 'Everything is planned.'));
 }
 
 function unplannedItem(o, data, rerender) {
