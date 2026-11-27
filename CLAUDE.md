@@ -1928,6 +1928,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.12 | Planner: the note under the board ("Planned / available hours …") removed |
 | 0.59.13 | Planner: scroll bars hidden (board, Not planned, legend); scrolling still works, a mouse wheel scrolls Not planned and the legend sideways (Shift + wheel on the board) |
 | 0.60.0 | **Parts per line + counter sale invoices:** each part line is In stock / To order / Ordered / Arrived (arrived parts go into the stock), the parts order status and the work order's "Parts arrived and ready" follow the lines; a work order's parts are handled on the work order only; the Parts orders page lists counter sales, which are invoiced on their own (migration 059) |
+| 0.60.1 | Planner: the refresh no longer jumps (the new page is swapped in only once the calendar and chart are filled in; scroll positions and the browsed calendar month are kept) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

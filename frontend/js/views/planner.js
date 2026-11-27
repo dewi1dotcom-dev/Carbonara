@@ -107,11 +107,20 @@ export async function plannerView(el, _params, host = el) {
     const q = new URLSearchParams({ team: teamId, start, days, ...(full ? { full: 1 } : {}), ...changes });
     location.hash = `#/planner?${q}`;
   };
+  // 0.60.1 (the user's report: the page jumped on every refresh): the new page is built off-screen and only swapped in
+  // once the calendar and the chart have their numbers, and the scroll positions (page, board, Not planned, legend)
+  // are put back, so a refresh doesn't move anything.
   const rerender = async () => {
     try {
       const fresh = h('div');
       await plannerView(fresh, [], host);
+      if (document.querySelector('.pl-job.dragging, .pl-ghost')) return;   // a drag started while it loaded
+      const keep =['.pl-scroll', '.pl-unplanned', '.pl-legend-strip']
+        .map((sel) => [sel, host.querySelector(sel)?.scrollLeft || 0]);
+      const y = window.scrollY;
       host.replaceChildren(...fresh.childNodes);
+      keep.forEach(([sel, x]) => { const n = host.querySelector(sel); if (n && x) n.scrollLeft = x; });
+      window.scrollTo(window.scrollX, y);
     } catch (e) { showError(e); }
   };
   current = rerender;
@@ -142,11 +151,10 @@ export async function plannerView(el, _params, host = el) {
     data.is_admin ? ['Job types', () => jobTypesDialog(rerender)] : null,
   ].filter(Boolean));
   // 0.59.8: no "Planner" heading (the menu says where you are); "Not planned" in the top row; Full screen in the toolbar.
+  const cal = calendarBox(teamId, start, go, data);
+  const chart = loadChart(teamId, start, go);
   append(el,
-    h('div', { class: 'pl-top' },
-      calendarBox(teamId, start, go, data),
-      unplannedCard(data, rerender),
-      loadChart(teamId, start, go)),
+    h('div', { class: 'pl-top' }, cal, unplannedCard(data, rerender), chart),
     // 0.59.9: Options first; the pinned legend in two rows right after the days dropdown.
     h('div', { class: 'toolbar planner-toolbar' },
       key.button,
@@ -160,14 +168,18 @@ export async function plannerView(el, _params, host = el) {
       full ? h('button', { class: 'btn', type: 'button', onClick: fullscreen }, '⛶ Full screen') : null),
     data.rows.length ? board(data, rerender) : h('div', { class: 'card notice' }, 'No lines yet. Use "Lines" to add people or places.'),
     full ? null : h('div', { class: 'pl-foot' }, h('button', { class: 'btn', type: 'button', onClick: openWindow }, '⧉ Open in its own window')));
+  // Finished only when the calendar and the chart are filled in (0.60.1), so a refresh swaps in a complete page.
+  await Promise.all([cal.ready, chart.ready].map((p) => Promise.resolve(p).catch(() => {})));
 }
 
 // ---------------------------------------------------------------- calendar, 7-day chart, legend (popup)
 
+let calKeep = null;
 /** A month to pick the day from; each day coloured by how full the team's people are. */
 function calendarBox(teamId, start, go, data) {
   const box = h('section', { class: 'card pl-cal' });
-  let month = start.slice(0, 7);
+  // The month browsed to with ‹ › survives the page's own refresh (0.60.1); a new day picked starts on its month.
+  let month = calKeep?.start === start ? calKeep.month : start.slice(0, 7);
   const draw = async () => {
     const first = `${month}-01`;
     const gridStart = addDays(first, -((weekday(first) + 6) % 7));
@@ -180,6 +192,7 @@ function calendarBox(teamId, start, go, data) {
     const shift = (k) => {
       const d = new Date(Date.UTC(y, m - 1 + k, 15));
       month = d.toISOString().slice(0, 7);
+      calKeep = { start, month };
       draw();
     };
     const heads = [0, 1, 2, 3, 4, 5, 6].map((i) => h('span', { class: 'pl-cal-dow' },
@@ -202,14 +215,14 @@ function calendarBox(teamId, start, go, data) {
         h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Later', onClick: () => shift(1) }, '›')),
       h('div', { class: 'pl-cal-grid' }, heads, cells));
   };
-  draw();
+  box.ready = draw();   // the page waits for it before it is swapped in (0.60.1: no jump)
   return box;
 }
 
 /** How full the next 7 working days are (from the day shown): planned / available hours of the people lines. */
 function loadChart(teamId, start, go) {
   const box = h('section', { class: 'card pl-chart' }, h('h3', {}, 'Booked, next 7 working days'));
-  api.get(`/planner/load?team_id=${teamId}&start=${start}&days=11`).then((list) => {
+  box.ready = api.get(`/planner/load?team_id=${teamId}&start=${start}&days=11`).then((list) => {
     const work = list.filter((d) => weekday(String(d.date)) % 6 !== 0).slice(0, 7);
     const bars = work.map((d) => {
       const iso = String(d.date);
