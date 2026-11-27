@@ -56,7 +56,7 @@ const pct = (d) => (d && d.available ? Math.round((d.planned / d.available) * 10
 // while a dialog is open or a job is being dragged. One set of listeners for the whole app.
 let current = null;
 const onPlanner = () => location.hash.startsWith('#/planner');
-const busyNow = () => document.querySelector('dialog[open], .pl-job.dragging, .pl-ghost');
+const busyNow = () => document.querySelector('dialog[open], .pl-job.dragging, .pl-ghost, .pl-legend-pop:not([hidden])');
 let hooked = false;
 function hookOnce() {
   if (hooked) return;
@@ -135,6 +135,7 @@ export async function plannerView(el, _params, host = el) {
     else document.documentElement.requestFullscreen?.().catch(() => {});
   };
 
+  const key = legend(data);
   append(el,
     h('div', { class: 'page-head pl-page-head' },
       h('div', {}, h('h1', {}, 'Planner'),
@@ -147,20 +148,21 @@ export async function plannerView(el, _params, host = el) {
         h('button', { class: 'btn', type: 'button', onClick: () => absenceDialog(null, data, rerender) }, '+ Absence'))),
     h('div', { class: 'pl-top' },
       calendarBox(teamId, start, go, data),
-      loadChart(teamId, start, go),
-      legendBox(data)),
+      loadChart(teamId, start, go)),
     h('div', { class: 'toolbar planner-toolbar' },
       teams.length > 1 ? teamSel : h('strong', { translate: 'no' }, data.team.name),
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Earlier', onClick: () => go({ start: addDays(start, -step) }) }, '◀'),
       dateIn,
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Later', onClick: () => go({ start: addDays(start, step) }) }, '▶'),
       h('button', { class: 'link', type: 'button', onClick: () => go({ start: osloTodayIso() }) }, 'Today'),
-      daySel),
+      daySel,
+      key.button),
+    key.strip,
     data.rows.length ? board(data, rerender) : h('div', { class: 'card notice' }, 'No lines yet. Use "Lines" to add people or places.'),
     unplannedCard(data, rerender));
 }
 
-// ---------------------------------------------------------------- calendar, 7-day chart, legend
+// ---------------------------------------------------------------- calendar, 7-day chart, legend (popup)
 
 /** A month to pick the day from; each day coloured by how full the team's people are. */
 function calendarBox(teamId, start, go, data) {
@@ -230,25 +232,88 @@ function loadChart(teamId, start, go) {
   return box;
 }
 
-function legendBox(data) {
+// Legend (0.59.5, the user's request): everything in a "Legend" popup; ticked items are always visible in a line above
+// the board. The choice is per browser (localStorage), so a wall screen and a phone can differ. Default: the job types.
+const LEGEND_KEY = 'carbonara.planner.legend';
+const ICONS = [['recall', '⚠️', 'Check for recalls'], ['arrived', '🔑', 'Car arrived'], ['clock', '⏱', 'Clock running'],
+  ['parts', '📦', 'Waiting for parts'], ['ready', '✅', 'Parts arrived and ready']];
+
+/** Every legend entry, grouped: { title, items: [{ key, marker, label, raw }] }. */
+function legendGroups(data) {
   const types = data.job_types.filter((t) => t.active);
-  return h('section', { class: 'card pl-legend' },
-    h('h3', {}, 'Job types'),
-    types.length ? h('ul', { class: 'pl-legend-list' }, types.map((t) => h('li', {},
-      h('span', { class: 'pl-swatch', style: `background:${t.color}` }), h('span', { translate: 'no' }, jobTypeName(t)))))
-      : h('p', { class: 'muted small' }, 'No job types.'),
-    h('h3', {}, 'Status'),
-    h('ul', { class: 'pl-legend-list' },
-      Object.entries(STATUS_MARK).map(([k, t]) => h('li', {}, h('span', { class: `pl-edge st-${k}` }), h('span', {}, t))),
-      h('li', {}, h('span', { class: 'pl-icon' }, '⚠️'), h('span', {}, 'Check for recalls')),
-      h('li', {}, h('span', { class: 'pl-icon' }, '🔑'), h('span', {}, 'Car arrived')),
-      h('li', {}, h('span', { class: 'pl-icon' }, '⏱'), h('span', {}, 'Clock running')),
-      h('li', {}, h('span', { class: 'pl-icon' }, '📦'), h('span', {}, 'Waiting for parts')),
-      h('li', {}, h('span', { class: 'pl-icon' }, '✅'), h('span', {}, 'Parts arrived and ready'))),
-    h('h3', {}, 'Absence'),
-    h('ul', { class: 'pl-legend-list' },
-      Object.entries(ABSENCE).map(([k, t]) => h('li', {}, h('span', { class: `pl-swatch abs-${k}` }), h('span', {}, t))),
-      h('li', {}, h('span', { class: 'pl-swatch pl-key-break' }), h('span', {}, 'Break'))));
+  return [
+    { title: 'Job types', items: types.map((t) => ({
+      key: `type:${t.id}`, marker: () => h('span', { class: 'pl-swatch', style: `background:${t.color}` }), label: jobTypeName(t), raw: true })) },
+    { title: 'Status', items: [
+      ...Object.entries(STATUS_MARK).map(([k, t]) => ({ key: `st:${k}`, marker: () => h('span', { class: `pl-edge st-${k}` }), label: t })),
+      ...ICONS.map(([k, icon, t]) => ({ key: `ic:${k}`, marker: () => h('span', { class: 'pl-icon' }, icon), label: t })),
+    ] },
+    { title: 'Absence', items: [
+      ...Object.entries(ABSENCE).map(([k, t]) => ({ key: `abs:${k}`, marker: () => h('span', { class: `pl-swatch abs-${k}` }), label: t })),
+      { key: 'break', marker: () => h('span', { class: 'pl-swatch pl-key-break' }), label: 'Break' },
+    ] },
+  ];
+}
+
+function pinnedKeys(data) {
+  try {
+    const saved = JSON.parse(localStorage.getItem(LEGEND_KEY) || 'null');
+    if (Array.isArray(saved)) return new Set(saved);
+  } catch { /* private window etc.: use the default */ }
+  return new Set(data.job_types.filter((t) => t.active).map((t) => `type:${t.id}`));
+}
+
+function savePinned(set) {
+  try { localStorage.setItem(LEGEND_KEY, JSON.stringify([...set])); } catch { /* not kept, still works now */ }
+}
+
+const legendItem = (it) => h('li', {}, it.marker(), h('span', it.raw ? { translate: 'no' } : {}, it.label));
+
+/** The "Legend" button with its popup, and the line of pinned items (returned separately, placed above the board). */
+function legend(data) {
+  const pinned = pinnedKeys(data);
+  const groups = legendGroups(data);
+  const strip = h('ul', { class: 'pl-legend-list pl-legend-strip' });
+  const drawStrip = () => {
+    const items = groups.flatMap((g) => g.items).filter((it) => pinned.has(it.key));
+    strip.replaceChildren(...items.map(legendItem));
+    strip.hidden = !items.length;
+  };
+  drawStrip();
+
+  const panel = h('div', { class: 'pl-legend-pop', hidden: true, role: 'dialog', 'aria-label': 'Legend' },
+    h('p', { class: 'muted small' }, 'Tick what should always be visible on the planner.'),
+    groups.map((g) => [
+      h('h3', {}, g.title),
+      g.items.length ? h('ul', { class: 'pl-legend-list pl-legend-pick' }, g.items.map((it) => {
+        const box = h('input', { type: 'checkbox', checked: pinned.has(it.key), 'aria-label': 'Always visible' });
+        box.addEventListener('change', () => {
+          if (box.checked) pinned.add(it.key); else pinned.delete(it.key);
+          savePinned(pinned);
+          drawStrip();
+        });
+        return h('li', {}, h('label', {}, box, it.marker(), h('span', it.raw ? { translate: 'no' } : {}, it.label)));
+      })) : h('p', { class: 'muted small' }, 'No job types.'),
+    ]).flat());
+
+  const btn = h('button', { class: 'btn', type: 'button', 'aria-expanded': 'false' }, 'Legend ▾');
+  const close = () => {
+    panel.hidden = true;
+    btn.setAttribute('aria-expanded', 'false');
+    document.removeEventListener('pointerdown', outside, true);
+    document.removeEventListener('keydown', esc, true);
+  };
+  const outside = (e) => { if (!wrap.contains(e.target)) close(); };
+  const esc = (e) => { if (e.key === 'Escape') close(); };
+  btn.addEventListener('click', () => {
+    if (!panel.hidden) { close(); return; }
+    panel.hidden = false;
+    btn.setAttribute('aria-expanded', 'true');
+    document.addEventListener('pointerdown', outside, true);
+    document.addEventListener('keydown', esc, true);
+  });
+  const wrap = h('div', { class: 'pl-legend-wrap' }, btn, panel);
+  return { button: wrap, strip };
 }
 
 // ---------------------------------------------------------------- the board

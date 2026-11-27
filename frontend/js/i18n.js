@@ -278,6 +278,8 @@ const NO = {
   'Open in its own window': 'Åpne i eget vindu',
   'Full screen': 'Fullskjerm',
   'Job types': 'Jobbtyper',
+  'Legend ▾': 'Forklaring ▾', 'Legend': 'Forklaring', 'Always visible': 'Alltid synlig',
+  'Tick what should always be visible on the planner.': 'Kryss av det som alltid skal vises i planleggeren.',
   'Job type': 'Jobbtype',
   'Booked, next 7 working days': 'Booket, neste 7 arbeidsdager',
   'The line marks 100 % (all available hours booked).': 'Streken viser 100 % (alle tilgjengelige timer booket).',
