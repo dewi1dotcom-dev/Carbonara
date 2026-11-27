@@ -1072,9 +1072,9 @@ body.planner-full .pl-page-head h1 { font-size: 1.3rem; margin: 0; }
   cursor: pointer; font-weight: normal; margin: 0; }
 .pl-legend-pick input[type=checkbox] { width: auto; margin: 0; }
 .pl-legend-pick label > :nth-child(2) { justify-self: center; box-sizing: border-box; }
-/* In the toolbar after the days dropdown (0.59.9): two rows, filled column by column. */
+/* In the toolbar after the days dropdown (0.59.9): two rows, filled column by column; pushed to the right edge (0.59.10). */
 .pl-legend-list.pl-legend-strip { display: grid; grid-auto-flow: column; grid-template-rows: repeat(2, auto); grid-template-columns: none;
-  grid-auto-columns: max-content; gap: .15rem 1.1rem; margin: 0 0 0 .4rem; flex: 1 1 auto; min-width: 0; overflow-x: auto; }
+  grid-auto-columns: max-content; gap: .15rem 1.1rem; margin: 0 0 0 auto; flex: 0 1 auto; min-width: 0; overflow-x: auto; }
 .pl-legend-strip li { grid-template-columns: 1.4rem auto; }
 .pl-swatch { display: inline-block; width: 1.1rem; height: .85rem; border-radius: 3px; border: 1px solid rgb(0 0 0 / .25); vertical-align: middle; flex: none; }
 .pl-swatch.abs-holiday { background: #7c3aed; } .pl-swatch.abs-away { background: #6b21a8; }

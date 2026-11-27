@@ -1895,6 +1895,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.7 | Planner head slimmed: no help text or "+ Absence" (an empty spot offers it); Lines + Job types in the "Options" popup (was "Legend"); "Open in its own window" at the bottom |
 | 0.59.8 | Planner: no "Planner" heading; "Not planned" moved to the top row between the calendar and the chart, jobs in two rows (scroll sideways) with a search |
 | 0.59.9 | Planner toolbar: "Options" first (left); the pinned legend in two rows right after the days dropdown |
+| 0.59.10 | Planner toolbar: the legend sits against the right edge |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
