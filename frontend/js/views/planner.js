@@ -455,8 +455,7 @@ function board(data, rerender) {
   return h('section', { class: 'card planner' },
     h('div', { class: 'pl-wrap' },
       h('div', { class: 'pl-names' }, h('div', { class: 'pl-corner' }), lanes.map((l) => l.name)),
-      h('div', { class: 'pl-scroll' }, head, lanes.map((l) => l.lane))),
-    h('p', { class: 'muted small' }, 'Planned / available hours on the days shown. A job booked on a place is also on its mechanic’s line.'));
+      h('div', { class: 'pl-scroll' }, head, lanes.map((l) => l.lane))));
 }
 
 /** One job on a line: drag to move (time + line), drag the right edge to change the estimate, tap to open. */
