@@ -213,7 +213,7 @@ function carForm(customerId, car, done) {
   const c = car || {};
   const text = (value, max, attrs = {}) => h('input', { type: 'text', maxlength: max, autocomplete: 'off', value: value ?? '', ...attrs });
   const inputs = {
-    registration_number: text(c.registration_number, 12, { class: 'mono' }),
+    registration_number: text(c.registration_number, 20, { class: 'mono' }), // room for a VIN (0.58.4)
     vin: text(c.vin, 40, { class: 'mono' }),
     make: text(c.make, 60), model: text(c.model, 80),
     model_year: text(c.model_year, 4, { inputmode: 'numeric' }),
@@ -222,10 +222,17 @@ function carForm(customerId, car, done) {
     note: h('textarea', { rows: 2, maxlength: 1000 }, c.note || ''),
   };
   const lookupBtn = h('button', { class: 'btn small', type: 'button' }, 'Look up at Statens vegvesen');
+  // The first field takes a registration number or a VIN (0.58.4, the user's request); an empty one looks up the VIN
+  // field instead. A VIN typed there moves to the VIN field, and the reg. no. comes from Statens vegvesen.
+  const isVin = (v) => /^[A-HJ-NPR-Z0-9]{17}$/.test(v.toUpperCase().replace(/[\s\-.]/g, ''));
   lookupBtn.addEventListener('click', () => busy(lookupBtn, async () => {
-    const reg = inputs.registration_number.value.trim();
-    if (!reg) { toast('Type the registration number first', 'error'); return; }
-    const r = await api.get(`/customer-cars/lookup?reg=${encodeURIComponent(reg)}`);
+    const typed = inputs.registration_number.value.trim() || inputs.vin.value.trim();
+    if (!typed) { toast('Type the registration number or VIN first', 'error'); return; }
+    const r = await api.get(`/customer-cars/lookup?reg=${encodeURIComponent(typed)}`);
+    if (isVin(typed)) {
+      inputs.registration_number.value = r.registration_number || '';
+      inputs.vin.value = r.vin || typed.toUpperCase().replace(/[\s\-.]/g, '');
+    }
     for (const k of CAR_FIELDS) if (r[k] != null && k in inputs && k !== 'note') inputs[k].value = r[k];
     toast('Filled in from Statens vegvesen', 'success');
     syncChassis();
@@ -244,7 +251,7 @@ function carForm(customerId, car, done) {
   syncChassis();
   const ok = h('button', { class: 'btn primary', type: 'submit' }, car ? 'Save' : 'Add car');
   const form = h('form', {},
-    h('div', { class: 'field' }, h('label', {}, 'Registration number'),
+    h('div', { class: 'field' }, h('label', {}, 'Registration number or VIN'),
       h('div', { class: 'toolbar' }, inputs.registration_number, lookupBtn)),
     field('VIN (chassis number)', inputs.vin),
     chassisBox,
@@ -254,6 +261,11 @@ function carForm(customerId, car, done) {
     h('div', { class: 'actions' }, ok));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
+    // a VIN typed in the first field without a lookup goes to the VIN field
+    if (isVin(inputs.registration_number.value) && !inputs.vin.value.trim()) {
+      inputs.vin.value = inputs.registration_number.value.toUpperCase().replace(/[\s\-.]/g, '');
+      inputs.registration_number.value = '';
+    }
     const body = Object.fromEntries(CAR_FIELDS.map((k) => [k, inputs[k].value?.trim?.() ?? inputs[k].value]));
     body.model_year = body.model_year ? Number(body.model_year) : null;
     for (const k of Object.keys(body)) if (body[k] === '') body[k] = null;

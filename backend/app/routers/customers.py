@@ -336,13 +336,16 @@ def set_owner(conn, car_id: int, customer_id: Optional[int], staff_id) -> None:
 
 @router.get("/customer-cars/lookup")
 def lookup(reg: str, _staff=Depends(require_register)):
-    """Statens vegvesen data for the car form (nothing is saved)."""
+    """Statens vegvesen data for the car form (nothing is saved). `reg` is a registration number or a 17-character
+    VIN (0.58.4, the user's request: the same field for both)."""
     if not vegvesen.is_configured():
         raise conflict("Statens vegvesen is not set up (API key on the System page)")
+    vin = vinlib.normalize(reg)
+    vin = vin if vinlib.is_valid_format(vin) else None
     try:
-        v = registry_values(reg)
+        v = registry_values(reg, vin=vin)
     except vegvesen.NotFound:
-        raise not_found("Registration number at Statens vegvesen")
+        raise not_found("VIN at Statens vegvesen" if vin else "Registration number at Statens vegvesen")
     except vegvesen.RegistryError as exc:
         raise HTTPException(502, f"Statens vegvesen: {exc}")
     return {"registration_number": v["registration_number"], "vin": v["vin"], "make": v["make"], "model": v["model"],

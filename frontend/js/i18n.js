@@ -1366,6 +1366,8 @@ const NO = {
   'The EU-kontroll deadline has passed – the car should not be driven.': 'EU-kontrollfristen er passert – bilen bør ikke kjøres.',
   'The EU-kontroll deadline is before the expected return:': 'EU-kontrollfristen er før bilen ventes tilbake:',
   'Rental car': 'Leiebil', 'Rental': 'Utleie', 'Registration number at Statens vegvesen': 'Registreringsnummeret hos Statens vegvesen',
+  'VIN at Statens vegvesen': 'Understellsnummeret hos Statens vegvesen', 'Registration number or VIN': 'Registreringsnummer eller understellsnummer',
+  'Type the registration number or VIN first': 'Skriv inn registreringsnummer eller understellsnummer først',
   'This car is out on rental; register the return first': 'Denne bilen er utleid; registrer innleveringen først',
   'This car is already out on rental': 'Denne bilen er allerede utleid',
   'This car was just rented out by someone else; reload and try again': 'Denne bilen ble nettopp leid ut av noen andre; last inn på nytt og prøv igjen',

@@ -142,15 +142,15 @@ def _me(request: Request) -> Optional[int]:
 # Statens vegvesen
 # --------------------------------------------------------------------------- #
 
-def registry_values(reg: str) -> dict:
-    """Look a registration number up at Statens vegvesen. Raises vegvesen.NotFound /
-    vegvesen.RegistryError (incl. NotConfigured)."""
-    item = vegvesen.fetch_by_regnr(reg)
+def registry_values(reg: str, vin: Optional[str] = None) -> dict:
+    """Look a registration number (or, with vin, a VIN; customer register 0.58.4) up at Statens vegvesen. Raises
+    vegvesen.NotFound / vegvesen.RegistryError (incl. NotConfigured)."""
+    item = vegvesen.fetch_by_vin(vin) if vin else vegvesen.fetch_by_regnr(reg)
     s = vegvesen.summary(item)
     f = vegvesen.extract(item)
     v = s["values"]
     return {
-        "registration_number": v.get("registration_number") or vegvesen.normalize_regnr(reg),
+        "registration_number": v.get("registration_number") or (None if vin else vegvesen.normalize_regnr(reg)),
         "vin": s["vin"], "make": v.get("make"), "model": v.get("model"), "color": v.get("color"),
         "fuel": v.get("fuel_type"),
         "eu_control_due": s["eu_control_due"], "eu_control_last_approved": s["eu_control_last_approved"],

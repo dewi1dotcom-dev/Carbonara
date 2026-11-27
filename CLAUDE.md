@@ -1378,7 +1378,7 @@ customers deleted after `retention_years`, and modules + another company + conse
   lock), private (first + last name) or company (company name, 9-digit org. no.), phone (`clean_phone`), e-mail, address,
   postal code, city, note. `customers.name` = display name. Delete (admins) = for good, not with open orders.
 - **Customer cars** (`customer_cars`, `#/customer-cars/:id`): **kept apart from `vehicles`**. Reg. no., VIN (unique),
-  make / model / year / colour / fuel / first registered (Statens vegvesen lookup by reg. no. via `rentals.registry_values`).
+  make / model / year / colour / fuel / first registered (Statens vegvesen lookup via `rentals.registry_values`: the first field takes a reg. no. **or a 17-character VIN** (0.58.4), an empty one looks up the VIN field; a VIN typed there moves to the VIN field).
   **Owners over time** (`car_ownerships`, one current per car): "Change owner" ends the current one and starts the new
   ("No owner now" = sold elsewhere / scrapped); adding a car that is already in the register (reg. no. or VIN) offers to
   change its owner instead. A customer can own several cars; earlier cars stay listed with their period.
@@ -1872,6 +1872,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.58.1 | Recalls: "Recalls found – create new work order" button moves the recall tasks (from the dialog or Sidekick) to a new work order; the first one says "Recalls: see work order #n." |
 | 0.58.2 | Work order page refreshes itself when you come back to its tab (and every 20 s while a recall check is due), so Sidekick's result shows without reloading |
 | 0.58.3 | "Recalls found – create new work order" no longer shows on the recall work order itself, nor for recalls already on another work order of the car (the box shows the last check and "Check again") |
+| 0.58.4 | Customer register car form: "Registration number or VIN" in one field; the Statens vegvesen lookup works by VIN too |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
