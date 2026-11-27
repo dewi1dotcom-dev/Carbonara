@@ -688,11 +688,7 @@ a.tile:hover { border-color: var(--primary); }
 .kiosk-card input, .kiosk-card textarea { font-size: 1.1rem; }
 .kiosk-card .chip { min-height: 48px; padding: .55rem 1rem; font-size: 1.05rem; }
 .kiosk-card .actions .btn.big { flex: 1; }
-/* While typing on the kiosk, the button row sticks to the bottom of the visible part, above the
-   keyboard (--kb = the part a keyboard laid over the page hides; 0 when the page is shrunk instead). */
-.kiosk-card.typing .actions { position: sticky; bottom: var(--kb, 0px); z-index: 2; margin: 1rem -1rem 0; padding: .6rem 1rem;
-  background: var(--surface); border-top: 1px solid var(--border); }
-html:has(.kiosk-card.typing) { scroll-padding-bottom: 5.5rem; } /* the focused field isn't left under the sticky row */
+/* 0.60.5: no sticky button row while typing any more; deliveries.js scrolls the page so the row sits above the keyboard. */
 input.kiosk-reg { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; font-size: 1.6rem;
   letter-spacing: .08em; text-transform: uppercase; max-width: 16rem; }
 /* Title row of the kiosk form (no language switch on the tablet since 0.33.12). */

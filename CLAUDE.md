@@ -638,9 +638,10 @@ the server is LAN-only, so no customer phones / public internet).
   locked-down tablet use Android screen pinning.
 - **On-screen keyboard (0.33.15):** no scrolling from code (0.33.14 did, and it brought the address bar back).
   On the tablet the viewport gets `interactive-widget=resizes-content` (the keyboard shrinks the page), and while
-  the **message field** has focus the button row is `position: sticky` at the bottom (`.typing`, lifted by `--kb` where
-  the keyboard is laid over the page, from `visualViewport`). Since 0.60.2 only for the message field (right above
-  the button): for reg. no. / name / phone it made the button jump up and float over the form.
+  the **message field** has focus the page is scrolled just far enough that the button row sits right above the
+  keyboard (`showButton`: the row's bottom vs. `visualViewport` offsetTop + height, on its resize and 350 ms after
+  focus; never scrolled up). 0.33.15–0.60.4 made the row `position: sticky` instead, which made it jump and float
+  (the user's report, 0.60.5: "it looks normal when I scroll all the way down").
 - **`/api/kiosk/*`** is the only API open without a staff session: `auth.require_kiosk_or_staff` (kiosk
   cookie or staff). Staff can preview the form at `#/kiosk` (deliveries sent from it are real).
 - **The form:** reg. no (stored uppercase without spaces, 2–8 letters/digits; linked to the car in the **customer register**
@@ -1949,6 +1950,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.60.2 | Kiosk form: the "Register delivery" button no longer jumps up and floats when the reg. no. / name / phone box is tapped (it only sticks above the keyboard for the message field) |
 | 0.60.3 | Kiosk: a reg. no. not in the customer register asks for the car's legal owner (first + last name, address), a contact phone that can be anyone's, and "I am not the owner" + the first name of the person delivering; shown on the staff delivery card (migration 060) |
 | 0.60.4 | Customer deliveries: the staff card lists the car's open work orders (links), or offers "New work order" (a car not in the customer register is first added from what was typed on the kiosk); the new work order is tied to the delivery and marked as arrived |
+| 0.60.5 | Kiosk: no floating button at all; tapping the message box scrolls the page so "Register delivery" sits right above the keyboard |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

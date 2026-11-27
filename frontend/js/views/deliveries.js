@@ -175,28 +175,29 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
    *   Browsers that lay the keyboard over the page (e.g. iPad) lift it by the hidden part (--kb).
    *   0.60.2 (the user's report: the button jumped up and floated when a text box was tapped): only for the message
    *   field, which sits right above the button; for the fields higher up (reg. no., name, phone) the button stays in
-   *   its place in the form instead of floating over it. */
+   *   its place in the form instead of floating over it.
+   * 0.60.5 (the user's report: it still floated for the message field; "the page should be scrolled the same distance
+   * as the height of the keyboard – it looks normal when I scroll all the way down"): no sticky row at all. When the
+   * message field has focus and the keyboard is up, the page is scrolled just far enough that the button row sits
+   * right above the keyboard (what scrolling down by hand gives); never scrolled the other way. */
   if (standalone) {
     const meta = document.querySelector('meta[name=viewport]');
     if (meta && !meta.content.includes('interactive-widget')) meta.content += ', interactive-widget=resizes-content';
   }
   const vv = window.visualViewport;
-  const onKeyboard = () => {
-    if (!page.isConnected) { vv?.removeEventListener('resize', onKeyboard); return; }
-    const form = page.querySelector('form.kiosk-card');
-    if (!form) return;
+  const showButton = () => {
+    if (!page.isConnected) { vv?.removeEventListener('resize', showButton); return; }
     const field = document.activeElement;
-    const inForm = !!field?.closest?.('form.kiosk-card');
-    // Tapping the stuck button itself must not drop it back down mid-tap (the click would miss).
-    const typing = inForm && (field.matches('textarea')
-      || (form.classList.contains('typing') && !!field.closest('.actions')));
-    const hidden = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
-    form.classList.toggle('typing', typing);
-    form.style.setProperty('--kb', `${typing ? hidden : 0}px`);
+    if (!field?.matches?.('form.kiosk-card textarea')) return;
+    const row = page.querySelector('form.kiosk-card .actions');
+    if (!row) return;
+    // The bottom of what can be seen: above a keyboard laid over the page (visualViewport), or the shrunk window.
+    const visibleBottom = vv ? vv.offsetTop + vv.height : window.innerHeight;
+    const gap = row.getBoundingClientRect().bottom + 12 - visibleBottom;
+    if (gap > 1) window.scrollBy({ top: gap, behavior: 'smooth' });
   };
-  vv?.addEventListener('resize', onKeyboard);
-  page.addEventListener('focusin', onKeyboard);
-  page.addEventListener('focusout', () => setTimeout(onKeyboard, 0)); // focus has moved on by then
+  vv?.addEventListener('resize', showButton);   // the keyboard opening changes the visible height
+  page.addEventListener('focusin', () => setTimeout(showButton, 350));   // keyboard already up (another field before)
 
   const frame = (...content) => page.replaceChildren(...[
     standalone ? null : h('div', { class: 'card notice' },
