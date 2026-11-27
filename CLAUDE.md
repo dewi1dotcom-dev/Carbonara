@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…056
+  migrations/           001…057
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -334,6 +334,7 @@ frontend/               no build step; plain ES modules
 | 054 | `parts_ready` | `work_orders.parts_ready_at / parts_ready_by` ("Parts arrived and ready", ticked by hand) |
 | 055 | `pdi_to_planner` | `pdi_orders.sent_via` also allows `'planner'` |
 | 056 | `work_order_recall_check` | `work_orders.recall_checked_at / recall_checked_by / recall_result` (none / found) |
+| 057 | `recall_work_order` | `work_orders.recall_work_order_id` (the recalls' own work order); job type "Recall / campaign" |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1139,6 +1140,12 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
   (`recall_checked_at / _by`, `recall_result`), each recall found becomes a task "Recall {code}: {title}", and for a car in
   stock also a `vehicle_recalls` row + the car's check (`_record_check`). Creating a work order answers `recall_due` (a toast);
   the planner marks unchecked jobs ⚠ (`recall_due` in `ORDER_SELECT`, `recalls.covered_sql`).
+  - **A work order of their own (0.58.0, the user's request):** "⚠ Found recalls" asks "Make a new work order for the
+    recalls?" (Yes ticked by default; `new_work_order` in `RecallCheckIn`). Yes → `_recall_work_order`: the same car and
+    customer, title "Recalls" / "Tilbakekallinger" (the user's language), job type "Recall / campaign" when it exists
+    (migration 057 adds it), the recalls as tasks, not planned, already counted as checked; the first work order gets
+    `recall_work_order_id`, and both cards link to each other (`work_order` / `from_work_order` in `recall_info`; events
+    `recall_work_order` / `recall_from`). No → tasks on this work order as before. Sidekick still adds them as tasks.
 - **Where they show:** "⚠ Open recall" badge (car header, Vehicles list and storage cards: `open_recalls` count); Today:
   "Recall checks due" (Today/tomorrow) and "Open recalls" (Needs attention); the morning `daily_due` notification counts
   them; **PDI orders** carry `open_recalls` (`OPEN_RECALLS_JSON` in `ORDER_SELECT`): in the e-mail ("TILBAKEKALLINGER /
@@ -1851,6 +1858,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.56.2 | Planner: everyone with a line on a team's planner can open it (its places included), also people added from another team or without a team; they get Planner + Work orders in the menu |
 | 0.57.0 | Work orders: recall check when the car's make is covered by a recall source (any car, also from the customer register): box at the top of the work order, recalls found become tasks, ⚠ in the planner, a reminder when the work order is created (migration 056) |
 | 0.57.1 | Recalls: Sidekick 1.6.0 also checks the cars on open work orders (customer register cars too; campaigns found become tasks, the work order counts as checked); "🔍 Check for recalls" on the work order and in the planner opens the recall source's website with the car filled in |
+| 0.58.0 | Work orders: recalls found can go on a new work order of their own (asked when saving them), linked from the work order that was checked (migration 057) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

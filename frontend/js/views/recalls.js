@@ -204,7 +204,8 @@ function addDialog(v, data, rerender, { asCheck, sourceId = null }) {
 
 /** The recall check on a work order (any car whose make a recall source covers, also from the customer register).
  *  o.recall from GET /work-orders/{id}: { sources, vin, registration_number, checked_at, result, checked_by_name,
- *  due, open_recalls }. Recalls found become tasks on the work order. */
+ *  due, open_recalls, work_order, from_work_order }. Recalls found become tasks on the work order, or (asked in the
+ *  dialog, 0.58.0) a new work order of their own that this one links to. */
 export function workOrderRecallCard(o, editable, rerender) {
   const r = o.recall;
   if (!r) return null;
@@ -217,10 +218,15 @@ export function workOrderRecallCard(o, editable, rerender) {
       r.vin ? h('button', { class: 'btn small', type: 'button', onClick: () => copy(r.vin, 'VIN') }, 'Copy VIN') : null,
       r.registration_number ? h('button', { class: 'btn small', type: 'button', onClick: () => copy(r.registration_number, 'Reg. no') }, 'Copy reg. no') : null)));
   const save = async (body) => {
-    await api.post(`/work-orders/${o.id}/recall-check`, body);
-    toast('Recall check saved', 'success');
+    const res = await api.post(`/work-orders/${o.id}/recall-check`, body);
+    toast(res.new_work_order ? `Work order #${res.new_work_order.number} made for the recalls` : 'Recall check saved', 'success');
     await rerender();
   };
+  // recalls put on a work order of their own (0.58.0): the link both ways
+  const moved = r.work_order ? h('div', { class: 'notice' }, h('span', {},
+    h('strong', {}, 'The recalls are on their own work order:'), ' ', h('a', { href: `#/work-orders/${r.work_order.id}` }, `#${r.work_order.number}`))) : null;
+  const from = r.from_work_order ? h('p', { class: 'small' }, h('span', {},
+    'Made from the recall check on work order:', ' ', h('a', { href: `#/work-orders/${r.from_work_order.id}` }, `#${r.from_work_order.number}`))) : null;
   const picker = sourcePicker(r.sources);
   const none = editable && r.sources.length ? h('button', { class: 'btn primary', type: 'button' }, '✓ No open recalls') : null;
   none?.addEventListener('click', () => busy(none, () => save({ result: 'none', source_id: picker.value() })));
@@ -241,6 +247,7 @@ export function workOrderRecallCard(o, editable, rerender) {
       h('span', {}, h('strong', {}, '⚠ Check for recalls'), ' · ',
         h('span', {}, 'A recall source covers this make. Look the car up and record the result.')),
       openBtn) : checked,
+    moved, from,
     r.open_recalls.length ? h('div', { class: 'notice' }, h('strong', {}, 'Open recalls on this car:'),
       h('ul', { class: 'plain' }, r.open_recalls.map((x) => h('li', {},
         x.code ? [h('span', { class: 'mono', translate: 'no' }, x.code), ' '] : null, h('span', { translate: 'no' }, x.title))))) : null,
@@ -258,11 +265,21 @@ function foundDialog(sourceId, save) {
     code.focus();
   };
   addRow();
+  // where the recalls go (0.58.0, the user's request): a new work order of their own (asked, ticked by default) or
+  // tasks on this one
+  const choice = (value, text, checked) => h('label', { class: 'check' },
+    h('input', { type: 'radio', name: 'recall-target', value, checked }), h('span', {}, text));
+  const target = h('fieldset', { class: 'recall-target' },
+    h('legend', {}, 'Make a new work order for the recalls?'),
+    choice('new', 'Yes, a new work order with the recalls (linked from this one)', true),
+    choice('here', 'No, add them as tasks on this work order', false));
   const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
   const form = h('form', {},
-    h('p', { class: 'muted small' }, 'Add each recall the brand’s system shows for this car. They are added to the work order’s tasks.'),
+    h('p', { class: 'muted small' }, 'Add each recall the brand’s system shows for this car.'),
     list,
-    h('div', { class: 'actions spread' }, h('button', { class: 'link', type: 'button', onClick: addRow }, '+ Another recall'), ok));
+    h('div', { class: 'actions spread' }, h('button', { class: 'link', type: 'button', onClick: addRow }, '+ Another recall')),
+    target,
+    h('div', { class: 'actions' }, ok));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const recalls = [...list.querySelectorAll('.recall-found-row')].map((row) => {
@@ -270,7 +287,8 @@ function foundDialog(sourceId, save) {
       return { code: c.value.trim() || null, title: t.value.trim() };
     }).filter((x) => x.title);
     if (!recalls.length) { toast('Describe the recall', 'error'); return; }
-    busy(ok, async () => { await save({ result: 'found', source_id: sourceId, recalls }); close(); });
+    const newWo = form.querySelector('input[name=recall-target]:checked')?.value !== 'here';
+    busy(ok, async () => { await save({ result: 'found', source_id: sourceId, recalls, new_work_order: newWo }); close(); });
   });
   const { close } = openDialog('Recalls found', form);
 }

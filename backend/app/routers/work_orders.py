@@ -426,7 +426,7 @@ def follow_pdi(conn, wo_id: int, planned_at, staff_id) -> None:
                                               "planned_at": {"from": o["planned_at"], "to": planned_at}})
 
 
-def add_tasks(conn, wo_id: int, texts: list[str], description: Optional[str], staff_id) -> None:
+def add_tasks(conn, wo_id: int, texts: list[str], description: Optional[str], staff_id, source: str = "pdi") -> None:
     """A PDI order sent again after a change: new items are added to the work order's tasks (ticked ones are kept)."""
     o = conn.execute("SELECT status, tasks, description FROM work_orders WHERE id = %s FOR UPDATE", (wo_id,)).fetchone()
     if not o or o["status"] not in ACTIVE:
@@ -439,7 +439,7 @@ def add_tasks(conn, wo_id: int, texts: list[str], description: Optional[str], st
     tasks = list(o["tasks"] or []) + _tasks(new)
     conn.execute("UPDATE work_orders SET tasks = %s, description = %s, updated_at = now(), updated_by = %s WHERE id = %s",
                  (Jsonb(tasks[:MAX_TASKS]), desc, staff_id, wo_id))
-    _event(conn, wo_id, "tasks", staff_id, {"added": len(new), "source": "pdi"})
+    _event(conn, wo_id, "tasks", staff_id, {"added": len(new), "source": source})
 
 
 class TaskIn(BaseModel):
@@ -609,7 +609,8 @@ def recall_info(conn, wo_id: int) -> Optional[dict]:
     """The recall check of a work order: the sources that cover the car's make (None when none do and the car has no
     open recalls), whether it was checked, and for a car in stock its open recalls."""
     r = conn.execute(
-        """SELECT w.vehicle_id, w.status, w.recall_checked_at, w.recall_result, s.name AS checked_by_name,
+        """SELECT w.vehicle_id, w.status, w.recall_checked_at, w.recall_result, w.recall_work_order_id,
+                  s.name AS checked_by_name,
                   coalesce(cc.make, v.make) AS make, coalesce(cc.vin, v.vin) AS vin,
                   coalesce(cc.registration_number, v.registration_number) AS registration_number
              FROM work_orders w LEFT JOIN vehicles v ON v.id = w.vehicle_id
@@ -622,11 +623,17 @@ def recall_info(conn, wo_id: int) -> Optional[dict]:
     open_recalls = conn.execute(
         "SELECT id, code, title, certainty FROM vehicle_recalls WHERE vehicle_id = %s AND status = 'open' "
         "ORDER BY created_at", (r["vehicle_id"],)).fetchall() if r["vehicle_id"] else []
-    if not sources and not open_recalls:
+    # the recalls' own work order made from this one's check, and the work order this one was made from (0.58.0)
+    link_sql = "SELECT id, number, status FROM work_orders WHERE "
+    moved_to = conn.execute(link_sql + "id = %s", (r["recall_work_order_id"],)).fetchone() \
+        if r["recall_work_order_id"] else None
+    made_from = conn.execute(link_sql + "recall_work_order_id = %s ORDER BY id LIMIT 1", (wo_id,)).fetchone()
+    if not sources and not open_recalls and not moved_to and not made_from:
         return None
     return {"sources": sources, "vin": r["vin"], "registration_number": r["registration_number"],
             "checked_at": r["recall_checked_at"], "result": r["recall_result"], "checked_by_name": r["checked_by_name"],
-            "due": bool(sources) and not r["recall_checked_at"] and r["status"] in ACTIVE, "open_recalls": open_recalls}
+            "due": bool(sources) and not r["recall_checked_at"] and r["status"] in ACTIVE, "open_recalls": open_recalls,
+            "work_order": moved_to, "from_work_order": made_from}
 
 
 class RecallFoundIn(BaseModel):
@@ -638,12 +645,33 @@ class RecallCheckIn(BaseModel):
     result: Literal["none", "found"]
     source_id: Optional[int] = None
     recalls: list[RecallFoundIn] = Field(default_factory=list, max_length=20)
+    new_work_order: bool = False  # the recalls go on a new work order of their own (0.58.0)
+
+
+def _recall_work_order(conn, o: dict, texts: list[str], staff: dict) -> dict:
+    """A new work order for the recalls found on work order o: the same car and customer, the recalls as tasks, not
+    planned (it shows under "Not planned" in the planner), already counted as checked. o gets the link."""
+    no = (staff.get("language") or "en") == "no"  # title and description are data: written in the user's language
+    jt = conn.execute("SELECT id FROM job_types WHERE active AND lower(name) = 'recall / campaign' ORDER BY id LIMIT 1"
+                      ).fetchone()
+    row = create_work_order(
+        conn, staff["id"], vehicle_id=o["vehicle_id"], customer_car_id=o["customer_car_id"],
+        customer_id=o["customer_id"], title="Tilbakekallinger" if no else "Recalls",
+        description=(f"Fra tilbakekallingssjekken på arbeidsordre #{o['number']}." if no
+                     else f"From the recall check on work order #{o['number']}."),
+        tasks=texts, job_type_id=jt["id"] if jt else None)
+    conn.execute("UPDATE work_orders SET recall_checked_at = now(), recall_checked_by = %s, recall_result = 'found' "
+                 "WHERE id = %s", (staff["id"], row["id"]))
+    conn.execute("UPDATE work_orders SET recall_work_order_id = %s WHERE id = %s", (row["id"], o["id"]))
+    _event(conn, row["id"], "recall_from", staff["id"], {"work_order_id": o["id"], "number": o["number"]})
+    _event(conn, o["id"], "recall_work_order", staff["id"], {"work_order_id": row["id"], "number": row["number"]})
+    return row
 
 
 @router.post("/work-orders/{wo_id}/recall-check")
 def recall_check(wo_id: int, body: RecallCheckIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
-    """The result of the recall check: none, or the recalls found (each becomes a task on the work order; a car in
-    stock also gets them as recalls and the check on the car, as on the car page)."""
+    """The result of the recall check: none, or the recalls found (each becomes a task on the work order, or on a new
+    work order of their own; a car in stock also gets them as recalls and the check on the car, as on the car page)."""
     o = _order(conn, wo_id, lock=True)
     _not_locked(o)
     source_id = recalls._source_id(conn, body.source_id)
@@ -652,10 +680,14 @@ def recall_check(wo_id: int, body: RecallCheckIn, conn=Depends(get_conn), staff=
         raise bad_request("Add the recalls that were found")
     conn.execute("UPDATE work_orders SET recall_checked_at = now(), recall_checked_by = %s, recall_result = %s, "
                  "updated_at = now(), updated_by = %s WHERE id = %s", (staff["id"], body.result, staff["id"], wo_id))
+    new_wo = None
     if found:
         texts = [f"Recall {x.code.strip()}: {x.title.strip()}" if (x.code or "").strip() else f"Recall: {x.title.strip()}"
                  for x in found]
-        add_tasks(conn, wo_id, texts, o["description"], staff["id"])
+        if body.new_work_order:
+            new_wo = _recall_work_order(conn, o, texts, staff)
+        else:
+            add_tasks(conn, wo_id, texts, o["description"], staff["id"], source="recall")
     v = conn.execute("SELECT * FROM vehicles WHERE id = %s AND deleted_at IS NULL", (o["vehicle_id"],)).fetchone() \
         if o["vehicle_id"] else None
     if v:
@@ -670,4 +702,5 @@ def recall_check(wo_id: int, body: RecallCheckIn, conn=Depends(get_conn), staff=
             log_event(conn, v["id"], "recall_added", staff_id=staff["id"], data={"code": code, "title": x.title.strip()})
         recalls._record_check(conn, v, source_id, body.result, staff["id"], None)
     _event(conn, wo_id, "recall_check", staff["id"], {"result": body.result, "count": len(found)})
-    return {"id": wo_id, "recall": recall_info(conn, wo_id)}
+    return {"id": wo_id, "recall": recall_info(conn, wo_id),
+            "new_work_order": {"id": new_wo["id"], "number": new_wo["number"]} if new_wo else None}

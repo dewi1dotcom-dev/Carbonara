@@ -238,6 +238,7 @@ const EVENT = {
   created: 'Work order created', updated: 'Details changed', tasks: 'Tasks changed', status: 'Status changed',
   parts_order: 'Parts order made', extra_lines: 'Other charges changed', invoiced: 'Invoiced', credited: 'Invoice credited',
   arrived: 'Car arrived', not_arrived: 'Not arrived after all', parts_ready: 'Parts arrived and ready', parts_not_ready: 'Parts not ready after all',
+  recall_check: 'Checked for recalls', recall_work_order: 'Recalls put on a new work order', recall_from: 'Made from a recall check',
 };
 
 function eventDetail(e) {
@@ -249,7 +250,11 @@ function eventDetail(e) {
       h('a', { href: `#/invoices/${d.credit_note_id}` }, `Credit note no. ${d.credit_note_number}`)];
   }
   if (e.kind === 'status') return [h('span', {}, WO_STATUS[d.from] ?? d.from), ' → ', h('span', {}, WO_STATUS[d.to] ?? d.to)];
-  if (e.kind === 'tasks') return h('span', {}, `${d.done}/${d.count}`);
+  if (e.kind === 'tasks') return d.added != null ? h('span', {}, `+${d.added}`) : h('span', {}, `${d.done}/${d.count}`);
+  if (e.kind === 'recall_check') return h('span', {}, d.result === 'found' ? `Found: ${d.count}` : 'No open recalls');
+  if (e.kind === 'recall_work_order' || e.kind === 'recall_from') {
+    return h('a', { href: `#/work-orders/${d.work_order_id}` }, `Work order #${d.number}`);
+  }
   if (e.kind === 'parts_order') return h('a', { href: `#/parts-orders/${d.order_id}` }, `Parts order #${d.order_no}`);
   if (e.kind === 'updated' && d.estimated_minutes) {
     return [h('span', {}, 'Estimated hours'), `: ${hoursText(d.estimated_minutes.from) || '–'} → ${hoursText(d.estimated_minutes.to) || '–'}`];
