@@ -304,6 +304,16 @@ function board(data, rerender) {
     return h('div', { class: 'pl-break', style: `left:${l}px;width:${(Math.min(z, we) - Math.max(a, ws)) * PX}px` });
   }).filter(Boolean)));
 
+  // Hour and half-hour lines, placed from the same minutes as the header ticks (0.59.3: the old
+  // fixed 96 px background didn't follow the zoom). One layer per day; it never takes clicks.
+  const hourOff = (Math.ceil(ws / 60) * 60 - ws) * PX;
+  const halfOff = (((Math.ceil(ws / 30) * 30 - ws) * PX) + (Math.ceil(ws / 60) * 60 === Math.ceil(ws / 30) * 30 ? 30 * PX : 0));
+  const gridLines = () => days.map((d, i) => h('div', {
+    class: 'pl-grid',
+    style: `left:${i * (dayW + GAP)}px;width:${dayW}px;background-size:${60 * PX}px 100%,${60 * PX}px 100%;`
+      + `background-position:${hourOff}px 0,${halfOff}px 0`,
+  }));
+
   // "Now" line.
   const nowLocal = `${osloTodayIso()}T${new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Oslo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date())}`;
   const nowX = days.includes(nowLocal.slice(0, 10)) && minOf(nowLocal) >= ws && minOf(nowLocal) <= we ? xOf(nowLocal) : null;
@@ -345,6 +355,7 @@ function board(data, rerender) {
     const laneH = 12 + Math.max(1, ends.length) * ROW_H;
     const id = r.kind === 'place' ? r.place_id : r.staff_id;
     const lane = h('div', { class: `pl-lane${r.kind === 'place' ? ' place' : ''}`, style: `width:${width}px;height:${laneH}px`, 'data-kind': r.kind, 'data-id': id },
+      gridLines(),
       breakStripes(),
       absences.map(({ a, x1, x2 }) => h('button', {
         class: `pl-absence abs-${a.kind}`, type: 'button', style: `left:${x1}px;width:${Math.max(x2 - x1, 8)}px`,

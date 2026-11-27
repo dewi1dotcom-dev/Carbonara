@@ -1888,6 +1888,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.0 | Customer register cars: first registered in Norway (imported), current owner registered and EU-kontroll (last approved, deadline with the usual badge) from Statens vegvesen, not changeable; refreshed by the worker (migration 058) |
 | 0.59.1 | Customer register cars: "First registered" is no longer in the car form; Statens vegvesen sets it (shown on the Statens vegvesen card) |
 | 0.59.2 | Customer register cars: Statens vegvesen lookup by VIN first (a VIN never changes); the reg. no. follows Statens vegvesen (new or replaced plates) and missing make / model / colour / fuel are filled in |
+| 0.59.3 | Planner: grid lines placed on the hours (they drifted with the zoom), plus fainter half-hour lines (`.pl-grid` per day) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

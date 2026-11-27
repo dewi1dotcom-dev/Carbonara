@@ -955,8 +955,11 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .pl-ticks { position: relative; height: 20px; }
 .pl-tick { position: absolute; top: 2px; font-size: .75rem; color: var(--muted); border-left: 1px solid var(--border); padding-left: 2px; }
 .pl-tick.half { height: 8px; opacity: .6; }
-.pl-lane { position: relative; border-bottom: 1px solid var(--border); cursor: cell;
-  background-image: repeating-linear-gradient(90deg, transparent 0 95px, var(--border) 95px 96px); }
+.pl-lane { position: relative; border-bottom: 1px solid var(--border); cursor: cell; }
+/* Hour lines (as the header ticks) and fainter half-hour lines; sizes / positions set per day in planner.js. */
+.pl-grid { position: absolute; top: 0; bottom: 0; pointer-events: none; background-repeat: repeat-x;
+  background-image: linear-gradient(90deg, var(--border) 0 1px, transparent 1px),
+    linear-gradient(90deg, rgb(127 127 127 / .14) 0 1px, transparent 1px); }
 .pl-break { position: absolute; top: 0; bottom: 0; pointer-events: auto;
   background: repeating-linear-gradient(45deg, rgb(127 127 127 / .14) 0 4px, transparent 4px 9px); }
 .pl-weekend { position: absolute; top: 0; bottom: 0; background: rgb(127 127 127 / .12); }
