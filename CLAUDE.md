@@ -1889,6 +1889,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.1 | Customer register cars: "First registered" is no longer in the car form; Statens vegvesen sets it (shown on the Statens vegvesen card) |
 | 0.59.2 | Customer register cars: Statens vegvesen lookup by VIN first (a VIN never changes); the reg. no. follows Statens vegvesen (new or replaced plates) and missing make / model / colour / fuel are filled in |
 | 0.59.3 | Planner: grid lines placed on the hours (they drifted with the zoom), plus fainter half-hour lines (`.pl-grid` per day) |
+| 0.59.4 | Planner legend: items in equal columns, swatches and icons in one fixed-width slot so the texts line up |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
