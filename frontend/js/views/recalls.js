@@ -225,6 +225,20 @@ export function workOrderRecallCard(o, editable, rerender) {
   // recalls put on a work order of their own (0.58.0): the link both ways
   const moved = r.work_order ? h('div', { class: 'notice' }, h('span', {},
     h('strong', {}, 'The recalls are on their own work order:'), ' ', h('a', { href: `#/work-orders/${r.work_order.id}` }, `#${r.work_order.number}`))) : null;
+  // "Recalls found – create new work order" (0.58.1, the user's request): moves the recall tasks (from the dialog or
+  // Sidekick) to a new work order; this one then links to it
+  let moveBtn = null;
+  if (editable && r.movable) {
+    moveBtn = h('button', { class: 'btn primary', type: 'button' }, '⚠ Recalls found – create new work order');
+    moveBtn.addEventListener('click', () => busy(moveBtn, async () => {
+      if (!confirm(`Move the ${r.movable} recall task(s) to a new work order?`)) return;
+      const res = await api.post(`/work-orders/${o.id}/recall-work-order`, {});
+      toast(`Work order #${res.new_work_order.number} made for the recalls`, 'success');
+      await rerender();
+    }));
+  }
+  const movable = moveBtn ? h('div', { class: 'notice warn recall-due-line' },
+    h('span', {}, `${r.movable} recall task(s) on this work order.`), moveBtn) : null;
   const from = r.from_work_order ? h('p', { class: 'small' }, h('span', {},
     'Made from the recall check on work order:', ' ', h('a', { href: `#/work-orders/${r.from_work_order.id}` }, `#${r.from_work_order.number}`))) : null;
   const picker = sourcePicker(r.sources);
@@ -247,7 +261,7 @@ export function workOrderRecallCard(o, editable, rerender) {
       h('span', {}, h('strong', {}, '⚠ Check for recalls'), ' · ',
         h('span', {}, 'A recall source covers this make. Look the car up and record the result.')),
       openBtn) : checked,
-    moved, from,
+    movable, moved, from,
     r.open_recalls.length ? h('div', { class: 'notice' }, h('strong', {}, 'Open recalls on this car:'),
       h('ul', { class: 'plain' }, r.open_recalls.map((x) => h('li', {},
         x.code ? [h('span', { class: 'mono', translate: 'no' }, x.code), ' '] : null, h('span', { translate: 'no' }, x.title))))) : null,
@@ -265,21 +279,12 @@ function foundDialog(sourceId, save) {
     code.focus();
   };
   addRow();
-  // where the recalls go (0.58.0, the user's request): a new work order of their own (asked, ticked by default) or
-  // tasks on this one
-  const choice = (value, text, checked) => h('label', { class: 'check' },
-    h('input', { type: 'radio', name: 'recall-target', value, checked }), h('span', {}, text));
-  const target = h('fieldset', { class: 'recall-target' },
-    h('legend', {}, 'Make a new work order for the recalls?'),
-    choice('new', 'Yes, a new work order with the recalls (linked from this one)', true),
-    choice('here', 'No, add them as tasks on this work order', false));
+  // they become tasks here, like Sidekick's; "Recalls found – create new work order" then moves them (0.58.1)
   const ok = h('button', { class: 'btn primary', type: 'submit' }, 'Save');
   const form = h('form', {},
-    h('p', { class: 'muted small' }, 'Add each recall the brand’s system shows for this car.'),
+    h('p', { class: 'muted small' }, 'Add each recall the brand’s system shows for this car. They are added to the work order’s tasks.'),
     list,
-    h('div', { class: 'actions spread' }, h('button', { class: 'link', type: 'button', onClick: addRow }, '+ Another recall')),
-    target,
-    h('div', { class: 'actions' }, ok));
+    h('div', { class: 'actions spread' }, h('button', { class: 'link', type: 'button', onClick: addRow }, '+ Another recall'), ok));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const recalls = [...list.querySelectorAll('.recall-found-row')].map((row) => {
@@ -287,8 +292,7 @@ function foundDialog(sourceId, save) {
       return { code: c.value.trim() || null, title: t.value.trim() };
     }).filter((x) => x.title);
     if (!recalls.length) { toast('Describe the recall', 'error'); return; }
-    const newWo = form.querySelector('input[name=recall-target]:checked')?.value !== 'here';
-    busy(ok, async () => { await save({ result: 'found', source_id: sourceId, recalls, new_work_order: newWo }); close(); });
+    busy(ok, async () => { await save({ result: 'found', source_id: sourceId, recalls }); close(); });
   });
   const { close } = openDialog('Recalls found', form);
 }

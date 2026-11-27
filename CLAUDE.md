@@ -1140,12 +1140,16 @@ when booking a PDI"). The plan (user's notes, Carbonara-recalls-notes.txt): phas
   (`recall_checked_at / _by`, `recall_result`), each recall found becomes a task "Recall {code}: {title}", and for a car in
   stock also a `vehicle_recalls` row + the car's check (`_record_check`). Creating a work order answers `recall_due` (a toast);
   the planner marks unchecked jobs ⚠ (`recall_due` in `ORDER_SELECT`, `recalls.covered_sql`).
+  - **A work order of their own (0.58.0; a button since 0.58.1, the user's request):** recalls found (the dialog or
+    Sidekick) become tasks on the work order; while it has recall tasks not done ("Recall …", `_is_recall_task`;
+    `movable` in `recall_info`), the recall box shows "⚠ Recalls found – create new work order"
+    (`POST /work-orders/{id}/recall-work-order`) → those tasks move to a new work order (`_recall_work_order`: same car and
+    customer, title "Recalls" / "Tilbakekallinger" in the user's language, job type "Recall / campaign" when it exists
+    (migration 057 adds it), not planned, already counted as checked). The first work order gets `recall_work_order_id`
+    and the line "Recalls: see work order #n." in its description; both recall boxes link to each other (`work_order` /
+    `from_work_order`; events `recall_work_order` / `recall_from`). (`new_work_order` in `RecallCheckIn` does the same
+    in one step; the dialog no longer offers it.)
   - **A work order of their own (0.58.0, the user's request):** "⚠ Found recalls" asks "Make a new work order for the
-    recalls?" (Yes ticked by default; `new_work_order` in `RecallCheckIn`). Yes → `_recall_work_order`: the same car and
-    customer, title "Recalls" / "Tilbakekallinger" (the user's language), job type "Recall / campaign" when it exists
-    (migration 057 adds it), the recalls as tasks, not planned, already counted as checked; the first work order gets
-    `recall_work_order_id`, and both cards link to each other (`work_order` / `from_work_order` in `recall_info`; events
-    `recall_work_order` / `recall_from`). No → tasks on this work order as before. Sidekick still adds them as tasks.
 - **Where they show:** "⚠ Open recall" badge (car header, Vehicles list and storage cards: `open_recalls` count); Today:
   "Recall checks due" (Today/tomorrow) and "Open recalls" (Needs attention); the morning `daily_due` notification counts
   them; **PDI orders** carry `open_recalls` (`OPEN_RECALLS_JSON` in `ORDER_SELECT`): in the e-mail ("TILBAKEKALLINGER /
@@ -1859,6 +1863,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.57.0 | Work orders: recall check when the car's make is covered by a recall source (any car, also from the customer register): box at the top of the work order, recalls found become tasks, ⚠ in the planner, a reminder when the work order is created (migration 056) |
 | 0.57.1 | Recalls: Sidekick 1.6.0 also checks the cars on open work orders (customer register cars too; campaigns found become tasks, the work order counts as checked); "🔍 Check for recalls" on the work order and in the planner opens the recall source's website with the car filled in |
 | 0.58.0 | Work orders: recalls found can go on a new work order of their own (asked when saving them), linked from the work order that was checked (migration 057) |
+| 0.58.1 | Recalls: "Recalls found – create new work order" button moves the recall tasks (from the dialog or Sidekick) to a new work order; the first one says "Recalls: see work order #n." |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

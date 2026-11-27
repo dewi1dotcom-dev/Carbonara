@@ -609,7 +609,7 @@ def recall_info(conn, wo_id: int) -> Optional[dict]:
     """The recall check of a work order: the sources that cover the car's make (None when none do and the car has no
     open recalls), whether it was checked, and for a car in stock its open recalls."""
     r = conn.execute(
-        """SELECT w.vehicle_id, w.status, w.recall_checked_at, w.recall_result, w.recall_work_order_id,
+        """SELECT w.vehicle_id, w.status, w.recall_checked_at, w.recall_result, w.recall_work_order_id, w.tasks,
                   s.name AS checked_by_name,
                   coalesce(cc.make, v.make) AS make, coalesce(cc.vin, v.vin) AS vin,
                   coalesce(cc.registration_number, v.registration_number) AS registration_number
@@ -633,7 +633,10 @@ def recall_info(conn, wo_id: int) -> Optional[dict]:
     return {"sources": sources, "vin": r["vin"], "registration_number": r["registration_number"],
             "checked_at": r["recall_checked_at"], "result": r["recall_result"], "checked_by_name": r["checked_by_name"],
             "due": bool(sources) and not r["recall_checked_at"] and r["status"] in ACTIVE, "open_recalls": open_recalls,
-            "work_order": moved_to, "from_work_order": made_from}
+            "work_order": moved_to, "from_work_order": made_from,
+            # recall tasks that "Recalls found – create new work order" can move (0.58.1)
+            "movable": 0 if moved_to or r["status"] not in ACTIVE
+            else sum(1 for t in r["tasks"] or [] if _is_recall_task(t) and not t.get("done"))}
 
 
 class RecallFoundIn(BaseModel):
@@ -662,10 +665,41 @@ def _recall_work_order(conn, o: dict, texts: list[str], staff: dict) -> dict:
         tasks=texts, job_type_id=jt["id"] if jt else None)
     conn.execute("UPDATE work_orders SET recall_checked_at = now(), recall_checked_by = %s, recall_result = 'found' "
                  "WHERE id = %s", (staff["id"], row["id"]))
-    conn.execute("UPDATE work_orders SET recall_work_order_id = %s WHERE id = %s", (row["id"], o["id"]))
+    # the first work order says where the recalls went, in its "Work to perform" text (0.58.1, the user's request)
+    line = (f"Tilbakekallinger: se arbeidsordre #{row['number']}." if no
+            else f"Recalls: see work order #{row['number']}.")
+    cur = conn.execute("SELECT description FROM work_orders WHERE id = %s", (o["id"],)).fetchone()["description"]
+    conn.execute("UPDATE work_orders SET recall_work_order_id = %s, description = %s WHERE id = %s",
+                 (row["id"], _text(f"{cur}\n\n{line}" if cur else line, 5000), o["id"]))
     _event(conn, row["id"], "recall_from", staff["id"], {"work_order_id": o["id"], "number": o["number"]})
     _event(conn, o["id"], "recall_work_order", staff["id"], {"work_order_id": row["id"], "number": row["number"]})
     return row
+
+
+def _is_recall_task(t: dict) -> bool:
+    """A task made from a recall found (the dialog or Sidekick): "Recall {code}: {title}" or "Recall: {title}"."""
+    text = str(t.get("text") or "")
+    return text.startswith("Recall ") or text.startswith("Recall:")
+
+
+@router.post("/work-orders/{wo_id}/recall-work-order")
+def recall_work_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_orders)):
+    """"Recalls found – create new work order" (0.58.1, the user's request): the recall tasks not done yet (added by
+    the recall dialog or Sidekick) move from this work order to a new one of their own; this one links to it."""
+    o = _order(conn, wo_id, lock=True)
+    _not_locked(o)
+    if o["recall_work_order_id"]:
+        raise conflict("The recalls are already on their own work order")
+    tasks = list(o["tasks"] or [])
+    move = [t for t in tasks if _is_recall_task(t) and not t.get("done")]
+    if not move:
+        raise bad_request("This work order has no recall tasks to move")
+    keep = [t for t in tasks if t not in move]
+    conn.execute("UPDATE work_orders SET tasks = %s, updated_at = now(), updated_by = %s WHERE id = %s",
+                 (Jsonb(keep), staff["id"], wo_id))
+    _event(conn, wo_id, "tasks", staff["id"], {"done": sum(1 for t in keep if t.get("done")), "count": len(keep)})
+    new_wo = _recall_work_order(conn, o, [t["text"] for t in move], staff)
+    return {"id": wo_id, "new_work_order": {"id": new_wo["id"], "number": new_wo["number"]}}
 
 
 @router.post("/work-orders/{wo_id}/recall-check")

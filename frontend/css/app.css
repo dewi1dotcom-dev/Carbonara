@@ -1073,8 +1073,4 @@ body.planner-full .pl-page-head h1 { font-size: 1.3rem; margin: 0; }
 .card.recall-due { border-color: var(--warn); }
 .recall-found-list { display: grid; gap: .4rem; margin-bottom: .5rem; }
 .recall-found-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .5rem; }
-.recall-target { border: 1px solid var(--border, #ccc); border-radius: 8px; padding: .4rem .8rem .7rem; margin: .8rem 0 0; }
-.recall-target legend { font-weight: 600; padding: 0 .3rem; }
-.recall-target label.check { margin-top: .5rem; align-items: flex-start; }
-.recall-target label.check input { flex: none; }
 .recall-due-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
