@@ -147,16 +147,17 @@ export async function plannerView(el, _params, host = el) {
       calendarBox(teamId, start, go, data),
       unplannedCard(data, rerender),
       loadChart(teamId, start, go)),
+    // 0.59.9: Options first; the pinned legend in two rows right after the days dropdown.
     h('div', { class: 'toolbar planner-toolbar' },
+      key.button,
       teams.length > 1 ? teamSel : h('strong', { translate: 'no' }, data.team.name),
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Earlier', onClick: () => go({ start: addDays(start, -step) }) }, '◀'),
       dateIn,
       h('button', { class: 'btn', type: 'button', 'aria-label': 'Later', onClick: () => go({ start: addDays(start, step) }) }, '▶'),
       h('button', { class: 'link', type: 'button', onClick: () => go({ start: osloTodayIso() }) }, 'Today'),
       daySel,
-      key.button,
+      key.strip,
       full ? h('button', { class: 'btn', type: 'button', onClick: fullscreen }, '⛶ Full screen') : null),
-    key.strip,
     data.rows.length ? board(data, rerender) : h('div', { class: 'card notice' }, 'No lines yet. Use "Lines" to add people or places.'),
     full ? null : h('div', { class: 'pl-foot' }, h('button', { class: 'btn', type: 'button', onClick: openWindow }, '⧉ Open in its own window')));
 }
