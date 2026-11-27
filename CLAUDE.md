@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…059
+  migrations/           001…060
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -337,6 +337,7 @@ frontend/               no build step; plain ES modules
 | 057 | `recall_work_order` | `work_orders.recall_work_order_id` (the recalls' own work order); job type "Recall / campaign" |
 | 058 | `customer_car_registry` | `customer_cars.first_registered_norway / owner_since / eu_control_due / eu_control_last_approved / registry_checked_at / registry_error` |
 | 059 | `parts_supply` | `parts_order_lines.supply` (stock / order / ordered / arrived), `supply_at / _by`, `expected_date`; `parts_orders.invoice_id` (counter sale invoices); movement kind `order_received` |
+| 060 | `delivery_owner` | `car_deliveries.owner_address / owner_postal_code / owner_city`, `not_owner`, `contact_name` (kiosk: a car not in the customer register) |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -637,8 +638,9 @@ the server is LAN-only, so no customer phones / public internet).
   locked-down tablet use Android screen pinning.
 - **On-screen keyboard (0.33.15):** no scrolling from code (0.33.14 did, and it brought the address bar back).
   On the tablet the viewport gets `interactive-widget=resizes-content` (the keyboard shrinks the page), and while
-  a text field has focus the button row is `position: sticky` at the bottom (`.typing`, lifted by `--kb` where
-  the keyboard is laid over the page, from `visualViewport`).
+  the **message field** has focus the button row is `position: sticky` at the bottom (`.typing`, lifted by `--kb` where
+  the keyboard is laid over the page, from `visualViewport`). Since 0.60.2 only for the message field (right above
+  the button): for reg. no. / name / phone it made the button jump up and float over the form.
 - **`/api/kiosk/*`** is the only API open without a staff session: `auth.require_kiosk_or_staff` (kiosk
   cookie or staff). Staff can preview the form at `#/kiosk` (deliveries sent from it are real).
 - **The form:** reg. no (stored uppercase without spaces, 2–8 letters/digits; linked to the car in the **customer register**
@@ -647,6 +649,21 @@ the server is LAN-only, so no customer phones / public internet).
   width/height), **tick boxes** (any), message. Key place and pin are required once the lists/maps exist.
   Choices are stored as `{en, no}` snapshots, so renaming an option doesn't change old deliveries.
   The form clears itself after 3 min idle and 30 s after "Thank you" (next customer must not see it).
+- **A car we don't know yet (0.60.3, migration 060; the user's request):** the form checks the typed reg. no. against the
+  customer register (`GET /api/kiosk/known?reg=` → yes / no only; a booked car tapped counts as known; a failed check
+  asks, to be safe). Unknown → a note ("fill in the car's legal owner, as on the registration certificate; the phone can be
+  anyone we can reach") and **Owner's first name, last name, address, postal code (4 digits), city**, "Contact phone
+  number", and "I am not the owner" → **Your first name**. The server requires them whenever the reg. no. isn't in the
+  register (`customer_name` = owner's full name; `owner_address / _postal_code / _city`, `not_owner`, `contact_name`).
+  The staff card shows the owner's address, "Delivered by someone else {first name} · the phone number is theirs" and
+  "Not in the customer register yet". The privacy notice lists the owner's name + address and the deliverer's first name.
+- **Work orders from a delivery (0.60.4, the user's request):** the staff card shows "Booked: #n" and "Open work orders: #n title, …"
+  (`open_work_orders` in `DELIVERY_SELECT`: the car's open / in progress ones). With none (and not received yet): "🛠 New
+  work order" (`newWorkOrderDialog` with the car, the customer's message as the work to perform). A car not in the register
+  gets "🛠 Add to customer register + work order": `POST /deliveries/{id}/to-register` makes the car (reg. no., SVV
+  VIN / make / model, then `refresh_registry`) and its owner from the kiosk data (an existing private customer with the same
+  name and phone or address is used; the phone only when the owner delivered it), links the delivery. The new work order
+  is tied to the delivery and marked as arrived (`POST /deliveries/{id}/work-order`).
 - **Maps:** one uploaded picture per location (`delivery_maps`, via `photostore`, served at
   `/api/kiosk/maps/{id}/image`, `display` size). Several maps → the customer picks the location first.
   A picture never changes: to replace it, add a new map and remove the old one. A map that deliveries
@@ -1929,6 +1946,9 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.59.13 | Planner: scroll bars hidden (board, Not planned, legend); scrolling still works, a mouse wheel scrolls Not planned and the legend sideways (Shift + wheel on the board) |
 | 0.60.0 | **Parts per line + counter sale invoices:** each part line is In stock / To order / Ordered / Arrived (arrived parts go into the stock), the parts order status and the work order's "Parts arrived and ready" follow the lines; a work order's parts are handled on the work order only; the Parts orders page lists counter sales, which are invoiced on their own (migration 059) |
 | 0.60.1 | Planner: the refresh no longer jumps (the new page is swapped in only once the calendar and chart are filled in; scroll positions and the browsed calendar month are kept) |
+| 0.60.2 | Kiosk form: the "Register delivery" button no longer jumps up and floats when the reg. no. / name / phone box is tapped (it only sticks above the keyboard for the message field) |
+| 0.60.3 | Kiosk: a reg. no. not in the customer register asks for the car's legal owner (first + last name, address), a contact phone that can be anyone's, and "I am not the owner" + the first name of the person delivering; shown on the staff delivery card (migration 060) |
+| 0.60.4 | Customer deliveries: the staff card lists the car's open work orders (links), or offers "New work order" (a car not in the customer register is first added from what was typed on the kiosk); the new work order is tied to the delivery and marked as arrived |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

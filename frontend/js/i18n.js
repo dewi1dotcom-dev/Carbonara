@@ -695,6 +695,22 @@ const NO = {
   'Not handed out yet': 'Ikke utlevert ennå', 'All orders': 'Alle bestillinger', 'Order no., customer, reg. no., reference…': 'Bestillingsnr., kunde, reg.nr., referanse…',
   'Search orders': 'Søk i bestillinger', 'No orders waiting.': 'Ingen bestillinger venter.', 'Deleted customer': 'Slettet kunde',
   'Order': 'Bestilling', 'Lines': 'Linjer', 'Total inc VAT': 'Sum inkl. mva.', 'Total ex VAT': 'Sum eks. mva.', 'VAT': 'Mva.',
+  // Kiosk: a car we don't know yet (0.60.3)
+  'We don’t have this car registered yet. Fill in the car’s legal owner, as on the registration certificate. The phone number can be anyone we can reach about the car.':
+    'Vi har ikke registrert denne bilen fra før. Fyll inn bilens eier, slik det står i vognkortet. Telefonnummeret kan være til hvem som helst vi kan nå om bilen.',
+  'Owner’s first name': 'Eierens fornavn', 'Owner’s last name': 'Eierens etternavn', 'Owner’s address': 'Eierens adresse',
+  'Contact phone number': 'Telefonnummer for kontakt', 'I am not the owner': 'Jeg er ikke eieren', 'Your first name': 'Ditt fornavn',
+  'Fill in the owner\'s first and last name': 'Fyll inn eierens fornavn og etternavn', 'Fill in the owner\'s address': 'Fyll inn eierens adresse',
+  'Postal code: 4 digits': 'Postnummer: 4 sifre', 'Fill in your first name': 'Fyll inn fornavnet ditt',
+  'Owner’s address:': 'Eierens adresse:', 'Delivered by someone else': 'Levert av en annen',
+  'the phone number is theirs': 'telefonnummeret er deres', 'Not in the customer register yet': 'Ikke i kunderegisteret ennå',
+  // Delivery card: work orders (0.60.4)
+  'Open work orders:': 'Åpne arbeidsordrer:', 'Booked:': 'Booket:', 'Add to customer register + work order': 'Legg i kunderegisteret + arbeidsordre',
+  'Added to the customer register': 'Lagt i kunderegisteret',
+  'Only staff with access to the customer register can do this': 'Bare ansatte med tilgang til kunderegisteret kan gjøre dette',
+  'The car is already in the customer register': 'Bilen er allerede i kunderegisteret',
+  'The delivery needs the owner\'s first and last name': 'Leveringen mangler eierens fornavn og etternavn',
+  'The work order isn\'t for this car': 'Arbeidsordren gjelder ikke denne bilen',
   'Which orders': 'Hvilke bestillinger', 'Counter sales': 'Disksalg', 'For work orders': 'Til arbeidsordrer',
   'All parts orders': 'Alle delebestillinger',
   'Parts sold to a customer over the counter. The parts for a job are added on its work order.':
@@ -1455,6 +1471,8 @@ const NO = {
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
+  ['Work order #{n} made', 'Arbeidsordre #{1} er laget'],
+  ['Add {} and its owner ({}) to the customer register?', 'Legge {1} og eieren ({2}) i kunderegisteret?'],
   ['Check for recalls on work order #{n}', 'Sjekk tilbakekallinger på arbeidsordre #{1}'], ['Checked {}', 'Sjekket {1}'],
   ['Sent to the planner {} by {}', 'Sendt til planleggeren {1} av {2}'], ['Sent to the planner {}', 'Sendt til planleggeren {1}'],
   ['sent to the planner {}', 'sendt til planleggeren {1}'], ['{} (planner)', '{1} (planlegger)'],
@@ -1697,6 +1715,8 @@ const NO_PATTERNS = [
   // customer car delivery (kiosk)
   ['We use your name and phone number only to contact you about the car. The registration is deleted {n} days after we have received the car.',
     'Vi bruker navnet og telefonnummeret ditt bare til å kontakte deg om bilen. Registreringen slettes {1} dager etter at vi har tatt imot bilen.'],
+  ['We use these details only for the work on the car and to contact you about it. The registration is deleted {n} days after we have received the car.',
+    'Vi bruker opplysningene bare til arbeidet på bilen og til å kontakte deg om den. Registreringen slettes {1} dager etter at vi har tatt imot bilen.'],
   ['Waiting to be received ({n})', 'Venter på mottak ({1})'], ['Received ({n})', 'Mottatt ({1})'],
   ["Received deliveries are deleted automatically {n} days after they were received, with the customer's details.",
     'Mottatte leveringer slettes automatisk {1} dager etter at de ble mottatt, med kundens opplysninger.'],

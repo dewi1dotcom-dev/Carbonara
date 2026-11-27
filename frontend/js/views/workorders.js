@@ -158,7 +158,7 @@ export async function newWorkOrderDialog(car = null, prefill = {}) {
   let chosen = car;
   const carSlot = h('div');
   const title = h('input', { type: 'text', maxlength: 120, autocomplete: 'off', placeholder: 'e.g. Service, Tyre change, Brakes' });
-  const desc = h('textarea', { rows: 4, maxlength: 5000, placeholder: 'What should be done' });
+  const desc = h('textarea', { rows: 4, maxlength: 5000, placeholder: 'What should be done' }, prefill.description || '');
   const tasks = h('textarea', { rows: 4, placeholder: 'One task per line' });
   const est = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', placeholder: 'e.g. 2,5' });
   const pDay = dateInput({ value: prefill.planned ? prefill.planned.slice(0, 10) : '' });

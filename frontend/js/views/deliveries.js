@@ -9,8 +9,10 @@
 // kiosk setup for admins (maps, key places, tick boxes, kiosk tablets).
 import { lang, setLang } from '../i18n.js';
 import {
-  api, append, badge, busy, canOpen, euStatus, fmtDate, h, nameInput, openDialog, session, showError, toast, vehicleTitle,
+  api, append, badge, busy, canOpen, debounce, euStatus, fmtDate, h, nameInput, openDialog, session, showError, toast,
+  vehicleTitle,
 } from '../ui.js';
+import { newWorkOrderDialog } from './workorders.js';
 
 const IDLE_MS = 3 * 60 * 1000;   // a half-filled form is cleared when the customer walks away
 const DONE_MS = 30 * 1000;       // the thank-you screen goes back to an empty form
@@ -80,8 +82,10 @@ export function deliveryPrivacyDialog(privacy, trashDays) {
     h('p', {}, h('strong', {}, company), privacy?.org_no ? ` (org.nr. ${privacy.org_no})` : '', ' er behandlingsansvarlig for opplysningene du registrerer når du leverer bilen din til oss.'),
     h('h3', {}, 'Hva vi registrerer'),
     h('p', {}, 'Registreringsnummer, navn og telefonnummer, hvor bilen står og hvor nøkkelen ligger, hva du krysser av for, og meldingen du skriver.'),
+    h('p', {}, 'For en bil vi ikke har registrert fra før: navnet og adressen til bilens eier, og fornavnet til den som leverer '
+      + 'bilen hvis det ikke er eieren. Telefonnummeret kan da være til den som leverer.'),
     h('h3', {}, 'Hvorfor'),
-    h('p', {}, 'For å finne bilen og nøkkelen, utføre det du ber oss om, og kontakte deg om bilen.'),
+    h('p', {}, 'For å finne bilen og nøkkelen, vite hvem som eier bilen vi jobber på, utføre det du ber oss om, og kontakte deg om bilen.'),
     h('p', {}, 'Har du time hos oss, vises registreringsnummeret ditt på nettbrettet fra kl. 07.00 virkedagen før timen og ut timedagen, slik at '
       + 'du kan velge bilen din. Når du trykker på bilen, fylles navnet og telefonnummeret vi har registrert inn i skjemaet, '
       + 'slik at du kan kontrollere og rette dem.'),
@@ -167,8 +171,11 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
    * nothing is scrolled by us:
    * - On the tablet, the keyboard shrinks the page (interactive-widget=resizes-content, Chrome / Android),
    *   so the browser itself scrolls the field into view above the keyboard.
-   * - While a text field has focus, the button row sticks to the bottom of what is visible (.typing).
-   *   Browsers that lay the keyboard over the page (e.g. iPad) lift it by the hidden part (--kb). */
+   * - While the message field has focus, the button row sticks to the bottom of what is visible (.typing).
+   *   Browsers that lay the keyboard over the page (e.g. iPad) lift it by the hidden part (--kb).
+   *   0.60.2 (the user's report: the button jumped up and floated when a text box was tapped): only for the message
+   *   field, which sits right above the button; for the fields higher up (reg. no., name, phone) the button stays in
+   *   its place in the form instead of floating over it. */
   if (standalone) {
     const meta = document.querySelector('meta[name=viewport]');
     if (meta && !meta.content.includes('interactive-widget')) meta.content += ', interactive-widget=resizes-content';
@@ -181,7 +188,7 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
     const field = document.activeElement;
     const inForm = !!field?.closest?.('form.kiosk-card');
     // Tapping the stuck button itself must not drop it back down mid-tap (the click would miss).
-    const typing = inForm && (field.matches('textarea, input[type=text], input[type=tel]')
+    const typing = inForm && (field.matches('textarea')
       || (form.classList.contains('typing') && !!field.closest('.actions')));
     const hidden = vv ? Math.max(0, Math.round(window.innerHeight - vv.height - vv.offsetTop)) : 0;
     form.classList.toggle('typing', typing);
@@ -211,6 +218,56 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
     });
     const name = nameInput({ id: 'kd-name', required: true, maxlength: 120, autocomplete: 'off' });
     const phone = h('input', { type: 'tel', id: 'kd-phone', required: true, maxlength: 20, inputmode: 'tel', autocomplete: 'off', placeholder: 'e.g. 912 34 567' });
+    // 0.60.3 (the user's request): a car the workshop doesn't know yet asks for its legal owner (first + last name,
+    // address); the phone can be anyone's, and someone delivering for the owner ticks "not the owner" and gives their
+    // first name. Known cars keep the short form (name + phone).
+    const last = nameInput({ id: 'kd-last', maxlength: 80, autocomplete: 'off' });
+    const address = h('input', { type: 'text', id: 'kd-addr', maxlength: 160, autocomplete: 'off' });
+    const postal = h('input', { type: 'text', id: 'kd-postal', maxlength: 4, inputmode: 'numeric', autocomplete: 'off', placeholder: '1234' });
+    const city = nameInput({ id: 'kd-city', maxlength: 80, autocomplete: 'off' });
+    const notOwner = h('input', { type: 'checkbox', id: 'kd-notowner' });
+    const contactName = nameInput({ id: 'kd-contact', maxlength: 60, autocomplete: 'off' });
+    let known = null;   // true / false once the reg. no. is checked; null = not checked yet
+    const peopleSlot = h('div');
+    const contactSlot = h('div');
+    const drawContact = () => contactSlot.replaceChildren(...(notOwner.checked
+      ? [h('div', { class: 'field' }, h('label', { for: 'kd-contact' }, 'Your first name'), contactName)] : []));
+    notOwner.addEventListener('change', () => { drawContact(); if (notOwner.checked) contactName.focus(); });
+    const drawPeople = () => {
+      peopleSlot.replaceChildren(...(known === false ? [
+        h('div', { class: 'notice kiosk-owner-note' },
+          'We don’t have this car registered yet. Fill in the car’s legal owner, as on the registration certificate. The phone number can be anyone we can reach about the car.'),
+        h('div', { class: 'grid' },
+          h('div', { class: 'field' }, h('label', { for: 'kd-name' }, 'Owner’s first name'), name),
+          h('div', { class: 'field' }, h('label', { for: 'kd-last' }, 'Owner’s last name'), last)),
+        h('div', { class: 'field' }, h('label', { for: 'kd-addr' }, 'Owner’s address'), address),
+        h('div', { class: 'grid' },
+          h('div', { class: 'field' }, h('label', { for: 'kd-postal' }, 'Postal code'), postal),
+          h('div', { class: 'field' }, h('label', { for: 'kd-city' }, 'City'), city)),
+        h('div', { class: 'field' }, h('label', { for: 'kd-phone' }, 'Contact phone number'), phone),
+        h('label', { class: 'check' }, notOwner, h('span', {}, 'I am not the owner')),
+        contactSlot,
+      ] : [
+        h('div', { class: 'grid' },
+          h('div', { class: 'field' }, h('label', { for: 'kd-name' }, 'Your name'), name),
+          h('div', { class: 'field' }, h('label', { for: 'kd-phone' }, 'Phone number'), phone)),
+      ]));
+    };
+    let knownSeq = 0;
+    const checkKnown = async () => {
+      const r = String(reg.value || '').toUpperCase().replace(/[^\p{L}\p{N}]/gu, '');
+      const my = ++knownSeq;
+      let k = null;
+      if (r.length >= 2 && r.length <= 8) {
+        try { k = (await api.get(`/kiosk/known?reg=${encodeURIComponent(r)}`)).known; } catch { k = false; } // ask, to be safe
+      }
+      if (my !== knownSeq) return known;
+      if (k !== known) { known = k; drawPeople(); }
+      return known;
+    };
+    reg.addEventListener('input', debounce(checkKnown, 450));
+    drawContact();
+    drawPeople();
     const message = h('textarea', { id: 'kd-msg', rows: 3, maxlength: 1000 });
     const keyRadios = cfg.key_places.map((o) => h('input', { type: 'radio', name: 'kd-key', value: o.id }));
     const checkBoxes = cfg.checkboxes.map((o) => h('input', { type: 'checkbox', value: o.id }));
@@ -248,6 +305,8 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
       unfill();
       picked = b;
       reg.value = b.registration_number;
+      knownSeq += 1;   // a booked car is in the customer register
+      if (known !== true) { known = true; drawPeople(); }
       drawBooked(list);
       try {
         const c = await api.get(`/kiosk/booked/${b.id}/contact`);
@@ -280,9 +339,7 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
       h('p', { class: 'muted' }, 'Register the car you are leaving with us. Quick and easy.'),
       bookedSlot,
       h('div', { class: 'field' }, h('label', { for: 'kd-reg' }, 'Registration number'), reg),
-      h('div', { class: 'grid' },
-        h('div', { class: 'field' }, h('label', { for: 'kd-name' }, 'Your name'), name),
-        h('div', { class: 'field' }, h('label', { for: 'kd-phone' }, 'Phone number'), phone)),
+      peopleSlot,
       cfg.key_places.length ? h('div', { class: 'field' }, h('label', {}, 'Put your key in an available box'),
         h('div', { class: 'chips' }, cfg.key_places.map((o, i) =>
           h('label', { class: 'chip' }, keyRadios[i], h('span', { translate: 'no' }, optText(o)))))) : null,
@@ -294,7 +351,7 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
           h('label', { class: 'chip' }, checkBoxes[i], h('span', { translate: 'no' }, optText(o)))))) : null,
       h('div', { class: 'field' }, h('label', { for: 'kd-msg' }, 'Message to the workshop (optional)'), message),
       h('p', { class: 'muted small' },
-        `We use your name and phone number only to contact you about the car. The registration is deleted ${cfg.trash_days} days after we have received the car. `,
+        `We use these details only for the work on the car and to contact you about it. The registration is deleted ${cfg.trash_days} days after we have received the car. `,
         h('button', { class: 'link', type: 'button', onClick: () => deliveryPrivacyDialog(cfg.privacy, cfg.trash_days) },
           'Read the privacy notice')),
       h('div', { class: 'actions' }, submit));
@@ -315,7 +372,24 @@ export async function kioskView(el, _params = [], { standalone = false } = {}) {
       if (cfg.maps.length && !mapId) { toast('Choose where the car is parked', 'error'); return; }
       if (cfg.maps.length && !pin) { toast('Tap the map where the car is parked', 'error'); return; }
       busy(submit, async () => {
+        // Typed and sent before the check came back: check now (an unknown car needs the owner's details).
+        if (known === null && !picked) await checkKnown();
+        if (known === false) {
+          const need = [[name, 'Fill in the owner\'s first and last name'], [last, 'Fill in the owner\'s first and last name'],
+            [address, 'Fill in the owner\'s address'], [postal, 'Postal code: 4 digits'], [city, 'Fill in the owner\'s address']]
+            .find(([el]) => !el.value.trim());
+          if (need) { toast(need[1], 'error'); need[0].focus(); return; }
+          if (!/^\d{4}$/.test(postal.value.trim())) { toast('Postal code: 4 digits', 'error'); postal.focus(); return; }
+          if (notOwner.checked && !contactName.value.trim()) { toast('Fill in your first name', 'error'); contactName.focus(); return; }
+        }
+        const unknown = known === false;
         await api.post('/kiosk/deliveries', {
+          owner_last_name: unknown ? last.value : null,
+          owner_address: unknown ? address.value : null,
+          owner_postal_code: unknown ? postal.value : null,
+          owner_city: unknown ? city.value : null,
+          not_owner: unknown && notOwner.checked,
+          contact_name: unknown && notOwner.checked ? contactName.value : null,
           registration_number: reg.value,
           customer_name: name.value,
           customer_phone: phone.value,
@@ -414,6 +488,12 @@ function cardTop(first) {
       d.svv_vin ? h('div', {}, h('span', {}, 'VIN: '), h('span', { class: 'mono' }, d.svv_vin)) : null,
       h('div', {}, h('span', { translate: 'no' }, d.display_name || d.customer_name), ' · ',
         h('a', { href: `tel:${d.customer_phone}` }, d.customer_phone)),
+      // A car not in the register (0.60.3): the owner's address, and who delivered it when not the owner.
+      d.owner_address ? h('div', { class: 'small' }, h('span', {}, 'Owner’s address:'), ' ',
+        h('span', { translate: 'no' }, `${d.owner_address}, ${d.owner_postal_code || ''} ${d.owner_city || ''}`.trim())) : null,
+      d.not_owner ? h('div', { class: 'small' }, h('span', { class: 'badge warn' }, 'Delivered by someone else'), ' ',
+        h('span', { translate: 'no' }, d.contact_name || ''), ' · ', h('span', {}, 'the phone number is theirs')) : null,
+      d.owner_address && !d.customer_car_id ? h('div', { class: 'small muted' }, 'Not in the customer register yet') : null,
       d.svv_name ? h('div', { class: 'small muted' }, h('span', {}, 'Name from Statens vegvesen'),
         match ? [' ', badge(match)] : null,
         d.name_match !== 'same' ? h('span', { class: 'block' }, h('span', {}, 'Typed by the customer: '),
@@ -425,13 +505,51 @@ function cardTop(first) {
   return slot;
 }
 
-function deliveryDetails(d) {
+/** Work orders for the delivered car (0.60.4, the user's request): its open work orders as links, or "New work order"
+ *  when it has none (a car not in the customer register is added first, from what was typed on the kiosk).
+ *  `rerender` = the page's redraw; without it (the received list's "Show") only the links are shown. */
+function workOrdersLine(d, rerender) {
+  const others = (d.open_work_orders || []).filter((w) => w.id !== d.work_order_id);
+  const link = (w) => (canOpen(`#/work-orders/${w.id}`) ? h('a', { href: `#/work-orders/${w.id}` }, `#${w.number}`) : `#${w.number}`);
+  const parts = [];
+  if (d.work_order_id) {
+    parts.push(h('div', { class: 'small' }, h('span', {}, 'Booked:'), ' ',
+      link({ id: d.work_order_id, number: d.work_order_number })));
+  }
+  if (others.length) {
+    parts.push(h('div', { class: 'small' }, h('span', {}, 'Open work orders:'), ' ',
+      others.map((w, i) => [i ? ', ' : '', link(w), w.title ? h('span', { class: 'muted', translate: 'no' }, ` ${w.title}`) : null])));
+  }
+  if (rerender && !d.work_order_id && !others.length && !d.received_at && canOpen('#/work-orders')) {
+    const make = h('button', { class: 'btn small', type: 'button' }, d.customer_car_id ? '🛠 New work order' : '🛠 Add to customer register + work order');
+    make.addEventListener('click', () => busy(make, async () => {
+      let carId = d.customer_car_id;
+      if (!carId) {
+        if (!confirm(`Add ${d.registration_number} and its owner (${d.customer_name}) to the customer register?`)) return;
+        carId = (await api.post(`/deliveries/${d.id}/to-register`)).customer_car_id;
+        toast('Added to the customer register', 'success');
+      }
+      await newWorkOrderDialog({ customer_car_id: carId, text: [d.registration_number, d.display_name || d.customer_name].filter(Boolean).join(' · ') }, {
+        description: d.message || '',
+        onDone: async (r) => {
+          await api.post(`/deliveries/${d.id}/work-order`, { work_order_id: r.id });
+          toast(`Work order #${r.number} made`, 'success');
+          await rerender();
+        },
+      });
+      if (!d.customer_car_id) await rerender();   // shows the link to the register even if the dialog is closed
+    }));
+    parts.push(h('div', { class: 'no-print' }, make));
+  }
+  return parts;
+}
+
+function deliveryDetails(d, rerender = null) {
   return [
     cardTop(d),
     h('div', { class: 'muted small' }, `Delivered ${fmtDate(d.created_at)}`,
       d.kiosk_name ? h('span', { translate: 'no' }, ` · ${d.kiosk_name}`) : null),
-    d.work_order_id ? h('div', { class: 'small' }, h('span', {}, 'Booked:'), ' ',
-      h('a', { href: `#/work-orders/${d.work_order_id}` }, `Work order #${d.work_order_number}`)) : null,
+    workOrdersLine(d, rerender),
     d.key_place ? h('div', {}, 'Key: ', h('strong', { translate: 'no' }, optText(d.key_place))) : null,
     d.checks?.length ? h('div', { class: 'chips delivery-checks' },
       d.checks.map((c) => h('span', { class: 'badge', translate: 'no' }, optText(c)))) : null,
@@ -475,7 +593,7 @@ export async function deliveriesView(el, _params = [], host = el) {
       },
     }, '✓ Received');
     return h('div', { class: 'card inner delivery-card' },
-      h('div', { class: 'delivery-main' }, deliveryDetails(d)),
+      h('div', { class: 'delivery-main' }, deliveryDetails(d, rerender)),
       h('div', { class: 'delivery-actions' }, receive));
   };
 

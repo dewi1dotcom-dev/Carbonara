@@ -47,7 +47,13 @@ DELIVERY_SELECT = """
            m.name AS map_name, m.name_no AS map_name_no, k.name AS kiosk_name,
            v.make, v.model, v.model_year,
            d.customer_car_id, cc.make AS car_make, cc.model AS car_model,
-           d.work_order_id, (SELECT w.number FROM work_orders w WHERE w.id = d.work_order_id) AS work_order_number
+           d.work_order_id, (SELECT w.number FROM work_orders w WHERE w.id = d.work_order_id) AS work_order_number,
+           d.owner_address, d.owner_postal_code, d.owner_city, d.not_owner, d.contact_name,
+           -- The car's open work orders (0.60.4: shown on the staff card, or "New work order" when there are none).
+           (SELECT coalesce(json_agg(json_build_object('id', w.id, 'number', w.number, 'title', w.title)
+                                     ORDER BY w.number), '[]'::json)
+              FROM work_orders w WHERE w.customer_car_id = d.customer_car_id
+               AND w.status IN ('open', 'in_progress')) AS open_work_orders
       FROM car_deliveries d
       LEFT JOIN delivery_maps m ON m.id = d.map_id
       LEFT JOIN staff sr ON sr.id = d.received_by
@@ -163,6 +169,13 @@ class DeliveryIn(BaseModel):
     check_ids: list[int] = Field(default_factory=list, max_length=50)
     message: Optional[str] = Field(None, max_length=1000)
     work_order_id: Optional[int] = None   # the car was picked from today's booked cars (0.52.0)
+    # A car not in the customer register (0.60.3): the legal owner's address; the person delivering may be someone else.
+    owner_last_name: Optional[str] = Field(None, max_length=80)   # joined with customer_name (then the first name)
+    owner_address: Optional[str] = Field(None, max_length=160)
+    owner_postal_code: Optional[str] = Field(None, max_length=10)
+    owner_city: Optional[str] = Field(None, max_length=80)
+    not_owner: bool = False
+    contact_name: Optional[str] = Field(None, max_length=60)
 
 
 # Work orders for a car in the customer register, not arrived yet, shown on the kiosk as the registration number only
@@ -196,6 +209,17 @@ def booked_contact(work_order_id: int, _who=Depends(require_kiosk_or_staff), con
     if not r:
         raise not_found("Booking")
     return {"name": r["customer_name"], "phone": r["customer_phone"]}
+
+
+@kiosk_router.get("/known")
+def known_car(reg: str = "", _who=Depends(require_kiosk_or_staff), conn=Depends(get_conn)):
+    """Is this registration number in the workshop's customer register? Yes / no only (0.60.3): an unknown car asks
+    for its legal owner's name and address on the kiosk."""
+    r = _clean_reg(reg)
+    if not 2 <= len(r) <= 8:
+        return {"known": None}
+    return {"known": bool(conn.execute("SELECT 1 FROM customer_cars WHERE registration_number = %s LIMIT 1",
+                                       (r,)).fetchone())}
 
 
 @kiosk_router.get("/config")
@@ -233,7 +257,33 @@ def create_delivery(body: DeliveryIn, tasks: BackgroundTasks, who=Depends(requir
     reg = _clean_reg(body.registration_number)
     if not 2 <= len(reg) <= 8:
         raise bad_request("Registration number: 2–8 letters and digits")
+    # The workshop's own register (0.53.0): never the sales company's stock (vehicles).
+    car = conn.execute("SELECT id FROM customer_cars WHERE registration_number = %s ORDER BY id DESC LIMIT 1",
+                       (reg,)).fetchone()
     name = cap_name(body.customer_name)
+    owner = {"owner_address": None, "owner_postal_code": None, "owner_city": None, "not_owner": False,
+             "contact_name": None}
+    if not car:
+        # 0.60.3 (the user's request): a car we don't know yet: the legal owner's full name and address are needed;
+        # the phone can be anyone's, and someone delivering for the owner gives their first name.
+        last = cap_name(body.owner_last_name or "")
+        if not name or not last:
+            raise bad_request("Fill in the owner's first and last name")
+        name = f"{name} {last}"
+        address = " ".join((body.owner_address or "").split())
+        postal = "".join(ch for ch in (body.owner_postal_code or "") if ch.isdigit())
+        city = cap_name(body.owner_city or "")
+        if not address or not city:
+            raise bad_request("Fill in the owner's address")
+        if len(postal) != 4:
+            raise bad_request("Postal code: 4 digits")
+        contact = cap_name(body.contact_name or "") if body.not_owner else ""
+        if body.not_owner and not contact:
+            raise bad_request("Fill in your first name")
+        owner = {"owner_address": address[:160], "owner_postal_code": postal, "owner_city": city[:80],
+                 "not_owner": body.not_owner, "contact_name": contact[:60] or None}
+    elif body.owner_last_name:   # the form asked for the owner after all (the car was added meanwhile): keep the full name
+        name = f"{name} {cap_name(body.owner_last_name)}"
     if not 2 <= len(name) <= 120:
         raise bad_request("Customer name is required")
     phone = clean_phone(body.customer_phone)
@@ -261,9 +311,6 @@ def create_delivery(body: DeliveryIn, tasks: BackgroundTasks, who=Depends(requir
               for i in dict.fromkeys(body.check_ids) if i in options and options[i]["kind"] == "checkbox"]
     message = (body.message or "").strip() or None
 
-    # The workshop's own register (0.53.0): never the sales company's stock (vehicles).
-    car = conn.execute("SELECT id FROM customer_cars WHERE registration_number = %s ORDER BY id DESC LIMIT 1",
-                       (reg,)).fetchone()
     # A car picked from today's booked cars: tied to its work order only while the reg. no. still matches
     # (the customer may have picked the wrong one and typed their own).
     booked = None
@@ -276,11 +323,14 @@ def create_delivery(body: DeliveryIn, tasks: BackgroundTasks, who=Depends(requir
                               (reg,)).fetchone()
     row = conn.execute(
         """INSERT INTO car_deliveries (registration_number, customer_car_id, customer_name, customer_phone, map_id,
-                                       pin_x, pin_y, key_place, checks, message, kiosk_id, work_order_id)
-           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
+                                       pin_x, pin_y, key_place, checks, message, kiosk_id, work_order_id,
+                                       owner_address, owner_postal_code, owner_city, not_owner, contact_name)
+           VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id, created_at""",
         (reg, car["id"] if car else None, name, phone, map_id, pin_x, pin_y,
          Jsonb(key_place) if key_place else None, Jsonb(checks), message,
-         who["kiosk"]["id"] if who["kiosk"] else None, booked["id"] if booked else None),
+         who["kiosk"]["id"] if who["kiosk"] else None, booked["id"] if booked else None,
+         owner["owner_address"], owner["owner_postal_code"], owner["owner_city"], owner["not_owner"],
+         owner["contact_name"]),
     ).fetchone()
     if car:  # the car's history in the register gets the delivery, never the customer's details
         _register_event(conn, car["id"], row["id"])
@@ -310,6 +360,85 @@ def list_deliveries(conn=Depends(get_conn)):
         "trash_days": settings.trash_days,
         "privacy": _privacy(),
     }
+
+
+@router.post("/deliveries/{delivery_id}/to-register", status_code=201)
+def delivery_to_register(delivery_id: int, request: Request, conn=Depends(get_conn)):
+    """A delivered car not in the customer register yet (0.60.4): add it, with the owner typed on the kiosk (an existing
+    customer with the same name and phone or address is used instead of a second one). Then a work order can be made."""
+    from . import customers   # customers imports nothing from here
+    staff = request.state.staff
+    if not customers._access(staff):
+        raise HTTPException(403, "Only staff with access to the customer register can do this")
+    d = conn.execute("SELECT * FROM car_deliveries WHERE id = %s FOR UPDATE", (delivery_id,)).fetchone()
+    if not d:
+        raise not_found("Delivery")
+    if d["customer_car_id"]:
+        raise conflict("The car is already in the customer register")
+    sid = staff["id"]
+    car = conn.execute("SELECT id FROM customer_cars WHERE registration_number = %s ORDER BY id DESC LIMIT 1",
+                       (d["registration_number"],)).fetchone()
+    customer_id = None
+    if not car:
+        words = (d["customer_name"] or "").split()
+        if len(words) < 2:
+            raise bad_request("The delivery needs the owner's first and last name")
+        first, last = " ".join(words[:-1]), words[-1]
+        # The phone belongs to the owner only when the owner delivered the car.
+        phone = None if d["not_owner"] else d["customer_phone"]
+        same = conn.execute(
+            """SELECT id FROM customers WHERE kind = 'private' AND lower(name) = lower(%s)
+                 AND ((%s::text IS NOT NULL AND phone = %s) OR (%s::text IS NOT NULL AND lower(address) = lower(%s)))
+                ORDER BY id LIMIT 1""",
+            (d["customer_name"], phone, phone, d["owner_address"], d["owner_address"])).fetchone()
+        if same:
+            customer_id = same["id"]
+        else:
+            f = customers._customer_fields(customers.CustomerIn(
+                kind="private", first_name=first[:60], last_name=last[:60], phone=phone,
+                address=(d["owner_address"] or "")[:120] or None, postal_code=d["owner_postal_code"],
+                city=(d["owner_city"] or "")[:60] or None))
+            customer_id = customers.create_customer(conn, f, sid)["id"]
+        vin = d["svv_vin"] if d["svv_vin"] and not conn.execute(
+            "SELECT 1 FROM customer_cars WHERE vin = %s", (d["svv_vin"],)).fetchone() else None
+        car = conn.execute(
+            """INSERT INTO customer_cars (registration_number, vin, make, model, created_by)
+               VALUES (%s, %s, %s, %s, %s) RETURNING id""",
+            (d["registration_number"], vin, d["svv_make"], d["svv_model"], sid)).fetchone()
+        customers.event(conn, "car_created", sid, car_id=car["id"], data={"delivery_id": delivery_id})
+        customers.set_owner(conn, car["id"], customer_id, sid)
+        customers.refresh_registry(conn, car["id"])   # never blocks: a failure is kept as registry_error
+    conn.execute("UPDATE car_deliveries SET customer_car_id = %s WHERE id = %s", (car["id"], delivery_id))
+    _register_event(conn, car["id"], delivery_id)
+    return {"customer_car_id": car["id"], "customer_id": customer_id}
+
+
+class DeliveryWorkOrderIn(BaseModel):
+    work_order_id: int
+
+
+@router.post("/deliveries/{delivery_id}/work-order")
+def delivery_work_order(delivery_id: int, body: DeliveryWorkOrderIn, request: Request, conn=Depends(get_conn)):
+    """A work order made from a delivery (0.60.4): tied to it, and the car counts as arrived (it is here)."""
+    from .work_orders import _access as wo_access
+    staff = request.state.staff
+    if not wo_access(staff):
+        raise HTTPException(403, "Only staff with access to work orders can do this")
+    d = conn.execute("SELECT id, customer_car_id, work_order_id FROM car_deliveries WHERE id = %s FOR UPDATE",
+                     (delivery_id,)).fetchone()
+    if not d:
+        raise not_found("Delivery")
+    w = conn.execute("SELECT id, customer_car_id, arrived_at FROM work_orders WHERE id = %s FOR UPDATE",
+                     (body.work_order_id,)).fetchone()
+    if not w or not d["customer_car_id"] or w["customer_car_id"] != d["customer_car_id"]:
+        raise bad_request("The work order isn't for this car")
+    if not d["work_order_id"]:
+        conn.execute("UPDATE car_deliveries SET work_order_id = %s WHERE id = %s", (w["id"], delivery_id))
+    if not w["arrived_at"]:
+        conn.execute("UPDATE work_orders SET arrived_at = now() WHERE id = %s", (w["id"],))
+        conn.execute("INSERT INTO work_order_events (work_order_id, kind, data, created_by) VALUES (%s, 'arrived', %s, %s)",
+                     (w["id"], Jsonb({"delivery_id": delivery_id}), staff["id"]))
+    return {"ok": True}
 
 
 @router.post("/deliveries/{delivery_id}/receive")
