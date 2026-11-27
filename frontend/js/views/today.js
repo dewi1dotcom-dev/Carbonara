@@ -4,6 +4,7 @@ import { lang } from '../i18n.js';
 import { api, append, boardBlock as block, boardRow as row, canOpen, canSee, carText, fmtDate, h, pdiCarHref, session, tyreText, vehicleTitle } from '../ui.js';
 import { optText } from './deliveries.js';
 import { messageBoard } from './messages.js';
+import { WAITING } from './workorders.js';
 import { diskNotice, workerStatusNotice } from './system.js';
 
 // Summer / winter wheels against the studded tyre season: cars here, plus rental cars for users
@@ -29,6 +30,23 @@ const pdiRow = (o, withPrep = false) => row(pdiCarHref(o.vehicle_id), carText(o)
   [o.pdi_at && clock.format(new Date(o.pdi_at)), o.location_code && `spot ${o.location_code}`,
     withPrep && (o.prepared_at ? '✓ prepared' : 'not prepared yet')].filter(Boolean).join(' · '),
   withPrep && !o.prepared_at ? 'bad' : '');
+
+// Work order rows: "#number reg. no." + customer / title, and why it is listed. The meta is separate nodes (translation).
+const woText = (w) => [`#${w.number}`, w.registration_number].filter(Boolean).join(' ');
+const woWho = (w) => h('span', { translate: 'no' }, [w.customer_name, w.title].filter(Boolean).join(' · '));
+function woBlocks(wo) {
+  const more = h('a', { class: 'small', href: '#/work-orders?show=attention' }, 'All work orders that need a look →');
+  return [
+    block('📌', 'Work orders to follow up', wo.follow_up.map((w) => row(`#/work-orders/${w.id}`, woText(w), [woWho(w), ' · ',
+      h('span', {}, `look again ${fmtDate(w.follow_up_on, false)}`), w.waiting ? [' · ', h('span', {}, WAITING[w.waiting] || '')] : null], 'bad')),
+    { cls: 'bad', more: wo.follow_up.length ? more : null }),
+    block('💤', 'Quiet work orders – nothing has happened for a while', wo.quiet.map((w) => row(`#/work-orders/${w.id}`, woText(w),
+      [woWho(w), ' · ', h('span', {}, `no activity for ${w.quiet_days} d`)], w.quiet === 'bad' ? 'bad' : '')),
+    { cls: wo.quiet.some((w) => w.quiet === 'bad') ? 'bad' : 'warn', more: wo.quiet.length && !wo.follow_up.length ? more : null }),
+    block('🧾', 'Work done – not invoiced yet', wo.not_invoiced.map((w) => row(`#/work-orders/${w.id}`, woText(w),
+      [woWho(w), ' · ', h('span', {}, `done ${fmtDate(w.done_at, false)}`)])), { cls: 'warn' }),
+  ];
+}
 
 export async function todayView(el) {
   // System admins: is the background worker alive (it does the promised GDPR deletions), and is there
@@ -86,6 +104,8 @@ export async function todayView(el) {
 
     // ---- needs attention
     h('h2', { class: 'today-heading' }, 'Needs attention'),
+    // Work orders that aren't forgotten (0.61.0): follow-up due, quiet for the System page's days, not invoiced.
+    ...(canSee('work_orders') && d.work_orders ? woBlocks(d.work_orders) : []),
     block('✉', 'PDI orders waiting for the workshop’s reply', d.pdi_waiting.map((o) =>
       row(pdiCarHref(o.vehicle_id), carText(o), o.sent_via === 'print'
         ? `printed / PDF ${fmtDate(o.sent_at, false)} · enter the date when they reply`
@@ -109,6 +129,8 @@ export async function todayView(el) {
       row(`#/vehicles/${c.id}`, carText(c), 'open the car to confirm'))),
     !(d.pdi_waiting.length || d.pdi_drafts.length || d.eu_control.length || d.service.length || d.registry_mismatches.length
       || d.recalls_open.length
+      || (canSee('work_orders') && d.work_orders && (d.work_orders.follow_up.length || d.work_orders.quiet.length
+        || d.work_orders.not_invoiced.length))
       || (canSee('rental') && d.rental_eu_control.length)
       || tyreRows(d.tyres_summer).length || tyreRows(d.tyres_winter).length)
       ? h('p', { class: 'empty' }, 'Nothing needs attention. 👍') : null,

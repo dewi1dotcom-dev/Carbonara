@@ -704,6 +704,27 @@ const NO = {
   'Postal code: 4 digits': 'Postnummer: 4 sifre', 'Fill in your first name': 'Fyll inn fornavnet ditt',
   'Owner’s address:': 'Eierens adresse:', 'Delivered by someone else': 'Levert av en annen',
   'the phone number is theirs': 'telefonnummeret er deres', 'Not in the customer register yet': 'Ikke i kunderegisteret ennå',
+  // Work orders that aren't forgotten (0.61.0)
+  'Needs a look': 'Trenger en titt', 'Waiting for the customer': 'Venter på kunden', 'Waiting for the car': 'Venter på bilen',
+  'Waiting for approval': 'Venter på godkjenning', 'Follow up': 'Følg opp', 'Look again': 'Se på igjen',
+  'Not invoiced': 'Ikke fakturert', 'Now:': 'Nå:', 'Look again on': 'Se på igjen den', 'Waiting for': 'Venter på',
+  'Not waiting / as shown': 'Venter ikke / som vist', 'Short note (optional)': 'Kort merknad (valgfritt)',
+  'In 1 week': 'Om 1 uke', 'No date': 'Ingen dato', 'Waiting and follow-up': 'Venting og oppfølging',
+  'On that day it is on Today, and whoever made the work order gets a notification.':
+    'Den dagen vises den på «I dag», og den som laget arbeidsordren får et varsel.',
+  'The work is done but not invoiced yet.': 'Arbeidet er ferdig, men ikke fakturert ennå.',
+  'Waiting and follow-up changed': 'Venting og oppfølging endret', 'Not waiting': 'Venter ikke', 'look again on': 'se på igjen',
+  'All work orders that need a look': 'Alle arbeidsordrer som trenger en titt', 'Work orders to follow up': 'Arbeidsordrer som skal følges opp',
+  'Quiet work orders – nothing has happened for a while': 'Stille arbeidsordrer – ingenting har skjedd på en stund',
+  'Work done – not invoiced yet': 'Arbeid ferdig – ikke fakturert ennå', 'Work order reminders': 'Påminnelser om arbeidsordrer',
+  'Every morning on working days, whoever made a work order gets a notification when it needs a look: follow-up date reached, nothing happened for a while (System page → Work orders), or done but not invoiced. The people ticked here get it about every work order.':
+    'Hver morgen på virkedager får den som laget en arbeidsordre et varsel når den trenger en titt: oppfølgingsdatoen er nådd, ingenting har skjedd på en stund (System → Arbeidsordrer), eller den er ferdig, men ikke fakturert. De som er krysset av her, får det om alle arbeidsordrer.',
+  'Work orders that need a look: follow-ups, quiet, not invoiced (in the morning)':
+    'Arbeidsordrer som trenger en titt: oppfølging, stille, ikke fakturert (om morgenen)',
+  'Quiet work order: amber after (days)': 'Stille arbeidsordre: gul etter (dager)',
+  'Quiet work order: red after (days)': 'Stille arbeidsordre: rød etter (dager)',
+  'An open work order with no activity (changes, clock, parts, notes) for this many days is marked and listed on Today.':
+    'En åpen arbeidsordre uten aktivitet (endringer, klokke, deler, merknader) i så mange dager markeres og vises på «I dag».',
   // Delivery card: work orders (0.60.4)
   'Open work orders:': 'Åpne arbeidsordrer:', 'Booked:': 'Booket:', 'Add to customer register + work order': 'Legg i kunderegisteret + arbeidsordre',
   'Added to the customer register': 'Lagt i kunderegisteret',
@@ -1472,6 +1493,8 @@ const NO = {
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
   ['Work order #{n} made', 'Arbeidsordre #{1} er laget'],
+  ['Quiet {n} d', 'Stille {1} d'], ['Open {n} d', 'Åpen {1} d'], ['last activity {}', 'siste aktivitet {1}'],
+  ['In {n} weeks', 'Om {1} uker'], ['look again {}', 'se på igjen {1}'], ['no activity for {n} d', 'ingen aktivitet på {1} d'],
   ['Add {} and its owner ({}) to the customer register?', 'Legge {1} og eieren ({2}) i kunderegisteret?'],
   ['Check for recalls on work order #{n}', 'Sjekk tilbakekallinger på arbeidsordre #{1}'], ['Checked {}', 'Sjekket {1}'],
   ['Sent to the planner {} by {}', 'Sendt til planleggeren {1} av {2}'], ['Sent to the planner {}', 'Sendt til planleggeren {1}'],

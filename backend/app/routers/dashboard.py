@@ -8,7 +8,7 @@ from ..common import READY_SQL, service_due, tyre_season, tyre_warning
 from ..db import get_conn
 from .pdi import ORDER_SELECT, THIS_WEEK_SQL
 from .storage_care import charging_due_list, storage_check_due_list
-from . import recalls
+from . import recalls, work_orders
 
 router = APIRouter(tags=["dashboard"])
 
@@ -124,6 +124,7 @@ def dashboard(conn=Depends(get_conn)):
         "battery_due": battery_due,
         "recall_due": recalls.due_list(conn),    # recall checks due (routers/recalls.py)
         "recalls_open": recalls.open_list(conn),  # open recalls on cars still here
+        "work_orders": work_orders.attention_list(conn),   # follow-ups due, quiet, not invoiced (0.61.0)
         "rental_eu_control": rental_eu,
         "rentals_late": rentals_late,
         "tyres_summer": sorted((t for t in tyres if t["kind"] != "winter_after_season"),

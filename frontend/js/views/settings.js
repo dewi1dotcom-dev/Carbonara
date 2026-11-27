@@ -17,10 +17,30 @@ export async function settingsView(el) {
       'The kiosk form where customers register the car they drop off: maps, key places, tick boxes and kiosk tablets.'),
     h('a', { href: '#/deliveries' }, 'Open Customer deliveries →'));
   const recallBox = h('div'); // Recall sources: where cars are checked for recalls (views/recalls.js)
+  const woBox = h('div'); // who gets every work order reminder (0.61.0)
   el.append(h('div', { class: 'page-head' }, h('h1', {}, 'Settings')), signatureCard(), staffBox, locBox, plateBox, pdiBox, sheetBox,
-    recallBox, deliveryBox, registryBox, retentionBox);
+    recallBox, woBox, deliveryBox, registryBox, retentionBox);
   await Promise.all([renderStaff(), renderLocations(), renderPlates(), renderPdiLists(), renderPdiSheetSettings(sheetBox),
-    renderRecallSources(recallBox), renderRegistry(), renderRetention()]);
+    renderRecallSources(recallBox), renderRegistry(), renderRetention(), renderWoReminders()]);
+
+  // Work order reminders (0.61.0, the user's rule): each work order's creator gets the morning notification about
+  // follow-ups due, quiet orders and work not invoiced; the people ticked here get it about every work order.
+  async function renderWoReminders() {
+    if (!session.me?.is_admin) return;
+    let people;
+    try { people = await api.get('/work-orders/reminder-staff'); } catch { return; }
+    const boxes = people.map((p) => h('input', { type: 'checkbox', value: p.id, checked: p.chosen }));
+    const save = h('button', { class: 'btn primary', type: 'button' }, 'Save');
+    save.addEventListener('click', () => busy(save, async () => {
+      await api.put('/work-orders/reminder-staff', { staff_ids: boxes.filter((b) => b.checked).map((b) => Number(b.value)) });
+      toast('Saved', 'success');
+    }));
+    woBox.replaceChildren(h('section', { class: 'card' },
+      h('h2', {}, 'Work order reminders'),
+      h('p', { class: 'muted small' }, 'Every morning on working days, whoever made a work order gets a notification when it needs a look: follow-up date reached, nothing happened for a while (System page → Work orders), or done but not invoiced. The people ticked here get it about every work order.'),
+      h('div', { class: 'chips' }, people.map((p, i) => h('label', { class: 'chip' }, boxes[i], h('span', { translate: 'no' }, p.name)))),
+      h('div', { class: 'actions left' }, save)));
+  }
 
   // Trade plates (prøvekjennemerker) for test drives. Named freely, so a set can
   // be renamed when a plate is replaced. A set is on at most one car at a time.

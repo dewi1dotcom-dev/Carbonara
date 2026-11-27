@@ -1,7 +1,9 @@
 // Work orders (0.49.0): a car + the work to perform (free text and / or a list to tick off) + the mechanic's reply +
 // labour time (the clock on the order; breaks taken off) + parts (parts orders tied to it). Who worked when is shown to
 // admins only. Server: routers/work_orders.py.
-import { api, append, busy, canOpen, canSee, dateInput, debounce, fmtDate, h, openDialog, session, showError, timeInput, toast } from '../ui.js';
+import {
+  api, append, busy, canOpen, canSee, dateInput, debounce, fmtDate, h, openDialog, osloTodayIso, session, showError, timeInput, toast,
+} from '../ui.js';
 import { carTitle, orderBadge, pickCustomer } from './customers.js';
 import { entryDialog, fmtDuration, fmtLocal } from './hours.js';
 import { field, fmtMoney, fmtQty, money2, parseNum, qtyText } from './parts.js';
@@ -33,7 +35,8 @@ export async function workOrdersView(el) {
   const state = { show: saved.get('show') || 'active', q: saved.get('q') || '' };
   const query = () => new URLSearchParams(Object.entries(state).filter(([k, v]) => v && !(k === 'show' && v === 'active'))).toString();
   const showSel = h('select', { 'aria-label': 'Show' },
-    [['active', 'Not done yet'], ['done', 'Done'], ['invoiced', 'Invoiced'], ['cancelled', 'Cancelled'], ['all', 'All work orders']]
+    [['active', 'Not done yet'], ['attention', 'Needs a look'], ['done', 'Done'], ['invoiced', 'Invoiced'],
+      ['cancelled', 'Cancelled'], ['all', 'All work orders']]
       .map(([v, t]) => h('option', { value: v, selected: v === state.show }, t)));
   const search = h('input', { type: 'search', value: state.q, placeholder: 'Work order no., reg. no., customer, text…', 'aria-label': 'Search work orders' });
   const listSlot = h('div');
@@ -68,6 +71,69 @@ function ordersTable(data) {
   return h('div', {}, summary, workOrderTable(data.orders));
 }
 
+// ---------------------------------------------------------------- not forgotten (0.61.0)
+
+export const WAITING = {
+  customer: 'Waiting for the customer', car: 'Waiting for the car', approval: 'Waiting for approval',
+  parts: 'Waiting for parts', other: 'Waiting', planned: 'Planned',
+};
+
+/** Badges under the status (server: work_orders.add_attention): follow-up due, quiet for n days, why it waits,
+ *  done but not invoiced. */
+export function attentionBadges(o) {
+  const b = [];
+  if (o.follow_up_due) b.push(h('span', { class: 'badge bad' }, h('span', {}, 'Follow up'), ` ${fmtDate(o.follow_up_on, false)}`));
+  else if (o.follow_up_on && ACTIVE.includes(o.status)) b.push(h('span', { class: 'badge' }, h('span', {}, 'Look again'), ` ${fmtDate(o.follow_up_on, false)}`));
+  if (o.quiet) b.push(h('span', { class: `badge ${o.quiet}` }, `Quiet ${o.quiet_days} d`));
+  if (o.waiting && o.waiting !== 'planned') b.push(h('span', { class: 'badge' }, WAITING[o.waiting] || o.waiting));
+  if (o.not_invoiced) b.push(h('span', { class: 'badge warn' }, 'Not invoiced'));
+  return b.length ? h('div', { class: 'wo-attention' }, b.map((x, i) => [i ? ' ' : '', x])) : null;
+}
+
+/** "Waiting for / Look again on" on the work order page (0.61.0): why it waits and when someone should look at it
+ *  again; on that day it is on Today and its creator (+ the people chosen in Settings) get a notification. */
+export function followUpCard(o, editable, rerender) {
+  const age = Math.max(0, Math.round((Date.now() - new Date(o.created_at).getTime()) / 86400000));
+  const facts = h('p', { class: 'small muted' },
+    h('span', {}, `Open ${age} d`), ' · ', h('span', {}, `last activity ${fmtDate(o.last_activity)}`),
+    o.quiet ? [' ', h('span', { class: `badge ${o.quiet}` }, `Quiet ${o.quiet_days} d`)] : null);
+  const auto = !o.waiting_for && o.waiting ? h('span', { class: 'muted small' }, h('span', {}, 'Now:'), ' ', h('span', {}, WAITING[o.waiting])) : null;
+  if (!editable) {
+    return h('section', { class: 'card follow-up-card no-print' }, facts,
+      o.waiting ? h('p', {}, h('span', { class: 'badge' }, WAITING[o.waiting]), o.waiting_note ? h('span', { translate: 'no' }, ` ${o.waiting_note}`) : null) : null,
+      o.follow_up_on ? h('p', {}, h('span', {}, 'Look again on'), ` ${fmtDate(o.follow_up_on, false)}`) : null);
+  }
+  const why = h('select', { 'aria-label': 'Waiting for' },
+    h('option', { value: '' }, 'Not waiting / as shown'),
+    ['customer', 'car', 'approval', 'parts', 'other'].map((k) => h('option', { value: k, selected: o.waiting_for === k }, WAITING[k])));
+  const note = h('input', { type: 'text', maxlength: 200, autocomplete: 'off', value: o.waiting_note || '', placeholder: 'Short note (optional)' });
+  const when = dateInput({ value: o.follow_up_on || '' });
+  const save = h('button', { class: 'btn primary small', type: 'button' }, 'Save');
+  const send = (date = when.value) => busy(save, async () => {
+    await api.put(`/work-orders/${o.id}/follow-up`, { waiting_for: why.value || null, waiting_note: note.value.trim() || null, follow_up_on: date || null });
+    toast('Saved', 'success');
+    await rerender();
+  });
+  save.addEventListener('click', () => send());
+  const inWeeks = (n) => {
+    const d = new Date(`${osloTodayIso()}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 7 * n);
+    return d.toISOString().slice(0, 10);
+  };
+  const quick = [1, 2, 4].map((n) => h('button', { class: 'link small', type: 'button', onClick: () => { when.value = inWeeks(n); send(when.value); } },
+    n === 1 ? 'In 1 week' : `In ${n} weeks`));
+  const clear = o.follow_up_on ? h('button', { class: 'link small danger', type: 'button', onClick: () => { when.value = ''; send(''); } }, 'No date') : null;
+  return h('section', { class: `card follow-up-card no-print${o.follow_up_due ? ' due' : ''}` },
+    h('div', { class: 'card-head' }, h('h2', {}, 'Waiting and follow-up'), facts),
+    h('div', { class: 'grid' },
+      h('div', { class: 'field' }, h('label', {}, 'Waiting for'), why, auto),
+      h('div', { class: 'field' }, h('label', {}, 'Note'), note),
+      h('div', { class: 'field' }, h('label', {}, 'Look again on'), when,
+        h('span', { class: 'small' }, quick.map((q, i) => [i ? ' · ' : '', q]), clear ? [' · ', clear] : null))),
+    h('div', { class: 'actions left' }, save,
+      h('span', { class: 'muted small' }, 'On that day it is on Today, and whoever made the work order gets a notification.')));
+}
+
 /** The table of work orders (list page, car pages, customer pages). */
 export function workOrderTable(orders) {
   const rows = orders.map((o) => {
@@ -77,7 +143,8 @@ export function workOrderTable(orders) {
         h('span', { class: 'muted small block', translate: 'no' }, carTitle(o))),
       h('td', {}, o.customer_name ? h('span', { translate: 'no' }, o.customer_name) : h('span', { class: 'muted' }, '–'),
         o.title ? h('span', { class: 'muted small block', translate: 'no' }, o.title) : null),
-      h('td', {}, woBadge(o.status), Number(o.clocks_running) > 0 ? [' ', h('span', { class: 'badge good' }, '⏱')] : null),
+      h('td', {}, woBadge(o.status), Number(o.clocks_running) > 0 ? [' ', h('span', { class: 'badge good' }, '⏱')] : null,
+        attentionBadges(o)),
       h('td', { class: 'num' }, o.task_count ? `${o.tasks_done}/${o.task_count}` : '–'),
       h('td', { class: 'num' }, o.labour_seconds ? fmtDuration(o.labour_seconds) : '–',
         o.estimated_minutes ? h('span', { class: 'muted small block' }, `estimated ${fmtDuration(o.estimated_minutes * 60)}`) : null),
@@ -241,6 +308,7 @@ const EVENT = {
   created: 'Work order created', updated: 'Details changed', tasks: 'Tasks changed', status: 'Status changed',
   parts_order: 'Parts order made', extra_lines: 'Other charges changed', invoiced: 'Invoiced', credited: 'Invoice credited',
   arrived: 'Car arrived', not_arrived: 'Not arrived after all', parts_ready: 'Parts arrived and ready', parts_not_ready: 'Parts not ready after all',
+  follow_up: 'Waiting and follow-up changed',
   recall_check: 'Checked for recalls', recall_work_order: 'Recalls put on a new work order', recall_from: 'Made from a recall check',
 };
 
@@ -249,6 +317,10 @@ function eventDetail(e) {
   if (e.kind === 'invoiced') return h('a', { href: `#/invoices/${d.invoice_id}` }, `Invoice no. ${d.number}`);
   if (e.kind === 'arrived' && d.kiosk) return h('span', {}, 'Registered on the delivery kiosk');
   if ((e.kind === 'parts_ready' || e.kind === 'parts_not_ready') && d.auto) return h('span', {}, 'Follows the parts');
+  if (e.kind === 'follow_up') {
+    return [d.waiting_for ? h('span', {}, WAITING[d.waiting_for] || d.waiting_for) : h('span', {}, 'Not waiting'),
+      d.follow_up_on ? [' · ', h('span', {}, 'look again on'), ` ${fmtDate(d.follow_up_on, false)}`] : null];
+  }
   if (e.kind === 'credited') {
     return [h('a', { href: `#/invoices/${d.invoice_id}` }, `Invoice no. ${d.number}`), ' → ',
       h('a', { href: `#/invoices/${d.credit_note_id}` }, `Credit note no. ${d.credit_note_number}`)];
@@ -352,6 +424,8 @@ export async function workOrderView(el, [id], host = el) {
         editable ? h('button', { class: 'btn', type: 'button', onClick: () => editDialog(o, rerender) }, 'Edit') : null)),
     actions.length ? h('div', { class: 'actions left no-print' }, actions) : null,
     partsReadyBar(o, editable, rerender),
+    ACTIVE.includes(o.status) ? followUpCard(o, editable, rerender) : null,
+    o.not_invoiced ? h('div', { class: 'notice warn no-print' }, 'The work is done but not invoiced yet.') : null,
     workOrderRecallCard(o, editable, rerender),
     h('section', { class: 'card clock-card no-print' },
       h('div', { class: 'clock-line' },

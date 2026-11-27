@@ -21,7 +21,7 @@ from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
 from .. import worktime
-from ..auth import require_staff
+from ..auth import require_admin, require_staff
 from ..common import bad_request, conflict, not_found
 from ..config import settings
 from ..db import get_conn
@@ -143,8 +143,16 @@ def create_work_order(conn, staff_id: int, *, vehicle_id=None, customer_car_id=N
 HAS_PARTS_SQL = """EXISTS (SELECT 1 FROM parts_order_lines pl JOIN parts_orders po ON po.id = pl.order_id
                              WHERE po.work_order_id = w.id AND po.status <> 'cancelled')"""
 
+# The last time anything happened on a work order (0.61.0): a change or history entry, the clock, its parts.
+LAST_ACTIVITY_SQL = """GREATEST(w.created_at, w.updated_at,
+        (SELECT max(e.created_at) FROM work_order_events e WHERE e.work_order_id = w.id),
+        (SELECT max(coalesce(t.ended_at, now())) FROM work_time t WHERE t.work_order_id = w.id),
+        (SELECT max(po.updated_at) FROM parts_orders po WHERE po.work_order_id = w.id))"""
+
 WO_SELECT = """SELECT w.id, w.number, w.status, w.title, w.planned_at, w.estimated_minutes, w.created_at, w.done_at,
                       w.parts_ready_at, """ + HAS_PARTS_SQL + """ AS has_parts,
+                      w.waiting_for, w.waiting_note, w.follow_up_on, w.created_by, w.invoice_id,
+                      """ + LAST_ACTIVITY_SQL + """ AS last_activity,
                       w.vehicle_id, w.customer_car_id, w.customer_id, w.assigned_to, w.pdi_order_id, w.updated_at,
                       w.arrived_at, w.job_type_id, w.place_id, jt.name AS job_type_name, jt.name_no AS job_type_name_no,
                       jt.color AS job_type_color, wp.name AS place_name,
@@ -160,6 +168,58 @@ WO_SELECT = """SELECT w.id, w.number, w.status, w.title, w.planned_at, w.estimat
                  LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id
                  LEFT JOIN customers c ON c.id = w.customer_id LEFT JOIN staff a ON a.id = w.assigned_to
                  LEFT JOIN job_types jt ON jt.id = w.job_type_id LEFT JOIN workshop_places wp ON wp.id = w.place_id"""
+
+
+WAITING = ("customer", "car", "approval", "parts", "other")
+
+
+def add_attention(r: dict, today) -> dict:
+    """What a work order row needs (0.61.0): quiet (no activity for the System page's days, unless a later follow-up
+    date says someone decided), follow-up due, why it waits, ready to plan, done but not invoiced."""
+    active = r["status"] in ACTIVE
+    last = r.get("last_activity")
+    days = (today - last.astimezone(OSLO).date()).days if last else 0
+    warn = settings.work_order_quiet_warn_days
+    bad = max(settings.work_order_quiet_bad_days, warn)
+    later = bool(r["follow_up_on"] and r["follow_up_on"] > today)
+    r["quiet_days"] = days
+    r["quiet"] = None if not active or later else "bad" if days >= bad else "warn" if days >= warn else None
+    r["follow_up_due"] = bool(active and r["follow_up_on"] and r["follow_up_on"] <= today)
+    # Chosen by hand, else what Carbonara knows: parts not ready yet, a time in the planner.
+    auto = "parts" if r["has_parts"] and not r["parts_ready_at"] else "planned" if r["planned_at"] else None
+    r["waiting"] = (r["waiting_for"] or auto) if active else None
+    r["ready_to_plan"] = bool(r["status"] == "open" and not r["planned_at"] and not r["waiting_for"]
+                              and (not r["has_parts"] or r["parts_ready_at"]))
+    # Customer jobs only: a job on a car in stock (a PDI) is the dealer's own and isn't invoiced.
+    r["not_invoiced"] = bool(r["status"] == "done" and not r["invoice_id"] and r["customer_car_id"])
+    return r
+
+
+def attention_list(conn, staff_ids: Optional[list[int]] = None) -> dict:
+    """Work orders that need a look (Today, the morning notification): follow-up due, quiet, done but not invoiced.
+    `staff_ids` = only the ones these people created."""
+    where = "w.status IN ('open', 'in_progress', 'done') AND w.invoice_id IS NULL"
+    params: list = []
+    if staff_ids is not None:
+        where += " AND w.created_by = ANY(%s)"
+        params.append(staff_ids)
+    today = worktime.today()
+    rows = [add_attention(r, today) for r in conn.execute(
+        WO_SELECT + f" WHERE {where} ORDER BY w.follow_up_on NULLS LAST, w.created_at", params).fetchall()]
+    keep = ("id", "number", "title", "status", "registration_number", "make", "model", "customer_name", "follow_up_on",
+            "waiting", "waiting_note", "quiet", "quiet_days", "done_at", "created_at")
+    pick = lambda r: {k: r.get(k) for k in keep}  # noqa: E731
+    follow = [pick(r) for r in rows if r["follow_up_due"]]
+    quiet = sorted((pick(r) for r in rows if r["quiet"] and not r["follow_up_due"]), key=lambda r: -r["quiet_days"])
+    return {"follow_up": follow, "quiet": quiet, "not_invoiced": [pick(r) for r in rows if r["not_invoiced"]]}
+
+
+REMINDER_KEY = "wo_reminder_staff"   # app_settings: comma list of staff ids who get every work order reminder
+
+
+def reminder_staff(conn) -> list[int]:
+    row = conn.execute("SELECT value FROM app_settings WHERE key = %s", (REMINDER_KEY,)).fetchone()
+    return [int(x) for x in (row["value"] if row else "").split(",") if x.strip().isdigit()]
 
 
 def _labour(conn, order_ids: list[int]) -> dict[int, int]:
@@ -178,12 +238,14 @@ def _labour(conn, order_ids: list[int]) -> dict[int, int]:
 
 
 @router.get("/work-orders")
-def list_orders(show: Literal["active", "done", "invoiced", "cancelled", "all"] = "active", q: str = "",
+def list_orders(show: Literal["active", "attention", "done", "invoiced", "cancelled", "all"] = "active", q: str = "",
                 vehicle_id: Optional[int] = None, customer_car_id: Optional[int] = None,
                 customer_id: Optional[int] = None, conn=Depends(get_conn), _staff=Depends(require_work_orders)):
     where, params = [], []
     if show == "active":
         where.append("w.status IN ('open', 'in_progress')")
+    elif show == "attention":   # 0.61.0: follow-up due, quiet, done but not invoiced (picked below)
+        where.append("w.status IN ('open', 'in_progress', 'done') AND w.invoice_id IS NULL")
     elif show != "all":
         where.append("w.status = %s")
         params.append(show)
@@ -208,11 +270,42 @@ def list_orders(show: Literal["active", "done", "invoiced", "cancelled", "all"] 
                         + " ORDER BY (w.status IN ('open', 'in_progress')) DESC, w.planned_at NULLS LAST, "
                           f"w.created_at DESC LIMIT {LIST_LIMIT}", params).fetchall()
     labour = _labour(conn, [r["id"] for r in rows])
+    today = worktime.today()
     for r in rows:
         r["labour_seconds"] = labour.get(r["id"], 0)
         r["planned_local"] = local(r["planned_at"])
+        add_attention(r, today)
+    if show == "attention":
+        rows = [r for r in rows if r["follow_up_due"] or r["quiet"] or r["not_invoiced"]]
     counts = conn.execute("SELECT status, count(*) AS n FROM work_orders GROUP BY status").fetchall()
     return {"orders": rows, "counts": {r["status"]: r["n"] for r in counts}}
+
+
+@router.get("/work-orders/attention")
+def attention(conn=Depends(get_conn), _staff=Depends(require_work_orders)):
+    """Follow-ups due, quiet work orders, done but not invoiced (0.61.0)."""
+    return attention_list(conn)
+
+
+@router.get("/work-orders/reminder-staff")
+def get_reminder_staff(conn=Depends(get_conn), _admin=Depends(require_admin)):
+    """Who gets every work order reminder, besides each order's creator (Settings page)."""
+    chosen = set(reminder_staff(conn))
+    people = conn.execute("SELECT id, name FROM staff WHERE active AND deleted_at IS NULL ORDER BY name").fetchall()
+    return [{**p, "chosen": p["id"] in chosen} for p in people]
+
+
+class ReminderStaffIn(BaseModel):
+    staff_ids: list[int] = Field(default_factory=list, max_length=200)
+
+
+@router.put("/work-orders/reminder-staff")
+def put_reminder_staff(body: ReminderStaffIn, conn=Depends(get_conn), staff=Depends(require_admin)):
+    ids = sorted({r["id"] for r in conn.execute("SELECT id FROM staff WHERE id = ANY(%s) AND active AND deleted_at IS NULL",
+                                                (body.staff_ids,)).fetchall()})
+    conn.execute("INSERT INTO app_settings (key, value) VALUES (%s, %s) ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value",
+                 (REMINDER_KEY, ",".join(map(str, ids))))
+    return {"staff_ids": ids}
 
 
 @router.get("/work-orders/cars")
@@ -306,6 +399,7 @@ def get_order(wo_id: int, conn=Depends(get_conn), staff=Depends(require_work_ord
              LEFT JOIN pdi_orders p ON p.id = w.pdi_order_id
              LEFT JOIN staff pr ON pr.id = w.parts_ready_by
             WHERE w.id = %s""", (wo_id,)).fetchone()
+    add_attention(out, worktime.today())   # quiet / follow-up / waiting (0.61.0)
     labour = _labour(conn, [wo_id]).get(wo_id, 0)
     is_admin = bool(staff.get("is_admin"))
     entries = []
@@ -597,6 +691,31 @@ def set_parts_ready(wo_id: int, body: PartsReadyIn, conn=Depends(get_conn), staf
                  "parts_ready_by = CASE WHEN %s THEN %s END WHERE id = %s",
                  (body.ready, body.ready, staff["id"], wo_id))
     _event(conn, wo_id, "parts_ready" if body.ready else "parts_not_ready", staff["id"])
+    return {"id": wo_id}
+
+
+class FollowUpIn(BaseModel):
+    waiting_for: Optional[Literal["customer", "car", "approval", "parts", "other"]] = None
+    waiting_note: Optional[str] = Field(None, max_length=200)
+    follow_up_on: Optional[str] = None   # ISO date; empty = none
+
+
+@router.put("/work-orders/{wo_id}/follow-up")
+def set_follow_up(wo_id: int, body: FollowUpIn, conn=Depends(get_conn), staff=Depends(require_work_orders)):
+    """Why the work order is waiting and when to look at it again (0.61.0). Saving counts as activity, so a work order
+    someone has looked at isn't "quiet" any more."""
+    from datetime import date
+    o = _order(conn, wo_id, lock=True)
+    _not_locked(o)
+    try:
+        when = date.fromisoformat(body.follow_up_on) if body.follow_up_on else None
+    except ValueError:
+        raise bad_request("Check the date")
+    note = _text(body.waiting_note, 200) if body.waiting_for else None
+    conn.execute("""UPDATE work_orders SET waiting_for = %s, waiting_note = %s, follow_up_on = %s, updated_at = now(),
+                           updated_by = %s WHERE id = %s""", (body.waiting_for, note, when, staff["id"], wo_id))
+    # The history gets the reason and the date, never the note's text.
+    _event(conn, wo_id, "follow_up", staff["id"], {"waiting_for": body.waiting_for, "follow_up_on": when})
     return {"id": wo_id}
 
 

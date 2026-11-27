@@ -1110,3 +1110,10 @@ body.planner-full .pl-page-head h1 { font-size: 1.3rem; margin: 0; }
 .recall-found-list { display: grid; gap: .4rem; margin-bottom: .5rem; }
 .recall-found-row { grid-template-columns: minmax(0, 1fr) minmax(0, 2fr); gap: .5rem; }
 .recall-due-line { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: .5rem; }
+
+/* Work orders that aren't forgotten (0.61.0): badges under the status, and the "Waiting and follow-up" card. */
+.wo-attention { margin-top: .25rem; line-height: 1.9; }
+.follow-up-card .card-head { flex-wrap: wrap; gap: .25rem 1rem; }
+.follow-up-card .card-head p { margin: 0; }
+.follow-up-card.due { border-left: 4px solid var(--bad); }
+.follow-up-card .field .small { display: block; margin-top: .3rem; }

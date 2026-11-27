@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…060
+  migrations/           001…061
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -338,6 +338,7 @@ frontend/               no build step; plain ES modules
 | 058 | `customer_car_registry` | `customer_cars.first_registered_norway / owner_since / eu_control_due / eu_control_last_approved / registry_checked_at / registry_error` |
 | 059 | `parts_supply` | `parts_order_lines.supply` (stock / order / ordered / arrived), `supply_at / _by`, `expected_date`; `parts_orders.invoice_id` (counter sale invoices); movement kind `order_received` |
 | 060 | `delivery_owner` | `car_deliveries.owner_address / owner_postal_code / owner_city`, `not_owner`, `contact_name` (kiosk: a car not in the customer register) |
+| 061 | `work_order_follow_up` | `work_orders.waiting_for` (customer / car / approval / parts / other), `waiting_note`, `follow_up_on` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1519,6 +1520,30 @@ adjust the time, auto-subtracted from the work: a 2 hour job set from 11 goes to
   - **Retention:** the worker deletes `work_days` older than `retention_years` (`hours.purge_old_days`); `work_time` stays
     with the work order.
 
+**Work orders that aren't forgotten (0.61.0)** (migration 061; the user's request: "2–5 weeks of waiting time … open orders
+that are forgotten usually pile up"; the user's choices: quiet limits adjustable, start at 14 / 30 days; reminders to the
+order's creator and to selected team members):
+- **Per open work order** ("Waiting and follow-up" card on the work order page, `followUpCard`; `PUT /work-orders/{id}/follow-up`,
+  event `follow_up` with the reason and date, never the note): **Waiting for** customer / car / approval / parts / other
+  (+ a short note), and **Look again on** (date; quick In 1 / 2 / 4 weeks, No date). Without a chosen reason it shows
+  what Carbonara knows ("Now: Waiting for parts" while parts haven't arrived, "Planned" with a time). The card also
+  shows "Open n d · last activity …".
+- **Last activity** (`LAST_ACTIVITY_SQL` in `WO_SELECT`): the latest of created / updated, a history entry, the clock,
+  its parts orders. **Quiet** (`add_attention`): no activity for System → Work orders `work_order_quiet_warn_days` (14,
+  amber) / `work_order_quiet_bad_days` (30, red), not while a later "look again" date is set (someone decided).
+  `add_attention` also gives `follow_up_due`, `waiting`, `ready_to_plan` and `not_invoiced` (done, no invoice, customer
+  register car only: a PDI on a car in stock isn't invoiced).
+- **Where it shows:** badges under the status in every work order table (`attentionBadges`: Follow up / Look again date,
+  Quiet n d, Waiting for …, Not invoiced); the list's **"Needs a look"** filter (`show=attention`); **Today → Needs
+  attention** (teams that see Work orders): "Work orders to follow up", "Quiet work orders", "Work done – not invoiced
+  yet" (`work_orders.attention_list`, in `/api/dashboard`; also `GET /work-orders/attention`).
+- **Morning notification** (`push._work_orders`, kind `work_orders`, working days from 07:30, once a day): each order's
+  **creator** about their own orders, and the people ticked on **Settings → Work order reminders** (admins;
+  `app_settings` `wo_reminder_staff`, `GET/PUT /work-orders/reminder-staff`) about all of them. "Follow up today: n ·
+  Quiet: n · Done, not invoiced: n", opens `#/work-orders?show=attention`.
+- Step 2 (not built yet, agreed): the list grouped (Needs a look / Ready to plan / Planned / Waiting / Not invoiced),
+  a responsible person per order, a weekly review with quick actions.
+
 **Invoices (0.50.0)** (migration 048; `routers/invoices.py`, `views/invoices.js`; the user's request: "labour (+ labour
 price) and parts should be in the same work order and finish with a bill / faktura with the Norwegian requirements"; the
 user's choices: Carbonara issues the invoice; labour = clocked time rounded up to a quarter hour, editable, one hourly rate
@@ -1951,6 +1976,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.60.3 | Kiosk: a reg. no. not in the customer register asks for the car's legal owner (first + last name, address), a contact phone that can be anyone's, and "I am not the owner" + the first name of the person delivering; shown on the staff delivery card (migration 060) |
 | 0.60.4 | Customer deliveries: the staff card lists the car's open work orders (links), or offers "New work order" (a car not in the customer register is first added from what was typed on the kiosk); the new work order is tied to the delivery and marked as arrived |
 | 0.60.5 | Kiosk: no floating button at all; tapping the message box scrolls the page so "Register delivery" sits right above the keyboard |
+| 0.61.0 | **Work orders aren't forgotten:** "Waiting for …" + "Look again on" date on each open work order, age and last activity, "Quiet" badges (amber 14 / red 30 days, System page), Today blocks (follow up, quiet, done not invoiced), "Needs a look" filter, a morning notification to the creator + people chosen in Settings (migration 061) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

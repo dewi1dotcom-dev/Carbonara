@@ -185,6 +185,10 @@ SETTINGS: tuple[Setting, ...] = (
             pattern_error="write the time as 15:30"),
     Setting("work_order_number_start", "First work order number", "Work hours", int, 1000, min=1, max=99999999,
             help="New work orders get the next free number from here (higher than any number in use)."),
+    # Work orders that aren't forgotten (0.61.0): no activity for this long = amber / red, listed on Today.
+    Setting("work_order_quiet_warn_days", "Quiet work order: amber after (days)", "Work orders", int, 14, min=1, max=365,
+            help="An open work order with no activity (changes, clock, parts, notes) for this many days is marked and listed on Today."),
+    Setting("work_order_quiet_bad_days", "Quiet work order: red after (days)", "Work orders", int, 30, min=1, max=730),
     # Invoicing (routers/invoices.py, 0.50.0). The seller is the Customer register company (else Company above).
     Setting("labour_rate", "Hourly rate for labour (kr ex VAT)", "Invoicing", float, 0, min=0, max=100000,
             help="Used for the labour on work orders unless a work order has its own rate."),

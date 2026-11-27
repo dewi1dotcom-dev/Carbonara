@@ -46,6 +46,7 @@ KIND_MENU: dict[str, Optional[tuple[str, ...]]] = {
     "pdi_status": ("vehicles", "pdi_orders"),    # PDI date confirmed / PDI done (to whoever made the order)
     "late_return": ("testdrive", "rental"),      # test drive / rental car not back (to whoever handed it out)
     "daily_due": ("vehicles", "storage"),        # storage checks + 12V charging due (one in the morning)
+    "work_orders": ("work_orders",),             # work orders that need a look (0.61.0; one in the morning)
     "system": ("system",),                       # background worker stopped, disk almost full
 }
 KINDS = tuple(KIND_MENU)
@@ -247,6 +248,7 @@ def scheduled(conn, *, system_checks: bool = True) -> None:
     if morning:
         _pdi_prep(conn, today)
         _daily_due(conn, today)
+        _work_orders(conn, today)
     _note_reminders(conn)  # any time of day: the person chose the time
     if daytime:
         _late_returns(conn)
@@ -292,6 +294,39 @@ def _daily_due(conn, today: dt.date) -> None:
           f"Sjekk av tilbakekallinger: {recall}" if recall else None]
     notify(conn, None, "daily_due", en=("Due today or soon", " · ".join(x for x in en if x)),
            no=("Forfaller i dag eller snart", " · ".join(x for x in no if x)), url="#/", tag=f"daily_due-{today}")
+
+
+def _work_orders(conn, today: dt.date) -> None:
+    """Work orders that need a look (0.61.0, the user's rule): to each order's creator about their own orders, and to
+    the people chosen on the Settings page about all of them. One a working day per person, from 07:30."""
+    from .routers.work_orders import attention_list, reminder_staff
+    if not _once(conn, f"work_orders:{today}"):
+        return
+    everyone = attention_list(conn)
+    rows = everyone["follow_up"] + everyone["quiet"] + everyone["not_invoiced"]
+    if not rows:
+        return
+    created_by = {r["id"]: r["created_by"] for r in conn.execute(
+        "SELECT id, created_by FROM work_orders WHERE id = ANY(%s)", (list({r["id"] for r in rows}),)).fetchall()}
+    chosen = set(reminder_staff(conn))
+    people = chosen | {c for c in created_by.values() if c}
+
+    def text(lists: dict) -> Optional[tuple[tuple[str, str], tuple[str, str]]]:
+        f, q, n = len(lists["follow_up"]), len(lists["quiet"]), len(lists["not_invoiced"])
+        if not (f or q or n):
+            return None
+        en = [f"Follow up today: {f}" if f else None, f"Quiet: {q}" if q else None, f"Done, not invoiced: {n}" if n else None]
+        no = [f"Følg opp i dag: {f}" if f else None, f"Stille: {q}" if q else None, f"Ferdig, ikke fakturert: {n}" if n else None]
+        return (("Work orders need a look", " · ".join(x for x in en if x)),
+                ("Arbeidsordrer trenger en titt", " · ".join(x for x in no if x)))
+
+    for sid in people:
+        mine = everyone if sid in chosen else {
+            k: [r for r in v if created_by.get(r["id"]) == sid] for k, v in everyone.items()}
+        t = text(mine)
+        if t:
+            notify(conn, [sid], "work_orders", en=t[0], no=t[1], url="#/work-orders?show=attention",
+                   tag=f"work_orders-{today}")
 
 
 def _note_reminders(conn) -> None:
