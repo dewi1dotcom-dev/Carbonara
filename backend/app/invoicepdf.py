@@ -124,10 +124,23 @@ class _NumberedCanvas(rl_canvas.Canvas):
         super().save()
 
 
-def build(inv: dict, logo: Optional[Path] = None) -> bytes:
+def _draft_mark(cv) -> None:
+    """A preview (0.65.2): "UTKAST – IKKE EN FAKTURA" across the page, so it can never pass for a real invoice."""
+    cv.saveState()
+    cv.setFillColor(colors.Color(0.8, 0.1, 0.1, alpha=0.13))
+    cv.setFont("Helvetica-Bold", 54)
+    cv.translate(W / 2, H / 2)
+    cv.rotate(52)
+    cv.drawCentredString(0, 0, "UTKAST – IKKE EN FAKTURA")
+    cv.restoreState()
+
+
+def build(inv: dict, logo: Optional[Path] = None, preview: bool = False) -> bytes:
+    """`preview` (0.65.2): a draft made before the invoice is issued: title FAKTURAUTKAST, no number, marked on every
+    page."""
     s, b, c = inv.get("seller") or {}, inv.get("buyer") or {}, inv.get("car") or {}
     is_invoice = inv.get("kind") == "invoice"
-    title = "FAKTURA" if is_invoice else "KREDITNOTA"
+    title = "FAKTURAUTKAST" if preview else "FAKTURA" if is_invoice else "KREDITNOTA"
     logo_img = None
     if logo and logo.exists():
         try:
@@ -160,6 +173,8 @@ def build(inv: dict, logo: Optional[Path] = None) -> bytes:
         cv.drawCentredString(W / 2, 13.5 * mm, second[:150])
 
     def first_page(cv, _doc):
+        if preview:
+            _draft_mark(cv)
         cv.saveState()
         # Logo (or the company name), top left.
         if logo_img:
@@ -199,7 +214,7 @@ def build(inv: dict, logo: Optional[Path] = None) -> bytes:
                 by += 4.8 * mm
                 cv.drawString(LEFT + 2 * mm, H - by, r[:50])
         # Title and the box of invoice details, right.
-        cv.setFont("Helvetica-Bold", 22)
+        cv.setFont("Helvetica-Bold", 22 if len(title) < 12 else 18)
         cv.drawString(RIGHT_COL, H - 56 * mm, title)
         box_top, box_h = 61 * mm, 25 * mm
         cv.setStrokeColor(RULE)
@@ -207,7 +222,8 @@ def build(inv: dict, logo: Optional[Path] = None) -> bytes:
         cv.roundRect(RIGHT_COL, H - box_top - box_h, W - RIGHT - RIGHT_COL, box_h, 2 * mm, stroke=1, fill=0)
         col = (W - RIGHT - RIGHT_COL - 6 * mm) / 3
         x0 = RIGHT_COL + 3 * mm
-        label_value(cv, x0, box_top + 5 * mm, "Fakturanr." if is_invoice else "Kreditnotanr.", inv.get("number"), bold=True)
+        label_value(cv, x0, box_top + 5 * mm, "Fakturanr." if is_invoice else "Kreditnotanr.",
+                    "Utkast" if preview else inv.get("number"), bold=True)
         label_value(cv, x0 + col, box_top + 5 * mm, "Fakturadato" if is_invoice else "Dato", no_date(inv.get("issue_date")))
         label_value(cv, x0 + 2 * col, box_top + 5 * mm, "Forfall" if is_invoice else "Leveringsdato",
                     no_date(inv.get("due_date") if is_invoice else inv.get("delivery_date")), bold=is_invoice)
@@ -244,10 +260,12 @@ def build(inv: dict, logo: Optional[Path] = None) -> bytes:
         cv.restoreState()
 
     def later_page(cv, _doc):
+        if preview:
+            _draft_mark(cv)
         cv.saveState()
         cv.setFont("Helvetica-Bold", 10)
         cv.setFillColor(INK)
-        cv.drawString(LEFT, H - 17 * mm, f"{title.capitalize()} nr. {inv.get('number')}")
+        cv.drawString(LEFT, H - 17 * mm, "Fakturautkast" if preview else f"{title.capitalize()} nr. {inv.get('number')}")
         cv.setFont("Helvetica", 9)
         cv.drawRightString(W - RIGHT, H - 17 * mm,
                            " · ".join(x for x in (b.get("name"), c.get("registration_number"), no_date(inv.get("issue_date"))) if x))
@@ -257,7 +275,8 @@ def build(inv: dict, logo: Optional[Path] = None) -> bytes:
 
     out = io.BytesIO()
     doc = BaseDocTemplate(out, pagesize=A4, leftMargin=LEFT, rightMargin=RIGHT, topMargin=LATER_TOP,
-                          bottomMargin=BOTTOM, title=f"{title.capitalize()} {inv.get('number')}",
+                          bottomMargin=BOTTOM,
+                          title="Fakturautkast" if preview else f"{title.capitalize()} {inv.get('number')}",
                           author=s.get("name") or "", subject=title.capitalize())
     width = W - LEFT - RIGHT
     doc.addPageTemplates([

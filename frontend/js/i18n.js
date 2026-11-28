@@ -724,6 +724,9 @@ const NO = {
   // Discounts (0.63.0)
   'The most sold and most recently used parts are listed first.': 'De mest solgte og sist brukte delene står først.',
   // Invoice PDF + logo (0.65.0)
+  'Preview': 'Forhåndsvis', 'Download preview': 'Last ned utkast',
+  'The preview is a draft marked “UTKAST – IKKE EN FAKTURA”: nothing is saved or sent.':
+    'Forhåndsvisningen er et utkast merket «UTKAST – IKKE EN FAKTURA»: ingenting lagres eller sendes.',
   'Print': 'Skriv ut', 'Download PDF': 'Last ned PDF', 'Logo': 'Logo', 'Logo on invoices': 'Logo på fakturaer',
   'Upload logo': 'Last opp logo', 'Upload a new logo': 'Last opp ny logo', 'Remove logo': 'Fjern logo', 'Logo saved': 'Logo lagret',
   'No logo yet: the company name is printed instead.': 'Ingen logo ennå: firmanavnet skrives i stedet.',

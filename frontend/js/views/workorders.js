@@ -8,7 +8,7 @@ import { carTitle, orderBadge, pickCustomer } from './customers.js';
 import { entryDialog, fmtDuration, fmtLocal } from './hours.js';
 import { field, fmtMoney, fmtQty, money2, numInput, parseNum, qtyText } from './parts.js';
 import {
-  allArrivedButton, customerDiscountNote, discountText, lineDialog, supplyCell, totalDiscountBox,
+  allArrivedButton, customerDiscountNote, discountText, lineDialog, previewButtons, supplyCell, totalDiscountBox,
 } from './partsorders.js';
 import { lang } from '../i18n.js';
 import { workOrderRecallCard } from './recalls.js';
@@ -843,7 +843,9 @@ function invoiceDialog(o) {
     h('div', { class: 'notice' }, 'An issued invoice can never be changed or deleted. A mistake is corrected with a credit note. '
       + 'The parts are taken out of the stock now.'),
     field('Note on the invoice', note),
-    h('div', { class: 'actions' }, ok));
+    // 0.65.2: review the invoice as a draft PDF (marked, not saved) before issuing it.
+    h('div', { class: 'actions spread' }, previewButtons(`/work-orders/${o.id}/invoice-preview`, note), ok),
+    h('p', { class: 'muted small' }, 'The preview is a draft marked “UTKAST – IKKE EN FAKTURA”: nothing is saved or sent.'));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     busy(ok, async () => {

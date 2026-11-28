@@ -2037,6 +2037,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.64.1 | The Parts menu opens Parts orders (all parts orders by default; "🔧 Parts store" button to the parts list); a red "Order parts" badge on orders with lines still "To order" (list and order page, `to_order` in `ORDERS_SELECT`) |
 | 0.65.0 | **Invoices as A4 PDFs:** a new, more professional layout (logo, seller, buyer at the envelope window, details box, car box, lines, totals, payment box, footer with "Side n av m"), several pages when needed; Print / Download PDF named "order no. ddmmyy"; logo upload on System → Invoicing |
 | 0.65.1 | Invoice PDF: totals, payment box and notes sit at the bottom of the last page, just above the footer line (`_AtBottom`; the whole block moves to a new page when it does not fit) |
+| 0.65.2 | Invoice preview: "👁 Preview" / "⬇ Download preview" in the invoice dialog (work orders, with the typed note) and on a counter sale's Invoice card: a draft PDF titled FAKTURAUTKAST, no number, "UTKAST – IKKE EN FAKTURA" across every page, named "<order> <ddmmyy> utkast.pdf"; nothing saved (`GET /work-orders/{id}/invoice-preview`, `GET /parts-orders/{id}/invoice-preview`) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

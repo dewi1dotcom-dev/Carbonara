@@ -968,6 +968,7 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
   .invoice-doc .inv-buyer { padding-top: 0; }
   .invoice-doc .inv-car { grid-template-columns: 1fr 1fr; }
 }
+.preview-buttons { display: inline-flex; flex-wrap: wrap; gap: .5rem; }
 /* System → Invoicing → Logo (0.65.0) */
 .logo-preview { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: .75rem; display: inline-block; }
 .logo-preview img { max-width: 240px; max-height: 90px; display: block; }

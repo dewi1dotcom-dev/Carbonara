@@ -205,6 +205,26 @@ function linesTable(o, editable, rerender) {
       h('dt', {}, 'Total inc VAT'), h('dd', {}, h('strong', {}, fmtMoney(o.total_inc)))));
 }
 
+// ---------------------------------------------------------------- invoice preview (0.65.2)
+
+/** "👁 Preview" (opens the draft PDF to print) and "⬇ Download preview": the invoice as it would be issued now, marked
+ *  as a draft. `url` = the preview endpoint; `noteInput` (optional) = the note typed in the dialog. */
+export function previewButtons(url, noteInput = null) {
+  const href = (download) => {
+    const p = new URLSearchParams();
+    const note = noteInput?.value.trim();
+    if (note) p.set('note', note);
+    if (download) p.set('download', '1');
+    return `/api${url}${p.toString() ? `?${p}` : ''}`;
+  };
+  const view = h('a', { class: 'btn', href: href(false), target: '_blank', rel: 'noopener' }, '👁 Preview');
+  const dl = h('a', { class: 'btn', href: href(true), download: '' }, '⬇ Download preview');
+  // The note may change after the buttons are drawn: build the address when tapped.
+  view.addEventListener('click', () => { view.href = href(false); });
+  dl.addEventListener('click', () => { dl.href = href(true); });
+  return h('span', { class: 'preview-buttons' }, view, dl);
+}
+
 // ---------------------------------------------------------------- discounts (0.63.0)
 
 /** "12,5 %" (Norwegian number format). */
@@ -339,7 +359,8 @@ function invoiceCard(o, edit, rerender) {
       h('dt', {}, 'Total inc VAT'), h('dd', {}, h('strong', {}, fmtMoney(b.total_inc)))),
     b.missing.length ? h('div', { class: 'notice warn' }, h('strong', {}, 'Missing before invoicing:'),
       h('ul', {}, b.missing.map((m) => h('li', {}, m)))) : null,
-    btn ? h('div', { class: 'actions left' }, btn) : null);
+    h('div', { class: 'actions left' }, btn, previewButtons(`/parts-orders/${o.id}/invoice-preview`)),
+    h('p', { class: 'muted small' }, 'The preview is a draft marked “UTKAST – IKKE EN FAKTURA”: nothing is saved or sent.'));
 }
 
 /** Add a line: search the parts store, or a free text line for a part that is not in it. */

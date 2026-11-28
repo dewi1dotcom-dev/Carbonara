@@ -301,6 +301,65 @@ def _jsonb(value):
     return Jsonb(value, dumps=lambda o: json.dumps(o, default=str))
 
 
+def _wo_car(conn, wo_id: int) -> dict:
+    """The car (from Vehicles or the customer register) and the mechanic, as printed on a work order's invoice."""
+    return conn.execute(
+        """SELECT coalesce(cc.registration_number, v.registration_number) AS registration_number,
+                  coalesce(cc.make, v.make) AS make, coalesce(cc.model, v.model) AS model, coalesce(cc.vin, v.vin) AS vin,
+                  m.name AS mechanic
+             FROM work_orders w LEFT JOIN vehicles v ON v.id = w.vehicle_id
+             LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id LEFT JOIN staff m ON m.id = w.assigned_to
+            WHERE w.id = %s""", (wo_id,)).fetchone() or {}
+
+
+def _parts_car(conn, order: dict) -> dict:
+    car = {"parts_order": order["order_no"]}
+    if order["car_id"]:
+        cc = conn.execute("SELECT registration_number, make, model, vin FROM customer_cars WHERE id = %s",
+                          (order["car_id"],)).fetchone()
+        car.update(cc or {})
+    return car
+
+
+def _preview_response(conn, b: dict, *, customer_id, car: dict, delivered, note: Optional[str], order_no,
+                      download: bool, staff: dict) -> Response:
+    """A draft PDF of the invoice as it would be issued now (0.65.2, the user's request: review before it is sent).
+    Nothing is saved; marked "UTKAST – IKKE EN FAKTURA" on every page; named "<order> <ddmmyy> utkast.pdf"."""
+    from .. import invoicepdf
+    issued = today()
+    inv = {"kind": "invoice", "number": None, "issue_date": issued, "delivery_date": delivered or issued,
+           "due_date": issued + timedelta(days=settings.invoice_due_days), "seller": _with_logo(conn, b["seller"]),
+           "buyer": _buyer(conn, customer_id) or {}, "car": {**car, "our_ref": staff["name"]},
+           "lines": b["lines"], "vat_lines": b["vat_lines"], "total_ex": b["total_ex"], "vat": b["vat"],
+           "total_inc": b["total_inc"], "kid": None, "note": (note or "").strip()[:1000] or None}
+    data = invoicepdf.build(inv, _logo_path(inv["seller"].get("logo")), preview=True)
+    name = f"{order_no} {issued:%d%m%y} utkast.pdf"
+    return Response(data, media_type="application/pdf", headers={
+        "Content-Disposition": f'{"attachment" if download else "inline"}; filename="{name}"',
+        "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/work-orders/{wo_id}/invoice-preview")
+def preview(wo_id: int, note: str = "", download: bool = False, conn=Depends(get_conn),
+            staff=Depends(require_work_orders)):
+    wo = _work_order(conn, wo_id)
+    delivered = wo["done_at"].astimezone(OSLO).date() if wo["done_at"] else None
+    return _preview_response(conn, billing(conn, wo), customer_id=wo["customer_id"],
+                             car={**_wo_car(conn, wo_id), "km": wo["km"], "work_order": wo["number"]},
+                             delivered=delivered, note=note, order_no=wo["number"], download=download, staff=staff)
+
+
+@router.get("/parts-orders/{order_id}/invoice-preview")
+def preview_parts(order_id: int, note: str = "", download: bool = False, conn=Depends(get_conn),
+                  staff=Depends(require_work_orders)):
+    order = conn.execute("SELECT * FROM parts_orders WHERE id = %s", (order_id,)).fetchone()
+    if not order:
+        raise not_found("Parts order")
+    return _preview_response(conn, parts_billing(conn, order), customer_id=order["customer_id"],
+                             car=_parts_car(conn, order), delivered=None, note=note, order_no=order["order_no"],
+                             download=download, staff=staff)
+
+
 class IssueIn(BaseModel):
     note: Optional[str] = Field(None, max_length=1000)
 
@@ -326,13 +385,7 @@ def issue(wo_id: int, body: IssueIn, conn=Depends(get_conn), staff=Depends(requi
     number = _next_number(conn)
     issued = today()
     delivered = wo["done_at"].astimezone(OSLO).date() if wo["done_at"] else issued
-    car = conn.execute(
-        """SELECT coalesce(cc.registration_number, v.registration_number) AS registration_number,
-                  coalesce(cc.make, v.make) AS make, coalesce(cc.model, v.model) AS model, coalesce(cc.vin, v.vin) AS vin,
-                  m.name AS mechanic
-             FROM work_orders w LEFT JOIN vehicles v ON v.id = w.vehicle_id
-             LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id LEFT JOIN staff m ON m.id = w.assigned_to
-            WHERE w.id = %s""", (wo_id,)).fetchone()
+    car = _wo_car(conn, wo_id)
     row = conn.execute(
         """INSERT INTO invoices (number, kind, work_order_id, customer_id, issue_date, delivery_date, due_date, seller,
                                  buyer, car, lines, vat_lines, total_ex, vat, total_inc, kid, note, parts_order_ids,
@@ -372,11 +425,7 @@ def issue_parts(order_id: int, body: IssueIn, conn=Depends(get_conn), staff=Depe
         change_status(conn, order_id, "done", sid)   # refused (nothing saved) when a part has too little stock
     number = _next_number(conn)
     issued = today()
-    car = {"parts_order": order["order_no"], "our_ref": staff["name"]}
-    if order["car_id"]:
-        cc = conn.execute("SELECT registration_number, make, model, vin FROM customer_cars WHERE id = %s",
-                          (order["car_id"],)).fetchone()
-        car.update(cc or {})
+    car = {**_parts_car(conn, order), "our_ref": staff["name"]}
     row = conn.execute(
         """INSERT INTO invoices (number, kind, customer_id, issue_date, delivery_date, due_date, seller, buyer, car,
                                  lines, vat_lines, total_ex, vat, total_inc, kid, note, parts_order_ids, created_by)
