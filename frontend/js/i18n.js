@@ -717,10 +717,27 @@ const NO = {
   'All work orders that need a look': 'Alle arbeidsordrer som trenger en titt', 'Work orders to follow up': 'Arbeidsordrer som skal følges opp',
   'Quiet work orders – nothing has happened for a while': 'Stille arbeidsordrer – ingenting har skjedd på en stund',
   'Work done – not invoiced yet': 'Arbeid ferdig – ikke fakturert ennå', 'Work order reminders': 'Påminnelser om arbeidsordrer',
-  'Every morning on working days, whoever made a work order gets a notification when it needs a look: follow-up date reached, nothing happened for a while (System page → Work orders), or done but not invoiced. The people ticked here get it about every work order.':
-    'Hver morgen på virkedager får den som laget en arbeidsordre et varsel når den trenger en titt: oppfølgingsdatoen er nådd, ingenting har skjedd på en stund (System → Arbeidsordrer), eller den er ferdig, men ikke fakturert. De som er krysset av her, får det om alle arbeidsordrer.',
-  'Work orders that need a look: follow-ups, quiet, not invoiced (in the morning)':
-    'Arbeidsordrer som trenger en titt: oppfølging, stille, ikke fakturert (om morgenen)',
+  'Every working day, when their work period starts, whoever made a work order gets a notification when it needs a look: follow-up date reached, nothing happened for a while (System page → Work orders), or done but not invoiced. The people ticked here get it about every work order.':
+    'Hver virkedag, når arbeidstiden starter, får den som laget en arbeidsordre et varsel når den trenger en titt: oppfølgingsdatoen er nådd, ingenting har skjedd på en stund (System → Arbeidsordrer), eller den er ferdig, men ikke fakturert. De som er krysset av her, får det om alle arbeidsordrer.',
+  'Work orders that need a look: follow-ups, quiet, not invoiced (when my work period starts)':
+    'Arbeidsordrer som trenger en titt: oppfølging, stille, ikke fakturert (når arbeidstiden min starter)',
+  // Discounts (0.63.0)
+  'Discount': 'Rabatt', 'Discount (%)': 'Rabatt (%)', 'Discount %': 'Rabatt %', 'discount': 'rabatt', 'customer': 'kunde',
+  'parts': 'deler', 'labour': 'arbeid', 'The customer\'s discount': 'Kundens rabatt', 'Customer discount:': 'Kunderabatt:',
+  '(used where a line has no discount of its own)': '(brukes der en linje ikke har egen rabatt)',
+  'Total discount ex VAT': 'Totalrabatt eks. mva', 'Total discount ex VAT:': 'Totalrabatt eks. mva:',
+  'No total discount': 'Ingen totalrabatt', 'Percent (%)': 'Prosent (%)', 'Amount (kr ex VAT)': 'Beløp (kr eks. mva)',
+  'Check the discount': 'Sjekk rabatten', 'Leave the discount empty to use the customer\'s discount.': 'La rabatten stå tom for å bruke kundens rabatt.',
+  'Labour discount (%)': 'Rabatt på arbeid (%)', 'Use the customer\'s discount': 'Bruk kundens rabatt',
+  'Discount on parts (%)': 'Rabatt på deler (%)', 'Discount on labour (%)': 'Rabatt på arbeid (%)',
+  'Total discount changed': 'Totalrabatt endret', 'A discount is a percent from 0 to 100': 'En rabatt er en prosent fra 0 til 100',
+  'A discount can\'t be more than 100 %': 'En rabatt kan ikke være mer enn 100 %',
+  'My work period': 'Min arbeidstid',
+  'Monday to Friday. Notifications that come outside it wait until it starts, also on days you start with ⏱. Reminders on your notes come at the time you chose.':
+    'Mandag til fredag. Varsler som kommer utenfor den, venter til den starter, også på dager du starter med ⏱. Påminnelser på notatene dine kommer når du har valgt.',
+  'The workplace\'s working day (System page).': 'Arbeidsplassens arbeidsdag (Systemsiden).',
+  'The end of the work period must be after the start': 'Slutten av arbeidstiden må være etter starten',
+  'Enter both the start and the end of the work period': 'Fyll inn både start og slutt på arbeidstiden',
   'Quiet work order: amber after (days)': 'Stille arbeidsordre: gul etter (dager)',
   'Quiet work order: red after (days)': 'Stille arbeidsordre: rød etter (dager)',
   'An open work order with no activity (changes, clock, parts, notes) for this many days is marked and listed on Today.':
@@ -1467,7 +1484,7 @@ const NO = {
   'PDI soon and the car is not prepared': 'Nybilklargjøring snart og bilen er ikke gjort klar',
   'PDI date confirmed or PDI done (orders you made)': 'Dato for nybilklargjøring bekreftet eller nybilklargjøring utført (bestillinger du har laget)',
   'Test drive or rental car not back (cars you handed out)': 'Prøvekjøring eller leiebil ikke tilbake (biler du har levert ut)',
-  'Storage checks, 12V charging and recall checks due (in the morning)': 'Lagerkontroller, 12V-lading og sjekk av tilbakekallinger som forfaller (om morgenen)',
+  'Storage checks, 12V charging and recall checks due (when my work period starts)': 'Lagerkontroller, 12V-lading og sjekk av tilbakekallinger som forfaller (når arbeidstiden min starter)',
   'Background worker or disk space problems': 'Problemer med bakgrunnsjobben eller diskplassen',
   'Carbonara can notify you on this phone or PC, also when Carbonara is closed. Notifications never show customer details.':
     'Carbonara kan varsle deg på denne telefonen eller PC-en, også når Carbonara er lukket. Varslene viser aldri kundeopplysninger.',
@@ -1492,6 +1509,8 @@ const NO = {
 // Texts with numbers, names or dates in them. {} = any text, {n} = a number.
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
+  ['Use the workplace\'s working day ({})', 'Bruk arbeidsplassens arbeidsdag ({1})'],
+  ['{} (customer)', '{1} (kunde)'],
   ['Work order #{n} made', 'Arbeidsordre #{1} er laget'],
   ['Quiet {n} d', 'Stille {1} d'], ['Open {n} d', 'Åpen {1} d'], ['last activity {}', 'siste aktivitet {1}'],
   ['In {n} weeks', 'Om {1} uker'], ['look again {}', 'se på igjen {1}'], ['no activity for {n} d', 'ingen aktivitet på {1} d'],

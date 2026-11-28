@@ -130,6 +130,7 @@ function invoiceDoc(inv) {
   const b = inv.buyer || {};
   const c = inv.car || {};
   const isInvoice = inv.kind === 'invoice';
+  const rabatt = (inv.lines || []).some((l) => Number(l.discount) > 0);   // the column only when a line has a discount (0.63.0)
   const orgLine = s.org_no ? `Org.nr. ${s.org_no}${s.vat_registered ? ' MVA' : ''}` : null;
   const meta = (label, value) => (value ? h('tr', {}, h('th', {}, label), h('td', {}, value)) : null);
   const carText = [c.registration_number, [c.make, c.model].filter(Boolean).join(' '), c.vin ? `VIN ${c.vin}` : null,
@@ -165,14 +166,15 @@ function invoiceDoc(inv) {
     carText ? h('p', {}, h('strong', {}, 'Bil: '), carText) : null,
     h('table', { class: 'inv-lines' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Varenr.'), h('th', {}, 'Beskrivelse'), h('th', { class: 'num' }, 'Antall'),
-        h('th', {}, 'Enhet'), h('th', { class: 'num' }, 'Pris eks. mva'), h('th', { class: 'num' }, 'Mva'),
-        h('th', { class: 'num' }, 'Beløp eks. mva'))),
+        h('th', {}, 'Enhet'), h('th', { class: 'num' }, 'Pris eks. mva'), rabatt ? h('th', { class: 'num' }, 'Rabatt') : null,
+        h('th', { class: 'num' }, 'Mva'), h('th', { class: 'num' }, 'Beløp eks. mva'))),
       h('tbody', {}, inv.lines.map((l) => h('tr', {},
         h('td', { class: 'mono' }, l.part_number || ''),
         h('td', {}, l.text),
-        h('td', { class: 'num' }, qtyNo(l.quantity)),
+        h('td', { class: 'num' }, l.kind === 'discount' ? '' : qtyNo(l.quantity)),
         h('td', {}, l.unit || ''),
-        h('td', { class: 'num' }, nok(l.unit_price)),
+        h('td', { class: 'num' }, l.kind === 'discount' ? '' : nok(l.unit_price)),
+        rabatt ? h('td', { class: 'num' }, Number(l.discount) > 0 ? pctNo(l.discount) : '') : null,
         h('td', { class: 'num' }, pctNo(l.vat_rate)),
         h('td', { class: 'num' }, nok(l.total_ex)))))),
     h('table', { class: 'inv-totals' }, h('tbody', {},

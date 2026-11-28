@@ -415,6 +415,10 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 .push-prefs h3 { margin: 0; }
 .push-prefs label.check { margin-top: .6rem; align-items: flex-start; }
 .push-prefs label.check input { flex: none; }
+/* 👤 → Notifications → My work period (0.62.0): From / To / Save on one line. */
+.push-period { display: flex; flex-wrap: wrap; gap: .5rem .75rem; align-items: flex-end; }
+.push-period label { display: flex; flex-direction: column; gap: .2rem; width: auto; }
+.push-period .dt-field input { width: 6rem; }
 /* System page → Disk space: how much of the disk is used. */
 .disk-bar { height: 12px; border-radius: 6px; background: var(--border); overflow: hidden; margin: .75rem 0 .25rem; }
 .disk-bar span { display: block; height: 100%; background: var(--good); }
@@ -926,6 +930,9 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .invoice-doc .inv-footer { margin-top: 1.5rem; font-size: .8rem; color: #444; }
 .extra-line input[type=text] { width: auto; flex: 1; min-width: 7rem; }
 .extra-line input.num-input { flex: 0 1 6rem; min-width: 4.5rem; }
+/* 0.63.0: the total discount row (kind, value, Save). */
+.total-discount select { width: auto; }
+.total-discount input.num-input { width: 7rem; flex: none; }
 @media (max-width: 640px) { .invoice-doc { padding: 1rem; font-size: .85rem; } .invoice-doc .inv-kind { text-align: left; } }
 @media print { .invoice-doc { padding: 0; max-width: none; border-radius: 0; margin: 0; } }
 

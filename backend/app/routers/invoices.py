@@ -86,11 +86,55 @@ def _buyer(conn, customer_id: Optional[int]) -> Optional[dict]:
             "address": c["address"], "postal_code": c["postal_code"], "city": c["city"]}
 
 
-def _line(kind: str, text: str, quantity, unit: str, unit_price, vat_rate, part_number=None) -> dict:
+def _line(kind: str, text: str, quantity, unit: str, unit_price, vat_rate, part_number=None, discount=None) -> dict:
+    """An invoice line; `discount` = percent off the line (0.63.0), shown in its own column on the invoice."""
     q, p = Decimal(str(quantity)), _money(Decimal(str(unit_price or 0)))
     rate = Decimal(str(vat_rate if vat_on() else 0))
-    return {"kind": kind, "part_number": part_number, "text": text, "quantity": q, "unit": unit, "unit_price": p,
-            "vat_rate": rate, "total_ex": _money(q * p)}
+    d = Decimal(str(discount)) if discount else Decimal(0)
+    line = {"kind": kind, "part_number": part_number, "text": text, "quantity": q, "unit": unit, "unit_price": p,
+            "vat_rate": rate, "total_ex": _money(q * p * (100 - d) / 100)}
+    if d:
+        line["discount"] = d
+    return line
+
+
+def customer_discounts(conn, customer_id: Optional[int]) -> dict:
+    """The customer's standing discount in percent (0.63.0): {"parts": …, "labour": …} (None = none)."""
+    row = conn.execute("SELECT discount_parts, discount_labour FROM customers WHERE id = %s",
+                       (customer_id,)).fetchone() if customer_id else None
+    return {"parts": row["discount_parts"] if row else None, "labour": row["discount_labour"] if row else None}
+
+
+def _pct_text(x) -> str:
+    return f"{Decimal(x).normalize():f}".replace(".", ",")
+
+
+def _total_discount(lines: list[dict], kind: Optional[str], value) -> tuple[list[dict], Decimal]:
+    """A discount on the whole order ex VAT (0.63.0): a percent, or an amount in kr (never more than the lines).
+    Split over the VAT rates in proportion to each rate's amount, as one "Rabatt" line per rate, so the VAT is right.
+    Returns (the discount lines, the discount ex VAT)."""
+    if not kind or not value:
+        return [], Decimal(0)
+    by_rate: dict[Decimal, Decimal] = {}
+    for line in lines:
+        by_rate[line["vat_rate"]] = by_rate.get(line["vat_rate"], Decimal(0)) + line["total_ex"]
+    by_rate = {r: b for r, b in by_rate.items() if b > 0}
+    subtotal = sum(by_rate.values(), Decimal(0))
+    if subtotal <= 0:
+        return [], Decimal(0)
+    value = Decimal(str(value))
+    amount = _money(subtotal * min(value, Decimal(100)) / 100) if kind == "percent" else min(_money(value), subtotal)
+    text = f"Rabatt {_pct_text(value)} %" if kind == "percent" else "Rabatt"
+    out, left = [], amount
+    rates = sorted(by_rate)
+    for i, r in enumerate(rates):
+        share = left if i == len(rates) - 1 else _money(amount * by_rate[r] / subtotal)
+        left -= share
+        if share:
+            label = f"{text} (mva {_pct_text(r)} %)" if len(rates) > 1 else text
+            out.append({"kind": "discount", "part_number": None, "text": label, "quantity": Decimal(1), "unit": "",
+                        "unit_price": -share, "vat_rate": r, "total_ex": -share})
+    return out, amount
 
 
 def _totals(lines: list[dict]) -> dict:
@@ -117,8 +161,12 @@ def _seller_missing(s: dict) -> list[str]:
 def parts_billing(conn, order: dict) -> dict:
     """What an invoice for a counter sale (a parts order without a work order, 0.60.0) would hold now."""
     rows = conn.execute("SELECT * FROM parts_order_lines WHERE order_id = %s ORDER BY id", (order["id"],)).fetchall()
+    cust = customer_discounts(conn, order["customer_id"])
     lines = [_line("part", p["name"], p["quantity"], UNIT_NO.get(p["unit"], p["unit"]) if p["unit"] else "stk",
-                   p["unit_price"], p["vat_rate"], p["part_number"]) for p in rows]
+                   p["unit_price"], p["vat_rate"], p["part_number"],
+                   p["discount"] if p["discount"] is not None else cust["parts"]) for p in rows]
+    extra, discount = _total_discount(lines, order["total_discount_kind"], order["total_discount"])
+    lines += extra
     s = seller()
     missing = _seller_missing(s)
     if not order["customer_id"]:
@@ -129,7 +177,9 @@ def parts_billing(conn, order: dict) -> dict:
         missing.append("a price on every line")
     if any(p["supply"] in ("order", "ordered") for p in rows):
         missing.append("parts that haven't arrived yet")
-    return {"lines": lines, **_totals(lines), "missing": missing, "vat_registered": vat_on(), "seller": s}
+    return {"lines": lines, **_totals(lines), "missing": missing, "vat_registered": vat_on(), "seller": s,
+            "customer_discount": cust, "total_discount": order["total_discount"],
+            "total_discount_kind": order["total_discount_kind"], "total_discount_ex": discount}
 
 
 def billing(conn, wo: dict) -> dict:
@@ -138,19 +188,25 @@ def billing(conn, wo: dict) -> dict:
     suggested = math.ceil(clocked / 60 / 15) * 15 if clocked else 0   # rounded up to a quarter hour
     minutes = wo["billed_minutes"] if wo["billed_minutes"] is not None else suggested
     rate = wo["labour_rate"] if wo["labour_rate"] is not None else Decimal(str(settings.labour_rate or 0))
+    cust = customer_discounts(conn, wo["customer_id"])
+    labour_discount = wo["labour_discount"] if wo["labour_discount"] is not None else cust["labour"]
     lines = []
     if minutes:
         title = f" – {wo['title']}" if wo.get("title") else ""
-        lines.append(_line("labour", f"Arbeid{title}", (Decimal(minutes) / 60).quantize(CENT), "t", rate, 25))
+        lines.append(_line("labour", f"Arbeid{title}", (Decimal(minutes) / 60).quantize(CENT), "t", rate, 25,
+                           discount=labour_discount))
     parts = conn.execute(
         """SELECT l.*, o.status AS order_status FROM parts_order_lines l JOIN parts_orders o ON o.id = l.order_id
             WHERE o.work_order_id = %s AND o.status <> 'cancelled' ORDER BY o.order_no, l.id""", (wo["id"],)).fetchall()
     for p in parts:
         lines.append(_line("part", p["name"], p["quantity"], UNIT_NO.get(p["unit"], p["unit"]), p["unit_price"],
-                           p["vat_rate"], p["part_number"]))
+                           p["vat_rate"], p["part_number"],
+                           p["discount"] if p["discount"] is not None else cust["parts"]))
     for x in wo["extra_lines"] or []:
         lines.append(_line("other", x.get("text") or "", x.get("quantity") or 1, x.get("unit") or "stk",
-                           x.get("unit_price") or 0, x.get("vat_rate", 25)))
+                           x.get("unit_price") or 0, x.get("vat_rate", 25), discount=x.get("discount")))
+    extra, discount = _total_discount(lines, wo["total_discount_kind"], wo["total_discount"])
+    lines += extra
     s = seller()
     missing = _seller_missing(s)
     if not wo["customer_id"]:
@@ -164,7 +220,10 @@ def billing(conn, wo: dict) -> dict:
     return {"clocked_seconds": clocked, "suggested_minutes": suggested, "minutes": minutes,
             "billed_minutes": wo["billed_minutes"], "rate": rate, "own_rate": wo["labour_rate"] is not None,
             "default_rate": Decimal(str(settings.labour_rate or 0)), "lines": lines, **_totals(lines),
-            "missing": missing, "vat_registered": vat_on(), "seller": s}
+            "missing": missing, "vat_registered": vat_on(), "seller": s,
+            "customer_discount": cust, "labour_discount": labour_discount, "own_labour_discount": wo["labour_discount"] is not None,
+            "total_discount": wo["total_discount"], "total_discount_kind": wo["total_discount_kind"],
+            "total_discount_ex": discount}
 
 
 def _next_number(conn) -> int:

@@ -180,18 +180,25 @@ def get_order(order_id: int, conn=Depends(get_conn), _staff=Depends(require_regi
              LEFT JOIN work_orders w ON w.id = o.work_order_id
             WHERE o.id = %s""", (order_id,)).fetchone()
     lines = conn.execute(LINES_SELECT, (order_id,)).fetchall()
-    total_ex = sum((l["quantity"] * (l["unit_price"] or 0) for l in lines), Decimal(0))
-    total_inc = sum((l["quantity"] * (l["unit_price"] or 0) * (1 + l["vat_rate"] / 100) for l in lines), Decimal(0))
-    for line in lines:
-        line["total_ex"] = (line["quantity"] * line["unit_price"]).quantize(CENT) if line["unit_price"] is not None else None
+    from .invoices import customer_discounts, parts_billing  # invoices imports this module
+    cust = customer_discounts(conn, order["customer_id"])
+    total_ex = total_inc = Decimal(0)
+    for line in lines:   # 0.63.0: the line's own discount, else the customer's parts discount
+        line["discount_used"] = line["discount"] if line["discount"] is not None else cust["parts"]
+        off = (100 - (line["discount_used"] or 0)) / Decimal(100)
+        ex = line["quantity"] * (line["unit_price"] or 0) * off
+        total_ex += ex
+        total_inc += ex * (1 + line["vat_rate"] / 100)
+        line["total_ex"] = ex.quantize(CENT) if line["unit_price"] is not None else None
     events = conn.execute(EVENTS_SELECT + " WHERE e.order_id = %s ORDER BY e.created_at DESC LIMIT 200",
                           (order_id,)).fetchall()
     billing = None
+    totals = {"total_ex": total_ex.quantize(CENT), "vat": (total_inc - total_ex).quantize(CENT),
+              "total_inc": total_inc.quantize(CENT)}
     if not order["work_order_id"]:   # a counter sale is invoiced on its own (0.60.0)
-        from .invoices import parts_billing  # invoices imports this module
         billing = parts_billing(conn, _order(conn, order_id))
-    return {**order, **extra, "lines": lines, "billing": billing, "total_ex": total_ex.quantize(CENT),
-            "vat": (total_inc - total_ex).quantize(CENT), "total_inc": total_inc.quantize(CENT),
+        totals = {k: billing[k] for k in ("total_ex", "vat", "total_inc")}   # with the total discount (0.63.0)
+    return {**order, **extra, "lines": lines, "billing": billing, **totals, "customer_discount": cust,
             "events": _names(conn, events)}
 
 
@@ -233,6 +240,7 @@ class LineIn(BaseModel):
     unit_price: Optional[Decimal] = Field(None, ge=0, le=MAX_PRICE)  # ex VAT; empty = the part's price
     vat_rate: Optional[Decimal] = Field(None, ge=0, le=100)
     supply: Optional[Literal["stock", "order", "ordered", "arrived"]] = None  # empty = worked out (0.60.0)
+    discount: Optional[Decimal] = Field(None, ge=0, le=100)  # percent; empty = the customer's (0.63.0)
 
 
 @router.post("/parts-orders/{order_id}/lines", status_code=201)
@@ -266,11 +274,11 @@ def add_line(order_id: int, body: LineIn, conn=Depends(get_conn), staff=Depends(
             price = body.unit_price.quantize(CENT) if body.unit_price is not None else part["sale_price"]
             line_id = conn.execute(
                 """INSERT INTO parts_order_lines (order_id, part_id, part_number, name, unit, quantity, unit_price,
-                                                  vat_rate, created_by, supply, supply_at, supply_by)
-                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), %s) RETURNING id""",
+                                                  vat_rate, created_by, supply, supply_at, supply_by, discount)
+                   VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, now(), %s, %s) RETURNING id""",
                 (order_id, part["id"], part["part_number"], part["name"], part["unit"], qty, price,
                  body.vat_rate if body.vat_rate is not None else part["vat_rate"], staff["id"], supply,
-                 staff["id"])).fetchone()["id"]
+                 staff["id"], body.discount)).fetchone()["id"]
         number = part["part_number"]
     else:
         name = cap_name(_clean(body.name, 200) or "") or None
@@ -279,12 +287,12 @@ def add_line(order_id: int, body: LineIn, conn=Depends(get_conn), staff=Depends(
         number = (_clean(body.part_number, 60) or "").upper() or None
         line_id = conn.execute(
             """INSERT INTO parts_order_lines (order_id, part_number, name, quantity, unit_price, vat_rate, created_by,
-                                              supply, supply_at, supply_by)
-               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), %s) RETURNING id""",
+                                              supply, supply_at, supply_by, discount)
+               VALUES (%s, %s, %s, %s, %s, %s, %s, %s, now(), %s, %s) RETURNING id""",
             (order_id, number, name, qty, body.unit_price.quantize(CENT) if body.unit_price is not None else None,
              body.vat_rate if body.vat_rate is not None else Decimal(25), staff["id"],
              body.supply if body.supply in ("order", "ordered", "arrived") else "order",   # never on our shelf
-             staff["id"])).fetchone()["id"]
+             staff["id"], body.discount)).fetchone()["id"]
     event(conn, "order_line_added", staff["id"], order_id=order_id,
           data={"part_number": number, "quantity": qty, "free_text": not body.part_id})
     conn.execute("UPDATE parts_orders SET updated_at = now() WHERE id = %s", (order_id,))
@@ -295,6 +303,7 @@ def add_line(order_id: int, body: LineIn, conn=Depends(get_conn), staff=Depends(
 class LinePatch(BaseModel):
     quantity: Optional[Decimal] = Field(None, gt=0, le=MAX_QTY)
     unit_price: Optional[Decimal] = Field(None, ge=0, le=MAX_PRICE)
+    discount: Optional[Decimal] = Field(None, ge=0, le=100)   # percent; null = the customer's (0.63.0)
 
 
 def _line(conn, order_id: int, line_id: int) -> dict:
@@ -316,12 +325,16 @@ def edit_line(order_id: int, line_id: int, body: LinePatch, conn=Depends(get_con
     qty = sent["quantity"].quantize(CENT) if sent.get("quantity") is not None else line["quantity"]
     price = (sent["unit_price"].quantize(CENT) if sent["unit_price"] is not None else None) \
         if "unit_price" in sent else line["unit_price"]
+    discount = sent["discount"] if "discount" in sent else line["discount"]
     if line["part_id"] and line["supply"] == "arrived" and qty != line["quantity"]:
         _stock(conn, line["part_id"], qty - line["quantity"], staff["id"], order)  # the arrival counted the old number
-    conn.execute("UPDATE parts_order_lines SET quantity = %s, unit_price = %s WHERE id = %s", (qty, price, line_id))
-    event(conn, "order_line_changed", staff["id"], order_id=order_id,
-          data={"part_number": line["part_number"], "quantity_from": line["quantity"], "quantity_to": qty,
-                "price_from": line["unit_price"], "price_to": price})
+    conn.execute("UPDATE parts_order_lines SET quantity = %s, unit_price = %s, discount = %s WHERE id = %s",
+                 (qty, price, discount, line_id))
+    data = {"part_number": line["part_number"], "quantity_from": line["quantity"], "quantity_to": qty,
+            "price_from": line["unit_price"], "price_to": price}
+    if discount != line["discount"]:
+        data.update(discount_from=line["discount"], discount_to=discount)
+    event(conn, "order_line_changed", staff["id"], order_id=order_id, data=data)
     conn.execute("UPDATE parts_orders SET updated_at = now() WHERE id = %s", (order_id,))
     sync(conn, order_id, staff["id"])
     return {"ok": True}
@@ -405,6 +418,37 @@ def all_arrived(order_id: int, conn=Depends(get_conn), staff=Depends(require_sta
         conn.execute("UPDATE parts_orders SET updated_at = now() WHERE id = %s", (order_id,))
     sync(conn, order_id, staff["id"])
     return {"ok": True, "lines": len(lines)}
+
+
+class TotalDiscountIn(BaseModel):
+    """A discount on the whole order ex VAT (0.63.0): a percent or an amount in kr; kind None = no total discount.
+    Also used by work orders (routers/work_orders.py)."""
+    kind: Optional[Literal["percent", "amount"]] = None
+    value: Optional[Decimal] = Field(None, ge=0, le=10_000_000)
+
+
+def total_discount_values(body: TotalDiscountIn) -> tuple[Optional[str], Optional[Decimal]]:
+    if not body.kind or not body.value:
+        return None, None
+    if body.kind == "percent" and body.value > 100:
+        raise bad_request("A discount can't be more than 100 %")
+    return body.kind, body.value.quantize(CENT)
+
+
+@router.put("/parts-orders/{order_id}/total-discount")
+def save_total_discount(order_id: int, body: TotalDiscountIn, conn=Depends(get_conn),
+                        staff=Depends(require_parts_editor)):
+    """A discount on a counter sale ex VAT (0.63.0): a percent or an amount in kr (a work order has its own)."""
+    order = _order(conn, order_id, lock=True)
+    _editable(order)
+    if order["invoice_id"]:
+        raise conflict("The order is invoiced: make a credit note first")
+    kind, value = total_discount_values(body)
+    if (kind, value) != (order["total_discount_kind"], order["total_discount"]):
+        conn.execute("UPDATE parts_orders SET total_discount_kind = %s, total_discount = %s, updated_at = now() "
+                     "WHERE id = %s", (kind, value, order_id))
+        event(conn, "order_total_discount", staff["id"], order_id=order_id, data={"kind": kind, "value": value})
+    return {"ok": True}
 
 
 class StatusIn(BaseModel):

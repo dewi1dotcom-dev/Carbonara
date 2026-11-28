@@ -1,5 +1,6 @@
 """Phone / PC notifications: this device's subscription, each person's choices and a test (app/push.py)."""
 
+from typing import Optional
 from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, Request
@@ -8,7 +9,9 @@ from pydantic import BaseModel, Field
 
 from .. import auth, push
 from ..common import bad_request
+from ..config import TIME_PATTERN
 from ..db import get_conn
+from ..worktime import _minutes, day_window
 
 router = APIRouter(tags=["notifications"])
 
@@ -35,6 +38,20 @@ class PrefsIn(BaseModel):
     prefs: dict[str, bool]
 
 
+class PeriodIn(BaseModel):
+    """My work period for notifications; both None = the working day on the System page."""
+    work_from: Optional[str] = Field(None, pattern=f"^{TIME_PATTERN}$")
+    work_until: Optional[str] = Field(None, pattern=f"^{TIME_PATTERN}$")
+
+
+def _period(staff: dict) -> dict:
+    start, end = push.work_period(staff)
+    d_start, d_end = day_window()
+    saved = staff.get("push_prefs") or {}
+    return {"work_from": push.hhmm(start), "work_until": push.hhmm(end), "own": bool(saved.get("work_from")),
+            "default_from": push.hhmm(d_start), "default_until": push.hhmm(d_end)}
+
+
 def _check_endpoint(endpoint: str) -> None:
     parts = urlsplit(endpoint)
     host = (parts.hostname or "").lower()
@@ -52,8 +69,10 @@ def push_config(request: Request, conn=Depends(get_conn)):
     _, public = push.vapid_keys(conn)
     devices = conn.execute("""SELECT count(*) AS n FROM push_subscriptions p JOIN sessions x ON x.token_hash = p.session_hash
                                WHERE p.staff_id = %s AND x.expires_at > now()""", (me["id"],)).fetchone()["n"]
+    saved = _saved_prefs(conn, me["id"])
     return {"public_key": public, "kinds": push.kinds_for(me),
-            "prefs": push.prefs_for({**me, "push_prefs": _saved_prefs(conn, me["id"])}), "devices": devices}
+            "prefs": push.prefs_for({**me, "push_prefs": saved}), "devices": devices,
+            "period": _period({"push_prefs": saved})}
 
 
 @router.post("/push/subscriptions", status_code=204)
@@ -85,6 +104,25 @@ def set_prefs(body: PrefsIn, request: Request, conn=Depends(get_conn)):
     saved.update({k: v for k, v in body.prefs.items() if k in push.KINDS})
     conn.execute("UPDATE staff SET push_prefs = %s WHERE id = %s", (Jsonb(saved), me["id"]))
     return push.prefs_for({**me, "push_prefs": saved})
+
+
+@router.put("/push/period")
+def set_period(body: PeriodIn, request: Request, conn=Depends(get_conn)):
+    """My work period (0.62.0): notifications outside it wait until it starts. Both empty = the workplace's day."""
+    me = request.state.staff
+    saved = _saved_prefs(conn, me["id"])
+    if body.work_from and body.work_until:
+        a, b = _minutes(body.work_from, -1), _minutes(body.work_until, -1)
+        if a < 0 or b <= a:
+            raise bad_request("The end of the work period must be after the start")
+        saved.update(work_from=push.hhmm(a), work_until=push.hhmm(b))
+    elif body.work_from or body.work_until:
+        raise bad_request("Enter both the start and the end of the work period")
+    else:
+        saved.pop("work_from", None)
+        saved.pop("work_until", None)
+    conn.execute("UPDATE staff SET push_prefs = %s WHERE id = %s", (Jsonb(saved), me["id"]))
+    return _period({"push_prefs": saved})
 
 
 @router.post("/push/test", status_code=204)

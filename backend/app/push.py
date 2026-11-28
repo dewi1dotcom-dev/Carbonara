@@ -16,6 +16,11 @@ How it works:
   locked phone. The server writes them in the recipient's language, so both languages live here.
 - Each person can turn each kind off (`staff.push_prefs`); kinds tied to a page only go to people whose
   team sees that page.
+- Work period (0.62.0, the user's rule: no notifications before people are at work): each person's own hours
+  (`push_prefs` "work_from" / "work_until", default the working day on the System page), Monday–Friday, or any time
+  their day is started with ⏱. A notification for someone outside it waits in the queue (`send_after`) until their
+  period starts; the morning ones are made for each person when their period starts. Only reminders on my own notes
+  come at once (the person chose that time).
 """
 
 from __future__ import annotations
@@ -33,6 +38,7 @@ from psycopg.types.json import Jsonb
 from .auth import menu_for
 from .config import settings
 from .db import pool
+from .worktime import OSLO, _minutes, day_window
 
 log = logging.getLogger(__name__)
 
@@ -56,8 +62,6 @@ OUTBOX_MAX_AGE = dt.timedelta(hours=1)
 TICK_SECONDS = 3                 # how often the push thread looks for something to send
 SCHEDULE_SECONDS = 60            # how often it checks the scheduled notifications
 SYSTEM_GRACE_SECONDS = 600       # no worker / disk alerts in the first 10 min after a start (redeploy)
-MORNING = dt.time(7, 30)         # morning notifications, Monday–Friday
-DAY_END = dt.time(21, 0)         # late-return notifications only 07:00–21:00
 TEST_DRIVE_LATE = dt.timedelta(hours=3)
 
 VAPID_KEY = "push_vapid"  # app_settings: "<private> <public>" (secret; not in the SETTINGS registry)
@@ -115,9 +119,42 @@ def prefs_for(staff: dict) -> dict[str, bool]:
     return {k: saved.get(k) is not False for k in kinds_for(staff)}
 
 
-# Active people with at least one device that can get notifications (a live session).
+def hhmm(minutes: int) -> str:
+    return f"{minutes // 60:02d}:{minutes % 60:02d}"
+
+
+def work_period(staff: dict) -> tuple[int, int]:
+    """The person's work period as minutes after midnight (start, end): their own, else the System page's day."""
+    start, end = day_window()
+    saved = staff.get("push_prefs") or {}
+    a, b = _minutes(saved.get("work_from") or "", start), _minutes(saved.get("work_until") or "", end)
+    return (a, b) if b > a else (start, end)
+
+
+def send_after(staff: dict, now: dt.datetime) -> Optional[dt.datetime]:
+    """None = at work now (in their period on a weekday, or their day is started with ⏱); else when the next
+    period starts. `now` is Oslo time; `staff` needs `push_prefs` and `day_open`."""
+    if staff.get("day_open"):
+        return None
+    start, end = work_period(staff)
+    mins = now.hour * 60 + now.minute
+    weekday = now.weekday() < 5
+    if weekday and start <= mins < end:
+        return None
+    day = now.date()
+    if not (weekday and mins < start):  # after the period, or a weekend: the next working day
+        day += dt.timedelta(days=1)
+        while day.weekday() >= 5:
+            day += dt.timedelta(days=1)
+    return dt.datetime.combine(day, dt.time(start // 60, start % 60), tzinfo=OSLO)
+
+
+# Active people with at least one device that can get notifications (a live session). `day_open` = their
+# working day is started with ⏱ and not ended.
 _RECIPIENTS = """
-    SELECT s.id, s.language, s.is_superadmin, s.push_prefs, t.menu AS team_menu
+    SELECT s.id, s.language, s.is_superadmin, s.push_prefs, t.menu AS team_menu,
+           EXISTS (SELECT 1 FROM work_days w WHERE w.staff_id = s.id AND w.ended_at IS NULL
+                      AND w.day = (now() AT TIME ZONE 'Europe/Oslo')::date) AS day_open
       FROM staff s LEFT JOIN teams t ON t.id = s.team_id
      WHERE s.active AND s.deleted_at IS NULL
        AND EXISTS (SELECT 1 FROM push_subscriptions p JOIN sessions x ON x.token_hash = p.session_hash
@@ -126,10 +163,11 @@ _RECIPIENTS = """
 
 def notify(conn, staff_ids: Optional[Iterable[int]], kind: str, *, en: tuple[str, str], no: tuple[str, str],
            url: str | Callable[[dict], str] = "#/", tag: Optional[str] = None, urgency: str = "normal",
-           exclude: Optional[int] = None) -> int:
+           exclude: Optional[int] = None, hold: bool = True) -> int:
     """Queue a notification for these people (None = everyone) who want this kind. `en` / `no` =
-    (title, body); `url` = the page it opens (or a function of the person). Never raises: a problem
-    here must not undo the change the request made (it runs in a savepoint)."""
+    (title, body); `url` = the page it opens (or a function of the person). Someone outside their work
+    period gets it when the period starts (`hold` False = at once). Never raises: a problem here must not
+    undo the change the request made (it runs in a savepoint)."""
     try:
         with conn.transaction():
             if staff_ids is None:
@@ -140,14 +178,15 @@ def notify(conn, staff_ids: Optional[Iterable[int]], kind: str, *, en: tuple[str
                     return 0
                 rows = conn.execute(_RECIPIENTS + " AND s.id = ANY(%s)", (ids,)).fetchall()
             count = 0
+            now = dt.datetime.now(OSLO)
             for s in rows:
                 if s["id"] == exclude or not prefs_for(s).get(kind):
                     continue
                 title, body = no if s["language"] == "no" else en
                 payload = {"title": title, "body": body, "url": url(s) if callable(url) else url,
                            "tag": tag or kind}
-                conn.execute("INSERT INTO push_outbox (staff_id, payload, urgency) VALUES (%s, %s, %s)",
-                             (s["id"], Jsonb(payload), urgency))
+                conn.execute("INSERT INTO push_outbox (staff_id, payload, urgency, send_after) VALUES (%s, %s, %s, %s)",
+                             (s["id"], Jsonb(payload), urgency, send_after(s, now) if hold else None))
                 count += 1
             return count
     except Exception:
@@ -164,11 +203,13 @@ def has_menu(staff: dict, item: str) -> bool:
 # --------------------------------------------------------------------------- #
 
 def drain(conn, limit: int = 50) -> int:
-    """Send up to `limit` queued notifications. Each is taken off the queue first (sent at most once)."""
+    """Send up to `limit` queued notifications that are due (held ones wait for the person's work period).
+    Each is taken off the queue first (sent at most once)."""
     rows = conn.execute(
-        """DELETE FROM push_outbox WHERE id IN (SELECT id FROM push_outbox ORDER BY id LIMIT %s
-                                                  FOR UPDATE SKIP LOCKED)
-           RETURNING id, staff_id, payload, urgency, created_at""", (limit,)).fetchall()
+        """DELETE FROM push_outbox WHERE id IN (SELECT id FROM push_outbox
+                                                 WHERE send_after IS NULL OR send_after <= now()
+                                                 ORDER BY id LIMIT %s FOR UPDATE SKIP LOCKED)
+           RETURNING id, staff_id, payload, urgency, created_at, send_after""", (limit,)).fetchall()
     if not rows:
         conn.commit()
         return 0
@@ -184,7 +225,7 @@ def drain(conn, limit: int = 50) -> int:
     from pywebpush import WebPushException, webpush
     sent, gone = set(), set()
     for r in sorted(rows, key=lambda r: r["id"]):
-        if now - r["created_at"] > OUTBOX_MAX_AGE:
+        if now - (r["send_after"] or r["created_at"]) > OUTBOX_MAX_AGE:
             continue  # stuck for an hour (e.g. no internet): too old to be useful
         data = json.dumps(r["payload"])
         for s in subs:
@@ -238,70 +279,106 @@ def _pdi_url(s: dict) -> str:
     return "#/pdi-orders" if has_menu(s, "pdi_orders") else "#/"
 
 
+def _at_work(conn) -> list[int]:
+    """The people who can get notifications and are in their work period now."""
+    now = dt.datetime.now(OSLO)
+    return [s["id"] for s in conn.execute(_RECIPIENTS).fetchall() if send_after(s, now) is None]
+
+
+def _not_had(conn, ids: Iterable[int], key: Callable[[int], str]) -> list[int]:
+    """Of these people, the ones whose key isn't in push_sent yet (nothing is marked here: see _mark)."""
+    keys = {key(i): i for i in ids}
+    if not keys:
+        return []
+    seen = {r["key"] for r in conn.execute("SELECT key FROM push_sent WHERE key = ANY(%s)", (list(keys),)).fetchall()}
+    return [i for k, i in keys.items() if k not in seen]
+
+
+def _mark(conn, keys: Iterable[str]) -> None:
+    keys = list(keys)
+    if keys:
+        conn.execute("INSERT INTO push_sent (key) SELECT unnest(%s::text[]) ON CONFLICT DO NOTHING", (keys,))
+
+
 def scheduled(conn, *, system_checks: bool = True) -> None:
     now = conn.execute("SELECT now() AT TIME ZONE 'Europe/Oslo' AS t").fetchone()["t"]
     today, clock = now.date(), now.time()
-    workday = today.weekday() < 5
-    morning = workday and MORNING <= clock < DAY_END
-    daytime = dt.time(7, 0) <= clock < DAY_END
 
-    if morning:
-        _pdi_prep(conn, today)
-        _daily_due(conn, today)
-        _work_orders(conn, today)
+    # The morning ones go to each person when their own work period starts (0.62.0), once a day.
+    working = _at_work(conn)
+    if working:
+        _pdi_prep(conn, today, working)
+        _daily_due(conn, today, working)
+        _work_orders(conn, today, working)
     _note_reminders(conn)  # any time of day: the person chose the time
-    if daytime:
-        _late_returns(conn)
+    _late_returns(conn)    # outside the work period they wait in the queue (notify)
     if system_checks:
         _system(conn, today)
     if clock.hour == 3 and clock.minute < 2:  # tidy up once a night
         conn.execute("DELETE FROM push_sent WHERE sent_at < now() - interval '30 days'")
-        conn.execute("DELETE FROM push_outbox WHERE created_at < now() - interval '1 hour'")
+        conn.execute("DELETE FROM push_outbox WHERE coalesce(send_after, created_at) < now() - interval '1 hour'")
 
 
-def _pdi_prep(conn, today: dt.date) -> None:
-    """Booked PDIs up to the next working day whose car isn't prepared (the 🔔 bar), once per order a day."""
+def _pdi_prep(conn, today: dt.date, working: list[int]) -> None:
+    """Booked PDIs up to the next working day whose car isn't prepared (the 🔔 bar), once per order a day and
+    person (people at work now)."""
     from .routers.pdi import ORDER_SELECT, _next_workday
     rows = conn.execute(
         ORDER_SELECT + """ WHERE o.status = 'booked' AND o.prepared_at IS NULL AND v.deleted_at IS NULL
                              AND (o.pdi_at AT TIME ZONE 'Europe/Oslo')::date BETWEEN %s AND %s
                            ORDER BY o.pdi_at""", (today, _next_workday(today))).fetchall()
-    new = [r for r in rows if _once(conn, f"pdi_prep:{r['id']}:{today}")]
-    if not new:
+    if not rows:
         return
-    cars_en, cars_no = _cars(new, "and {n} more", "og {n} til")
-    when = new[0]["pdi_local"].strftime("%d.%m.%Y %H:%M") if new[0]["pdi_local"] else ""
-    if len(new) == 1:
-        en = ("Prepare the car for the PDI", f"{cars_en} · PDI {when}")
-        no = ("Gjør bilen klar til nybilklargjøring", f"{cars_no} · nybilklargjøring {when}")
-    else:
-        en = (f"{len(new)} cars to prepare for the PDI", cars_en)
-        no = (f"{len(new)} biler skal gjøres klar til nybilklargjøring", cars_no)
-    notify(conn, None, "pdi_prep", en=en, no=no, url=_pdi_url, tag=f"pdi_prep-{today}")
+    keys = {f"pdi_prep:{r['id']}:{today}:{sid}": (r["id"], sid) for r in rows for sid in working}
+    seen = {x["key"] for x in conn.execute("SELECT key FROM push_sent WHERE key = ANY(%s)", (list(keys),)).fetchall()}
+    groups: dict[tuple[int, ...], list[int]] = {}  # the same new orders → one notify call
+    for sid in working:
+        new = tuple(r["id"] for r in rows if f"pdi_prep:{r['id']}:{today}:{sid}" not in seen)
+        if new:
+            groups.setdefault(new, []).append(sid)
+    for ids, people in groups.items():
+        new = [r for r in rows if r["id"] in ids]
+        _mark(conn, (f"pdi_prep:{o}:{today}:{sid}" for o in ids for sid in people))
+        cars_en, cars_no = _cars(new, "and {n} more", "og {n} til")
+        when = new[0]["pdi_local"].strftime("%d.%m.%Y %H:%M") if new[0]["pdi_local"] else ""
+        if len(new) == 1:
+            en = ("Prepare the car for the PDI", f"{cars_en} · PDI {when}")
+            no = ("Gjør bilen klar til nybilklargjøring", f"{cars_no} · nybilklargjøring {when}")
+        else:
+            en = (f"{len(new)} cars to prepare for the PDI", cars_en)
+            no = (f"{len(new)} biler skal gjøres klar til nybilklargjøring", cars_no)
+        notify(conn, people, "pdi_prep", en=en, no=no, url=_pdi_url, tag=f"pdi_prep-{today}")
 
 
-def _daily_due(conn, today: dt.date) -> None:
-    """One morning notification: storage checks and 12V charging due within 3 days or overdue."""
+def _daily_due(conn, today: dt.date, working: list[int]) -> None:
+    """One morning notification per person (when their work period starts): storage checks, 12V charging and
+    recall checks due within 3 days or overdue."""
     from .routers.recalls import due_list as recall_due_list
     from .routers.storage_care import charging_due_list, storage_check_due_list
+    people = _not_had(conn, working, lambda i: f"daily_due:{today}:{i}")
+    if not people:
+        return
     checks, charges = len(storage_check_due_list(conn)), len(charging_due_list(conn, today))
     recall = len(recall_due_list(conn))
-    if not (checks or charges or recall) or not _once(conn, f"daily_due:{today}"):
-        return
+    if not (checks or charges or recall):
+        return  # nothing yet: something that becomes due later today is still sent
+    _mark(conn, (f"daily_due:{today}:{i}" for i in people))
     en = [f"Storage checks: {checks}" if checks else None, f"12V charging: {charges}" if charges else None,
           f"Recall checks: {recall}" if recall else None]
     no = [f"Lagerkontroller: {checks}" if checks else None, f"12V-lading: {charges}" if charges else None,
           f"Sjekk av tilbakekallinger: {recall}" if recall else None]
-    notify(conn, None, "daily_due", en=("Due today or soon", " · ".join(x for x in en if x)),
+    notify(conn, people, "daily_due", en=("Due today or soon", " · ".join(x for x in en if x)),
            no=("Forfaller i dag eller snart", " · ".join(x for x in no if x)), url="#/", tag=f"daily_due-{today}")
 
 
-def _work_orders(conn, today: dt.date) -> None:
+def _work_orders(conn, today: dt.date, working: list[int]) -> None:
     """Work orders that need a look (0.61.0, the user's rule): to each order's creator about their own orders, and to
-    the people chosen on the Settings page about all of them. One a working day per person, from 07:30."""
+    the people chosen on the Settings page about all of them. One a day per person, when their work period starts."""
     from .routers.work_orders import attention_list, reminder_staff
-    if not _once(conn, f"work_orders:{today}"):
+    waiting = _not_had(conn, working, lambda i: f"work_orders:{today}:{i}")
+    if not waiting:
         return
+    _mark(conn, (f"work_orders:{today}:{i}" for i in waiting))  # looked at once a day per person
     everyone = attention_list(conn)
     rows = everyone["follow_up"] + everyone["quiet"] + everyone["not_invoiced"]
     if not rows:
@@ -309,7 +386,7 @@ def _work_orders(conn, today: dt.date) -> None:
     created_by = {r["id"]: r["created_by"] for r in conn.execute(
         "SELECT id, created_by FROM work_orders WHERE id = ANY(%s)", (list({r["id"] for r in rows}),)).fetchall()}
     chosen = set(reminder_staff(conn))
-    people = chosen | {c for c in created_by.values() if c}
+    people = (chosen | {c for c in created_by.values() if c}) & set(waiting)
 
     def text(lists: dict) -> Optional[tuple[tuple[str, str], tuple[str, str]]]:
         f, q, n = len(lists["follow_up"]), len(lists["quiet"]), len(lists["not_invoiced"])
@@ -345,7 +422,7 @@ def _note_reminders(conn) -> None:
         what = car_text(r) if r["registration_number"] or r["make"] else r["link_title"]
         notify(conn, [r["staff_id"]], "notes",
                en=("Reminder", what or "A note in Carbonara"), no=("Påminnelse", what or "Et notat i Carbonara"),
-               url="#/notes", tag=f"note-{r['id']}", urgency="high")
+               url="#/notes", tag=f"note-{r['id']}", urgency="high", hold=False)
 
 
 def _late_returns(conn) -> None:

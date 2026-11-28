@@ -1,7 +1,7 @@
 // Phone / PC notifications (Web Push; server: app/push.py, routers/notifications.py).
 // Turned on per device from the 👤 menu; which kinds is chosen per person (all their devices).
 // Needs HTTPS: browsers only allow notifications on a secure address. /sw.js shows them.
-import { api, busy, h, openDialog, session, showError, toast } from '../ui.js';
+import { api, busy, h, openDialog, session, showError, timeInput, toast } from '../ui.js';
 
 const OWNER_KEY = 'carbonara.pushOwner'; // who turned notifications on on this device
 
@@ -12,8 +12,8 @@ const KIND_LABEL = {
   pdi_prep: 'PDI soon and the car is not prepared',
   pdi_status: 'PDI date confirmed or PDI done (orders you made)',
   late_return: 'Test drive or rental car not back (cars you handed out)',
-  daily_due: 'Storage checks, 12V charging and recall checks due (in the morning)',
-  work_orders: 'Work orders that need a look: follow-ups, quiet, not invoiced (in the morning)',
+  daily_due: 'Storage checks, 12V charging and recall checks due (when my work period starts)',
+  work_orders: 'Work orders that need a look: follow-ups, quiet, not invoiced (when my work period starts)',
   system: 'Background worker or disk space problems',
 };
 
@@ -101,6 +101,7 @@ export async function notificationsDialog() {
       'Carbonara can notify you on this phone or PC, also when Carbonara is closed. '
       + 'Notifications never show customer details.'),
     deviceSlot,
+    periodBlock(cfg),
     prefsBlock(cfg)));
 
   const drawDevice = async () => {
@@ -163,6 +164,41 @@ function deviceBlock(state, cfg, redraw) {
           }, 'Turn on notifications')),
       ];
   }
+}
+
+/** My work period (0.62.0): notifications outside it wait until it starts (all my devices). */
+function periodBlock(cfg) {
+  const slot = h('div', { class: 'push-prefs' });
+  const draw = () => {
+    const p = cfg.period;
+    const from = timeInput({ value: p.work_from });
+    const until = timeInput({ value: p.work_until });
+    const save = async (body, ev) => busy(ev.currentTarget, async () => {
+      cfg.period = await api.put('/push/period', body);
+      toast('Saved', 'success');
+      draw();
+    });
+    slot.replaceChildren(
+      h('h3', {}, 'My work period'),
+      h('p', { class: 'muted small' },
+        'Monday to Friday. Notifications that come outside it wait until it starts, also on days you start '
+        + 'with ⏱. Reminders on your notes come at the time you chose.'),
+      h('div', { class: 'push-period' },
+        h('label', {}, 'From', from), h('label', {}, 'To', until),
+        h('button', {
+          class: 'btn', type: 'button',
+          onClick: (ev) => save({ work_from: from.value || null, work_until: until.value || null }, ev),
+        }, 'Save')),
+      p.own
+        ? h('p', { class: 'small' },
+          h('button', {
+            class: 'link', type: 'button',
+            onClick: (ev) => save({ work_from: null, work_until: null }, ev),
+          }, `Use the workplace's working day (${p.default_from}–${p.default_until})`))
+        : h('p', { class: 'muted small' }, 'The workplace\'s working day (System page).'));
+  };
+  draw();
+  return slot;
 }
 
 function prefsBlock(cfg) {

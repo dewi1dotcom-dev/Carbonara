@@ -37,7 +37,7 @@ export async function settingsView(el) {
     }));
     woBox.replaceChildren(h('section', { class: 'card' },
       h('h2', {}, 'Work order reminders'),
-      h('p', { class: 'muted small' }, 'Every morning on working days, whoever made a work order gets a notification when it needs a look: follow-up date reached, nothing happened for a while (System page → Work orders), or done but not invoiced. The people ticked here get it about every work order.'),
+      h('p', { class: 'muted small' }, 'Every working day, when their work period starts, whoever made a work order gets a notification when it needs a look: follow-up date reached, nothing happened for a while (System page → Work orders), or done but not invoiced. The people ticked here get it about every work order.'),
       h('div', { class: 'chips' }, people.map((p, i) => h('label', { class: 'chip' }, boxes[i], h('span', { translate: 'no' }, p.name)))),
       h('div', { class: 'actions left' }, save)));
   }

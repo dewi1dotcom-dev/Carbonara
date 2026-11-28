@@ -39,7 +39,7 @@ const EVENT = {
   customer_delivery: 'Delivered at the kiosk', customer_delivery_received: 'Delivery received',
   registration_number_changed: 'New registration number from Statens vegvesen',
   order_line_supply: 'Part supply changed', order_arrived: 'All parts arrived', order_invoiced: 'Invoiced',
-  order_credited: 'Invoice credited',
+  order_credited: 'Invoice credited', order_total_discount: 'Total discount changed',
 };
 const SUPPLY_TEXT = { stock: 'In stock', order: 'To order', ordered: 'Ordered', arrived: 'Arrived' };  // as in partsorders.js
 const qty = (n) => Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 });
@@ -144,7 +144,7 @@ export function registerPrivacyDialog(company, years) {
 // ---------------------------------------------------------------- customer form
 
 /** The customer fields (also used when a car is copied from the car database). read() = the body for the server. */
-function customerFields(c = {}) {
+function customerFields(c = {}, { discounts = false } = {}) {
   const kind = h('select', {}, h('option', { value: 'private', selected: c.kind !== 'company' }, 'Private person'),
     h('option', { value: 'company', selected: c.kind === 'company' }, 'Company'));
   const text = (value, max, attrs = {}) => h('input', { type: 'text', maxlength: max, autocomplete: 'off', value: value || '', ...attrs });
@@ -158,6 +158,10 @@ function customerFields(c = {}) {
   const postal = text(c.postal_code, 10, { inputmode: 'numeric' });
   const city = text(c.city, 60);
   const note = h('textarea', { rows: 2, maxlength: 1000 }, c.note || '');
+  // 0.63.0: the customer's standing discount (percent), used on lines without a discount of their own.
+  const pctValue = (v) => (v != null && Number(v) ? String(Number(v)).replace('.', ',') : '');
+  const discParts = text(pctValue(c.discount_parts), 6, { inputmode: 'decimal', placeholder: '0' });
+  const discLabour = text(pctValue(c.discount_labour), 6, { inputmode: 'decimal', placeholder: '0' });
   const personBox = h('div', { class: 'grid' }, field('First name *', first), field('Last name *', last));
   const companyBox = h('div', { class: 'grid' }, field('Company name *', companyName), field('Organisation number', orgNo));
   const sync = () => { personBox.hidden = kind.value === 'company'; companyBox.hidden = kind.value !== 'company'; };
@@ -168,17 +172,34 @@ function customerFields(c = {}) {
     h('div', { class: 'grid' }, field('Phone', phone), field('E-mail', email)),
     field('Address', address),
     h('div', { class: 'grid' }, field('Postal code', postal), field('City', city)),
+    discounts ? h('div', { class: 'grid' }, field('Discount on parts (%)', discParts), field('Discount on labour (%)', discLabour)) : null,
     field('Note', note));
+  const pctRead = (input) => {
+    const s = input.value.trim().replace('%', '').replace(',', '.');
+    if (!s) return null;
+    const n = Number(s);
+    if (!Number.isFinite(n) || n < 0 || n > 100) throw new Error('A discount is a percent from 0 to 100');
+    return n;
+  };
   const read = () => ({
     kind: kind.value, first_name: first.value, last_name: last.value, company_name: companyName.value, org_no: orgNo.value,
     phone: phone.value, email: email.value, address: address.value, postal_code: postal.value, city: city.value,
     note: note.value,
+    ...(discounts ? { discount_parts: pctRead(discParts), discount_labour: pctRead(discLabour) } : {}),
   });
   return { el, read, focus: () => (kind.value === 'company' ? companyName : first).focus() };
 }
 
+/** "Parts 10 % · Labour 5 %" (0.63.0), or null when the customer has no discount. */
+function discountSummary(c) {
+  const p = (n) => `${Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 })} %`;
+  const parts = Number(c.discount_parts) > 0 ? [h('span', {}, 'Parts'), ` ${p(c.discount_parts)}`] : null;
+  const labour = Number(c.discount_labour) > 0 ? [h('span', {}, 'Labour'), ` ${p(c.discount_labour)}`] : null;
+  return parts || labour ? h('span', {}, parts, parts && labour ? ' · ' : '', labour) : null;
+}
+
 export function customerForm(c, done) {
-  const f = customerFields(c || {});
+  const f = customerFields(c || {}, { discounts: true });
   const ok = h('button', { class: 'btn primary', type: 'submit' }, c ? 'Save' : 'Add customer');
   const form = h('form', {}, f.el, h('div', { class: 'actions' }, ok));
   form.addEventListener('submit', (e) => {
@@ -495,6 +516,7 @@ export async function customerView(el, [id], host = el) {
         row('Phone', c.phone && h('a', { href: `tel:${c.phone}`, translate: 'no' }, c.phone)),
         row('E-mail', c.email && h('a', { href: `mailto:${c.email}`, translate: 'no' }, c.email)),
         row('Address', addr && h('span', { translate: 'no' }, addr)),
+        row('Discount', discountSummary(c)),
         row('Note', c.note && h('span', { class: 'pre-line', translate: 'no' }, c.note)),
         row('Created', fmtDate(c.created_at)))),
     h('section', { class: 'card' },

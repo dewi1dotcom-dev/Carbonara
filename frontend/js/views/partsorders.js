@@ -169,6 +169,7 @@ function linesTable(o, editable, rerender) {
       h('td', {}, o.status === 'done' ? h('span', { class: 'muted small' }, 'Handed out') : supplyCell(o.id, l, editable, rerender)),
       h('td', { class: 'num' }, qtyText(l.quantity, l.unit)),
       h('td', { class: 'num' }, fmtMoney(l.unit_price)),
+      h('td', { class: 'num' }, discountText(l)),
       h('td', { class: 'num' }, fmtMoney(l.total_ex)),
       editable ? h('td', { class: 'no-print nowrap' },
         h('button', { class: 'link small', type: 'button', onClick: () => lineDialog(o, l, rerender) }, 'change'), ' ',
@@ -184,12 +185,69 @@ function linesTable(o, editable, rerender) {
     editable ? allArrivedButton(o.id, o.lines, rerender) : null,
     h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Part number'), h('th', {}, 'Name'), h('th', {}, 'Supply'), h('th', { class: 'num' }, 'Quantity'),
-        h('th', { class: 'num' }, 'Price ex VAT'), h('th', { class: 'num' }, 'Total ex VAT'), editable ? h('th', { class: 'no-print' }) : null)),
+        h('th', { class: 'num' }, 'Price ex VAT'), h('th', { class: 'num' }, 'Discount'), h('th', { class: 'num' }, 'Total ex VAT'),
+        editable ? h('th', { class: 'no-print' }) : null)),
       h('tbody', {}, rows))),
+    customerDiscountNote(o.customer_discount),
     h('dl', { class: 'kv order-totals' },
+      Number(o.billing?.total_discount_ex) > 0 ? [h('dt', {}, 'Total discount ex VAT'), h('dd', {}, `−${fmtMoney(o.billing.total_discount_ex)}`)] : null,
       h('dt', {}, 'Total ex VAT'), h('dd', {}, fmtMoney(o.total_ex)),
       h('dt', {}, 'VAT'), h('dd', {}, fmtMoney(o.vat)),
       h('dt', {}, 'Total inc VAT'), h('dd', {}, h('strong', {}, fmtMoney(o.total_inc)))));
+}
+
+// ---------------------------------------------------------------- discounts (0.63.0)
+
+/** "12,5 %" (Norwegian number format). */
+export const pctText = (n) => `${Number(n).toLocaleString('nb-NO', { maximumFractionDigits: 2 })} %`;
+
+/** A part line's discount: its own, or the customer's (marked), or "–". */
+export function discountText(l) {
+  const d = l.discount ?? l.discount_used;
+  if (d == null || Number(d) === 0) return '–';
+  return l.discount != null ? pctText(d)
+    : h('span', { title: 'The customer\'s discount' }, pctText(d), h('span', { class: 'muted small block' }, 'customer'));
+}
+
+/** "Customer discount: parts 10 % · labour 5 %" under a lines table, when the customer has one. */
+export function customerDiscountNote(cd, { labour = false } = {}) {
+  if (!cd) return null;
+  const parts = Number(cd.parts) > 0 ? [h('span', {}, 'parts'), ` ${pctText(cd.parts)}`] : null;
+  const lab = labour && Number(cd.labour) > 0 ? [h('span', {}, 'labour'), ` ${pctText(cd.labour)}`] : null;
+  if (!parts && !lab) return null;
+  return h('p', { class: 'muted small' }, h('span', {}, 'Customer discount:'), ' ', parts, parts && lab ? ' · ' : '', lab,
+    ' ', h('span', {}, '(used where a line has no discount of its own)'));
+}
+
+/** The discount on the whole order ex VAT: none / percent / kr. `url` = the PUT endpoint. */
+export function totalDiscountBox(url, b, editable, rerender) {
+  const has = b.total_discount_kind && Number(b.total_discount) > 0;
+  const shown = has ? (b.total_discount_kind === 'percent' ? pctText(b.total_discount) : `${fmtMoney(b.total_discount)}`) : null;
+  if (!editable) {
+    return has ? h('p', {}, h('span', {}, 'Total discount ex VAT:'), ` ${shown}`,
+      b.total_discount_kind === 'percent' ? ` (−${fmtMoney(b.total_discount_ex)})` : '') : null;
+  }
+  const kind = h('select', { 'aria-label': 'Total discount' },
+    [['', 'No total discount'], ['percent', 'Percent (%)'], ['amount', 'Amount (kr ex VAT)']]
+      .map(([v, t]) => h('option', { value: v, selected: v === (b.total_discount_kind || '') }, t)));
+  const value = numInput(has ? b.total_discount : null, { qty: true, class: 'num-input', 'aria-label': 'Discount' });
+  const sync = () => { value.hidden = !kind.value; };
+  kind.addEventListener('change', sync);
+  sync();
+  const save = h('button', { class: 'btn small', type: 'button' }, 'Save');
+  save.addEventListener('click', () => busy(save, async () => {
+    const v = parseNum(value.value.replace('%', ''));
+    if (kind.value && (v == null || Number.isNaN(v) || v < 0 || (kind.value === 'percent' && v > 100))) {
+      toast('Check the discount', 'error'); value.focus(); return;
+    }
+    await api.put(url, { kind: kind.value || null, value: kind.value ? v : null });
+    toast('Saved', 'success');
+    await rerender();
+  }));
+  return h('div', { class: 'no-print' },
+    h('h3', {}, 'Total discount ex VAT'),
+    h('div', { class: 'toolbar total-discount' }, kind, value, save),
+    has && b.total_discount_kind === 'percent' ? h('p', { class: 'muted small' }, `−${fmtMoney(b.total_discount_ex)}`) : null);
 }
 
 // ---------------------------------------------------------------- supply per line (0.60.0)
@@ -264,7 +322,9 @@ function invoiceCard(o, edit, rerender) {
   }));
   return h('section', { class: 'card no-print' },
     h('h2', {}, 'Invoice'),
+    totalDiscountBox(`/parts-orders/${o.id}/total-discount`, b, edit && ACTIVE.includes(o.status), rerender),
     h('dl', { class: 'kv order-totals' },
+      Number(b.total_discount_ex) > 0 ? [h('dt', {}, 'Total discount ex VAT'), h('dd', {}, `−${fmtMoney(b.total_discount_ex)}`)] : null,
       h('dt', {}, 'Total ex VAT'), h('dd', {}, fmtMoney(b.total_ex)),
       h('dt', {}, 'VAT'), h('dd', {}, fmtMoney(b.vat)),
       h('dt', {}, 'Total inc VAT'), h('dd', {}, h('strong', {}, fmtMoney(b.total_inc)))),
@@ -310,6 +370,11 @@ export function lineDialog(o, l, done) {
   const name = l.free ? nameInput({ maxlength: 200 }) : null;
   const number = l.free ? upperInput({ maxlength: 60, class: 'mono' }) : null;
   const vat = l.free ? numInput(25, { qty: true }) : null;
+  // 0.63.0: empty = the customer's parts discount (if any).
+  const cd = o.customer_discount?.parts;
+  const discount = numInput(isNew ? null : l.discount, {
+    qty: true, placeholder: Number(cd) > 0 ? `${pctText(cd)} (customer)` : '0',
+  });
   const ok = h('button', { class: 'btn primary', type: 'submit' }, isNew ? 'Add' : 'Save');
   const title = part ? [h('strong', { class: 'mono', translate: 'no' }, part.part_number), ' ', h('span', { translate: 'no' }, part.name)]
     : !l.free ? [h('strong', { class: 'mono', translate: 'no' }, l.part_number || ''), ' ', h('span', { translate: 'no' }, l.name)] : null;
@@ -319,24 +384,28 @@ export function lineDialog(o, l, done) {
       ? h('div', { class: 'notice warn' }, 'Not available in stock now: order it from the supplier.') : null,
     l.free ? h('div', { class: 'grid' }, field('Name *', name), field('Part number', number)) : null,
     h('div', { class: 'grid' }, field('Quantity *', qty), field('Price per unit ex VAT (kr)', price), vat ? field('VAT (%)', vat) : null),
+    h('div', { class: 'grid' }, field('Discount (%)', discount)),
+    h('p', { class: 'muted small' }, 'Leave the discount empty to use the customer\'s discount.'),
     h('div', { class: 'actions' }, ok));
   form.addEventListener('submit', (e) => {
     e.preventDefault();
     const n = parseNum(qty.value);
     const p = parseNum(price.value);
+    const d = parseNum(discount.value.replace('%', ''));
     if (n == null || Number.isNaN(n) || n <= 0) { toast('Enter the quantity', 'error'); qty.focus(); return; }
     if (Number.isNaN(p) || p < 0) { toast('Check the price', 'error'); price.focus(); return; }
+    if (Number.isNaN(d) || (d != null && (d < 0 || d > 100))) { toast('Check the discount', 'error'); discount.focus(); return; }
     if (l.free && !name.value.trim()) { toast('Type the name of the part', 'error'); name.focus(); return; }
     busy(ok, async () => {
       if (!isNew) {
-        await api.patch(`/parts-orders/${o.id}/lines/${l.id}`, { quantity: n, unit_price: p });
+        await api.patch(`/parts-orders/${o.id}/lines/${l.id}`, { quantity: n, unit_price: p, discount: d });
       } else if (part) {
-        await api.post(`/parts-orders/${o.id}/lines`, { part_id: part.id, quantity: n, unit_price: p });
+        await api.post(`/parts-orders/${o.id}/lines`, { part_id: part.id, quantity: n, unit_price: p, discount: d });
       } else {
         const v = parseNum(vat.value);
         await api.post(`/parts-orders/${o.id}/lines`, {
           name: name.value.trim(), part_number: number.value.trim() || null, quantity: n, unit_price: p,
-          vat_rate: v == null || Number.isNaN(v) ? 25 : v,
+          vat_rate: v == null || Number.isNaN(v) ? 25 : v, discount: d,
         });
       }
       close();

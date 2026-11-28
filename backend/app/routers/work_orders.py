@@ -29,6 +29,7 @@ from ..worktime import OSLO, local
 from .customers import ORDERS_SELECT, touch
 from .hours import enabled as hours_enabled, start_day, stop_running
 from .parts import CENT
+from .parts_orders import TotalDiscountIn, total_discount_values
 from . import recalls
 
 router = APIRouter(tags=["work orders"])
@@ -445,6 +446,7 @@ class WorkOrderPatch(BaseModel):
     assigned_to: Optional[int] = None
     labour_rate: Optional[Decimal] = Field(None, ge=0, le=100_000)   # null = the System page rate
     billed_minutes: Optional[int] = Field(None, ge=0, le=100_000)    # null = the clocked time, rounded up
+    labour_discount: Optional[Decimal] = Field(None, ge=0, le=100)   # percent; null = the customer's (0.63.0)
     km: Optional[int] = Field(None, ge=0, le=5_000_000)
     customer_id: Optional[int] = None
     job_type_id: Optional[int] = None
@@ -465,7 +467,7 @@ def edit_order(wo_id: int, body: WorkOrderPatch, conn=Depends(get_conn), staff=D
     _not_locked(o)
     sent = body.model_dump(exclude_unset=True)
     new = {}
-    for f in ("labour_rate", "billed_minutes", "km"):
+    for f in ("labour_rate", "billed_minutes", "labour_discount", "km"):
         if f in sent:
             new[f] = sent[f]
     if "customer_id" in sent:
@@ -496,7 +498,7 @@ def edit_order(wo_id: int, body: WorkOrderPatch, conn=Depends(get_conn), staff=D
     conn.execute(f"UPDATE work_orders SET {sets}, updated_at = now(), updated_by = %s WHERE id = %s",
                  (*[new[f] for f in changed], staff["id"], wo_id))
     data = {"fields": changed}
-    for f in ("estimated_minutes", "planned_at", "assigned_to", "labour_rate", "billed_minutes", "km",
+    for f in ("estimated_minutes", "planned_at", "assigned_to", "labour_rate", "billed_minutes", "labour_discount", "km",
               "customer_id", "job_type_id", "place_id"):  # short values and ids; texts are never logged
         if f in changed:
             data[f] = {"from": o[f], "to": new[f]}
@@ -641,6 +643,7 @@ class ExtraLine(BaseModel):
     quantity: Decimal = Field(default=Decimal(1), gt=0, le=100_000)
     unit_price: Decimal = Field(ge=0, le=10_000_000)   # ex VAT
     vat_rate: Decimal = Field(default=Decimal(25), ge=0, le=100)
+    discount: Optional[Decimal] = Field(None, ge=0, le=100)   # percent (0.63.0)
 
 
 class ExtraLinesIn(BaseModel):
@@ -653,11 +656,26 @@ def save_extra_lines(wo_id: int, body: ExtraLinesIn, conn=Depends(get_conn), sta
     o = _order(conn, wo_id, lock=True)
     _not_locked(o)
     lines = [{"text": " ".join(x.text.split()), "quantity": x.quantity, "unit_price": x.unit_price,
-              "vat_rate": x.vat_rate} for x in body.lines if x.text.strip()]
+              "vat_rate": x.vat_rate, **({"discount": x.discount} if x.discount else {})}
+             for x in body.lines if x.text.strip()]
     conn.execute("UPDATE work_orders SET extra_lines = %s, updated_at = now(), updated_by = %s WHERE id = %s",
                  (Jsonb(lines, dumps=lambda v: json.dumps(v, default=str)), staff["id"], wo_id))
     _event(conn, wo_id, "extra_lines", staff["id"], {"count": len(lines)})
     return {"lines": lines}
+
+
+@router.put("/work-orders/{wo_id}/total-discount")
+def save_total_discount(wo_id: int, body: TotalDiscountIn, conn=Depends(get_conn),
+                        staff=Depends(require_work_orders)):
+    o = _order(conn, wo_id, lock=True)
+    _not_locked(o)
+    kind, value = total_discount_values(body)
+    if (kind, value) == (o["total_discount_kind"], o["total_discount"]):
+        return {"id": wo_id}
+    conn.execute("UPDATE work_orders SET total_discount_kind = %s, total_discount = %s, updated_at = now(), "
+                 "updated_by = %s WHERE id = %s", (kind, value, staff["id"], wo_id))
+    _event(conn, wo_id, "total_discount", staff["id"], {"kind": kind, "value": value})
+    return {"id": wo_id}
 
 
 class ArrivedIn(BaseModel):

@@ -6,8 +6,10 @@ import {
 } from '../ui.js';
 import { carTitle, orderBadge, pickCustomer } from './customers.js';
 import { entryDialog, fmtDuration, fmtLocal } from './hours.js';
-import { field, fmtMoney, fmtQty, money2, parseNum, qtyText } from './parts.js';
-import { allArrivedButton, lineDialog, supplyCell } from './partsorders.js';
+import { field, fmtMoney, fmtQty, money2, numInput, parseNum, qtyText } from './parts.js';
+import {
+  allArrivedButton, customerDiscountNote, discountText, lineDialog, supplyCell, totalDiscountBox,
+} from './partsorders.js';
 import { lang } from '../i18n.js';
 import { workOrderRecallCard } from './recalls.js';
 
@@ -306,7 +308,7 @@ export async function newWorkOrderDialog(car = null, prefill = {}) {
 
 const EVENT = {
   created: 'Work order created', updated: 'Details changed', tasks: 'Tasks changed', status: 'Status changed',
-  parts_order: 'Parts order made', extra_lines: 'Other charges changed', invoiced: 'Invoiced', credited: 'Invoice credited',
+  parts_order: 'Parts order made', extra_lines: 'Other charges changed', total_discount: 'Total discount changed', invoiced: 'Invoiced', credited: 'Invoice credited',
   arrived: 'Car arrived', not_arrived: 'Not arrived after all', parts_ready: 'Parts arrived and ready', parts_not_ready: 'Parts not ready after all',
   follow_up: 'Waiting and follow-up changed',
   recall_check: 'Checked for recalls', recall_work_order: 'Recalls put on a new work order', recall_from: 'Made from a recall check',
@@ -590,8 +592,11 @@ const OPEN_PARTS = ['open', 'ordered', 'arrived'];
 
 /** Parts, added right here (kept in the work order's parts order: reserved now, out of the stock on the invoice). */
 function partsCard(o, editable, rerender) {
-  const lines = o.parts_lines;
+  const cd = o.billing?.customer_discount || null;
+  // 0.63.0: a line without its own discount gets the customer's parts discount.
+  const lines = o.parts_lines.map((l) => ({ ...l, discount_used: l.discount ?? cd?.parts ?? null }));
   const orderId = async () => (await api.post(`/work-orders/${o.id}/parts-order`)).id;
+  const target = async (id) => ({ id: id ?? await orderId(), customer_discount: cd });
   const search = h('input', { type: 'search', placeholder: 'Find a part: number or name…', 'aria-label': 'Find a part' });
   const results = h('div');
   let seq = 0;
@@ -605,7 +610,7 @@ function partsCard(o, editable, rerender) {
       results.replaceChildren(data.parts.length ? h('ul', { class: 'rows pick-list' }, data.parts.slice(0, 12).map((p) => h('li', {},
         h('button', {
           class: 'link pick', type: 'button',
-          onClick: async () => { try { lineDialog({ id: await orderId() }, { part: p }, rerender); } catch (e) { showError(e); } },
+          onClick: async () => { try { lineDialog(await target(), { part: p }, rerender); } catch (e) { showError(e); } },
         },
         h('span', { class: 'mono', translate: 'no' }, p.part_number), ' ', h('span', { translate: 'no' }, p.name),
         h('span', { class: 'muted small block' }, h('span', {}, 'In stock:'), ' ', qtyText(p.quantity, p.unit),
@@ -615,7 +620,7 @@ function partsCard(o, editable, rerender) {
     } catch (e) { showError(e); }
   }, 250));
   const free = h('button', { class: 'btn', type: 'button' }, '+ Part not in the store');
-  free.addEventListener('click', () => busy(free, async () => lineDialog({ id: await orderId() }, { free: true }, rerender)));
+  free.addEventListener('click', () => busy(free, async () => lineDialog(await target(), { free: true }, rerender)));
   const rows = lines.map((l) => {
     const canChange = editable && OPEN_PARTS.includes(l.order_status);
     return h('tr', {},
@@ -629,8 +634,12 @@ function partsCard(o, editable, rerender) {
         : supplyCell(l.order_id, l, canChange, rerender)),
       h('td', { class: 'num' }, qtyText(l.quantity, l.unit)),
       h('td', { class: 'num' }, fmtMoney(l.unit_price)),
+      h('td', { class: 'num' }, discountText(l)),
       h('td', { class: 'no-print nowrap' }, canChange ? [
-        h('button', { class: 'link small', type: 'button', onClick: () => lineDialog({ id: l.order_id }, l, rerender) }, 'change'), ' ',
+        h('button', {
+          class: 'link small', type: 'button',
+          onClick: async () => { try { lineDialog(await target(l.order_id), l, rerender); } catch (e) { showError(e); } },
+        }, 'change'), ' ',
         h('button', {
           class: 'link danger small', type: 'button',
           onClick: async () => {
@@ -647,9 +656,10 @@ function partsCard(o, editable, rerender) {
     waitingOrders.map((id) => allArrivedButton(id, lines.filter((l) => l.order_id === id), rerender)),
     lines.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Part number'), h('th', {}, 'Name'), h('th', {}, 'Supply'), h('th', { class: 'num' }, 'Quantity'),
-        h('th', { class: 'num' }, 'Price ex VAT'), h('th', { class: 'no-print' }))),
+        h('th', { class: 'num' }, 'Price ex VAT'), h('th', { class: 'num' }, 'Discount'), h('th', { class: 'no-print' }))),
       h('tbody', {}, rows)))
       : h('p', { class: 'empty' }, 'No parts on this work order.'),
+    customerDiscountNote(cd),
     editable ? h('div', { class: 'add-line no-print' },
       h('div', { class: 'toolbar' }, search, free), results,
       h('p', { class: 'muted small' }, 'A part is “In stock” when there is enough on the shelf, else “To order”. Set it to Ordered and Arrived as it comes in. The parts leave the stock when the invoice is made.')) : null);
@@ -670,15 +680,23 @@ function billingCard(o, editable, rerender) {
   const b = o.billing;
   const hours = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', value: hoursText(b.minutes) || '0', disabled: !editable });
   const rate = h('input', { type: 'text', inputmode: 'decimal', autocomplete: 'off', value: String(b.rate).replace('.', ','), disabled: !editable });
+  // 0.63.0: the labour discount; empty = the customer's labour discount.
+  const custLabour = b.customer_discount?.labour;
+  const labourDiscount = numInput(b.own_labour_discount ? b.labour_discount : null, {
+    qty: true, disabled: !editable, placeholder: Number(custLabour) > 0 ? `${pct(custLabour)} (customer)` : '0',
+  });
   const save = h('button', { class: 'btn', type: 'button' }, 'Save labour');
   save.addEventListener('click', () => busy(save, async () => {
     const minutes = parseHoursOrZero(hours.value);
     const r = parseNum(rate.value);
+    const d = parseNum(labourDiscount.value.replace('%', ''));
     if (minutes == null || Number.isNaN(minutes)) { toast('Check the hours', 'error'); hours.focus(); return; }
     if (r == null || Number.isNaN(r) || r < 0) { toast('Check the hourly rate', 'error'); rate.focus(); return; }
+    if (Number.isNaN(d) || (d != null && (d < 0 || d > 100))) { toast('Check the discount', 'error'); labourDiscount.focus(); return; }
     await api.patch(`/work-orders/${o.id}`, {
       billed_minutes: minutes === b.suggested_minutes && b.billed_minutes == null ? null : minutes,
       labour_rate: !b.own_rate && r === Number(b.default_rate) ? null : r,
+      labour_discount: d,
     });
     toast('Saved', 'success');
     await rerender();
@@ -688,13 +706,16 @@ function billingCard(o, editable, rerender) {
     onClick: async () => { try { await api.patch(`/work-orders/${o.id}`, { [field]: null }); await rerender(); } catch (e) { showError(e); } },
   }, label);
 
+  const hasDiscount = b.lines.some((l) => Number(l.discount) > 0);
   const linesTable = b.lines.length ? h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
     h('thead', {}, h('tr', {}, h('th', {}, 'Description'), h('th', { class: 'num' }, 'Quantity'), h('th', { class: 'num' }, 'Price ex VAT'),
+      hasDiscount ? h('th', { class: 'num' }, 'Discount') : null,
       h('th', { class: 'num' }, 'VAT'), h('th', { class: 'num' }, 'Total ex VAT'))),
     h('tbody', {}, b.lines.map((l) => h('tr', {},
       h('td', {}, l.part_number ? [h('span', { class: 'mono', translate: 'no' }, l.part_number), ' '] : null, h('span', { translate: 'no' }, l.text)),
-      h('td', { class: 'num nowrap', translate: 'no' }, `${fmtQty(l.quantity)} ${l.unit}`),
-      h('td', { class: 'num' }, kr(l.unit_price)),
+      h('td', { class: 'num nowrap', translate: 'no' }, l.kind === 'discount' ? '' : `${fmtQty(l.quantity)} ${l.unit}`),
+      h('td', { class: 'num' }, l.kind === 'discount' ? '' : kr(l.unit_price)),
+      hasDiscount ? h('td', { class: 'num' }, Number(l.discount) > 0 ? pct(l.discount) : '') : null,
       h('td', { class: 'num' }, pct(l.vat_rate)),
       h('td', { class: 'num' }, kr(l.total_ex))))))) : h('p', { class: 'empty' }, 'Nothing to invoice yet.');
 
@@ -705,12 +726,16 @@ function billingCard(o, editable, rerender) {
       h('span', {}, 'rounded up to a quarter hour:'), ` ${hoursText(b.suggested_minutes) || '0'} h`),
     h('div', { class: 'grid' },
       field('Hours to invoice', hours, b.billed_minutes != null && editable ? reset('billed_minutes', 'Use the clocked time') : null),
-      field('Hourly rate ex VAT (kr)', rate, b.own_rate && editable ? reset('labour_rate', 'Use the rate from the System page') : null)),
+      field('Hourly rate ex VAT (kr)', rate, b.own_rate && editable ? reset('labour_rate', 'Use the rate from the System page') : null),
+      field('Labour discount (%)', labourDiscount,
+        b.own_labour_discount && editable ? reset('labour_discount', 'Use the customer\'s discount') : null)),
     editable ? h('div', { class: 'actions left no-print' }, save) : null,
     h('h3', {}, 'Other charges'),
     extraLines(o, editable, rerender),
+    totalDiscountBox(`/work-orders/${o.id}/total-discount`, b, editable, rerender),
     h('h3', {}, 'On the invoice'),
     linesTable,
+    customerDiscountNote(b.customer_discount, { labour: true }),
     h('dl', { class: 'kv order-totals' },
       h('dt', {}, 'Total ex VAT'), h('dd', {}, kr(b.total_ex)),
       ...b.vat_lines.map((v) => [h('dt', {}, `VAT ${pct(v.rate)}`), h('dd', {}, kr(v.vat))]).flat(),
@@ -731,23 +756,27 @@ function extraLines(o, editable, rerender) {
   const qty = h('input', { type: 'text', inputmode: 'decimal', value: '1', 'aria-label': 'Quantity', class: 'num-input' });
   const price = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'kr ex VAT', 'aria-label': 'Price ex VAT', class: 'num-input' });
   const vat = h('input', { type: 'text', inputmode: 'decimal', value: '25', 'aria-label': 'VAT (%)', class: 'num-input' });
+  const disc = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'Discount %', 'aria-label': 'Discount (%)', class: 'num-input' });
   const add = h('button', { class: 'btn small', type: 'button' }, '+ Add');
   add.addEventListener('click', () => busy(add, async () => {
     const q = parseNum(qty.value); const p = parseNum(price.value); const v = parseNum(vat.value);
+    const d = parseNum(disc.value.replace('%', ''));
     if (!text.value.trim()) { toast('Write what the charge is for', 'error'); text.focus(); return; }
     if (q == null || Number.isNaN(q) || q <= 0) { toast('Enter the quantity', 'error'); qty.focus(); return; }
     if (p == null || Number.isNaN(p) || p < 0) { toast('Check the price', 'error'); price.focus(); return; }
-    list.push({ text: text.value.trim(), quantity: q, unit_price: p, vat_rate: v == null || Number.isNaN(v) ? 25 : v });
+    if (Number.isNaN(d) || (d != null && (d < 0 || d > 100))) { toast('Check the discount', 'error'); disc.focus(); return; }
+    list.push({ text: text.value.trim(), quantity: q, unit_price: p, vat_rate: v == null || Number.isNaN(v) ? 25 : v, discount: d || null });
     await save();
   }));
   return h('div', {},
     list.length ? h('ul', { class: 'rows' }, list.map((x, i) => h('li', {},
-      h('span', { translate: 'no' }, `${x.text} · ${fmtQty(x.quantity)} × ${kr(x.unit_price)} · ${pct(x.vat_rate)}`),
+      h('span', { translate: 'no' }, `${x.text} · ${fmtQty(x.quantity)} × ${kr(x.unit_price)} · ${pct(x.vat_rate)}`,
+        Number(x.discount) > 0 ? [' · ', h('span', {}, 'discount'), ` ${pct(x.discount)}`] : null),
       editable ? h('button', {
         class: 'link danger small no-print', type: 'button',
         onClick: async () => { list.splice(i, 1); try { await save(); } catch (e) { showError(e); } },
       }, 'remove') : null))) : h('p', { class: 'empty' }, 'None.'),
-    editable ? h('div', { class: 'toolbar extra-line no-print' }, text, qty, price, vat, add) : null);
+    editable ? h('div', { class: 'toolbar extra-line no-print' }, text, qty, price, vat, disc, add) : null);
 }
 
 /** Invoices and credit notes of this work order. */

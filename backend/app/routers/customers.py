@@ -11,6 +11,7 @@ import json
 import logging
 import re
 import time
+from decimal import Decimal
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -102,6 +103,9 @@ class CustomerIn(BaseModel):
     postal_code: Optional[str] = Field(None, max_length=10)
     city: Optional[str] = Field(None, max_length=60)
     note: Optional[str] = Field(None, max_length=1000)
+    # 0.63.0: the customer's standing discount in percent (None = none). Left out = unchanged on edit.
+    discount_parts: Optional[Decimal] = Field(None, ge=0, le=100)
+    discount_labour: Optional[Decimal] = Field(None, ge=0, le=100)
 
 
 def _customer_fields(body: CustomerIn) -> dict:
@@ -118,6 +122,10 @@ def _customer_fields(body: CustomerIn) -> dict:
         "city": _text(body.city, 60),
         "note": (body.note or "").strip()[:1000] or None,
     }
+    for k in ("discount_parts", "discount_labour"):   # only when sent (other forms that make customers leave them out)
+        if k in body.model_fields_set:
+            v = getattr(body, k)
+            f[k] = v.quantize(Decimal("0.01")) if v else None
     if f["email"] and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", f["email"]):
         raise bad_request("The e-mail address is not valid")
     if f["org_no"] and len(f["org_no"]) != 9:
@@ -209,8 +217,16 @@ ORDERS_SELECT = """SELECT o.id, o.order_no, o.status, o.created_at, o.done_at, o
                               AS work_order_number, o.invoice_id,
                           (SELECT i.number FROM invoices i WHERE i.id = o.invoice_id) AS invoice_number,
                           (SELECT count(*) FROM parts_order_lines l WHERE l.order_id = o.id) AS lines,
-                          (SELECT coalesce(sum(l.quantity * l.unit_price * (1 + l.vat_rate / 100)), 0)
-                             FROM parts_order_lines l WHERE l.order_id = o.id) AS total_inc
+                          -- 0.63.0: with the line / customer discount and the order's total discount (an amount is
+                          -- spread like the invoice spreads it over the VAT rates)
+                          (SELECT CASE o.total_discount_kind
+                                    WHEN 'percent' THEN t.inc * greatest(0, 1 - o.total_discount / 100)
+                                    WHEN 'amount' THEN t.inc * greatest(0, 1 - o.total_discount / nullif(t.ex, 0))
+                                    ELSE t.inc END
+                             FROM (SELECT coalesce(sum(x.ex * (1 + x.vat_rate / 100)), 0) AS inc, coalesce(sum(x.ex), 0) AS ex
+                                     FROM (SELECT l.quantity * coalesce(l.unit_price, 0)
+                                                  * (100 - coalesce(l.discount, c.discount_parts, 0)) / 100 AS ex, l.vat_rate
+                                             FROM parts_order_lines l WHERE l.order_id = o.id) x) t) AS total_inc
                      FROM parts_orders o LEFT JOIN customers c ON c.id = o.customer_id
                      LEFT JOIN customer_cars cc ON cc.id = o.car_id"""
 

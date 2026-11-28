@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…061
+  migrations/           001…063
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -339,6 +339,8 @@ frontend/               no build step; plain ES modules
 | 059 | `parts_supply` | `parts_order_lines.supply` (stock / order / ordered / arrived), `supply_at / _by`, `expected_date`; `parts_orders.invoice_id` (counter sale invoices); movement kind `order_received` |
 | 060 | `delivery_owner` | `car_deliveries.owner_address / owner_postal_code / owner_city`, `not_owner`, `contact_name` (kiosk: a car not in the customer register) |
 | 061 | `work_order_follow_up` | `work_orders.waiting_for` (customer / car / approval / parts / other), `waiting_note`, `follow_up_on` |
+| 062 | `push_work_period` | `push_outbox.send_after` (a notification held until the person's work period starts) |
+| 063 | `discounts` | `customers.discount_parts / discount_labour`, `parts_order_lines.discount`, `work_orders.labour_discount`, `total_discount` + `total_discount_kind` (percent / amount) on `work_orders` and `parts_orders` |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -1129,6 +1131,14 @@ storage, periodic checklist, 12V battery form).
     - `late_return` test drive out > 3 h / rental past its expected return, to whoever handed it out, 07:00–21:00
     - `system` (system admins) worker problems and disk warn / bad, each at most once a day, not in the first
       10 min after a start. In the app, not the worker, so it can warn when the worker has stopped.
+- **Work period (0.62.0, the user's rule: "not have notifications before workers are in their work period"):**
+  👤 → Notifications → **My work period** (`push_prefs` `work_from` / `work_until`, `PUT /push/period`; none = System →
+  Work hours `planner_day_start` / `_end`), Monday–Friday; a day started with ⏱ (open `work_days` row today) also
+  counts. `notify()` gives someone outside it `push_outbox.send_after` = their next period start (`push.send_after`;
+  `drain` skips rows not due, max age counted from `send_after`). The morning ones (`pdi_prep`, `daily_due`,
+  `work_orders`) are made per person when their period starts (`_at_work`, `push_sent` keys `…:{day}:{staff id}`);
+  `late_return` / `system` / messages wait in the queue. Only note reminders (`hold=False`) and "Send a test" come at
+  once. This replaces the fixed 07:30 / 07:00–21:00 times below.
 - `/sw.js` (site root, scope `/`) caches nothing; a tap opens the page (`carbonara-open` message to an open window,
   else a new one); a `dm` push updates the 💬 count (`carbonara-push` → `carbonara:dm-changed`).
 
@@ -1581,6 +1591,26 @@ Customer register company):
   `invoice_vat_registered` (on), `invoice_foretaksregisteret` (on), `invoice_kid` (off; MOD10), `invoice_number_start`
   (10000), `invoice_note`.
 
+**Discounts (0.63.0)** (migration 063; the user's request: "some customers have a set discount … a discount option for
+each item / work in parts / work orders, but also an option to have a total discount at ex VAT"):
+- **Customer:** "Discount on parts (%)" and "Discount on labour (%)" in the customer form (`customers.discount_parts /
+  _labour`; only sent by that form, `model_fields_set`, so other places that make customers never clear them); shown
+  as "Discount" on the customer page.
+- **Per line, live default:** `parts_order_lines.discount`, `work_orders.labour_discount` and `extra_lines[].discount`;
+  **NULL = the customer's discount** (parts / labour; other charges have none by default), worked out when shown or
+  invoiced (`invoices.customer_discounts`), so a changed customer discount follows until a line gets its own. The line
+  dialog ("Discount (%)", empty = customer's), the labour field ("Use the customer's discount" resets), the "Discount"
+  column (marked "customer" when inherited, `discountText` in `partsorders.js`).
+- **Total discount ex VAT** (`total_discount` + `total_discount_kind` percent / amount on `work_orders` and
+  `parts_orders`; `PUT /work-orders/{id}/total-discount`, `PUT /parts-orders/{id}/total-discount`,
+  `parts_orders.TotalDiscountIn`; `totalDiscountBox` on the invoice basis card and the counter sale's Invoice card):
+  `invoices._total_discount` makes one "Rabatt" line per VAT rate (split by each rate's amount, the last takes the
+  rounding; an amount never more than the lines), kind `discount`, so the VAT per rate stays right.
+- **Invoice lines:** `_line(..., discount)` → `total_ex` = quantity × price × (1 − discount); `discount` kept in the
+  line snapshot; the document shows a "Rabatt" column only when a line has one. List totals (`ORDERS_SELECT`
+  `total_inc`) and the parts order page use the same rules. Events `total_discount` / `order_total_discount`
+  (kind + value), `order_line_changed` gets `discount_from / _to`.
+
 **Planner (0.51.0)** (migration 049; `routers/planner.py`, `views/planner.js`, `worktime.work_segments`; the user's request with a
 photo of their old booking system: "a calendar to plan the jobs, each user gets their own line (users can be added or
 removed) of work orders lined up after each other per day; one calendar for each team, everyone can make changes in their
@@ -1977,6 +2007,8 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.60.4 | Customer deliveries: the staff card lists the car's open work orders (links), or offers "New work order" (a car not in the customer register is first added from what was typed on the kiosk); the new work order is tied to the delivery and marked as arrived |
 | 0.60.5 | Kiosk: no floating button at all; tapping the message box scrolls the page so "Register delivery" sits right above the keyboard |
 | 0.61.0 | **Work orders aren't forgotten:** "Waiting for …" + "Look again on" date on each open work order, age and last activity, "Quiet" badges (amber 14 / red 30 days, System page), Today blocks (follow up, quiet, done not invoiced), "Needs a look" filter, a morning notification to the creator + people chosen in Settings (migration 061) |
+| 0.62.0 | **Notifications follow each person's work period:** 👤 → Notifications → My work period (default the System page's working day, Mon–Fri, or once the day is started with ⏱); notifications outside it wait until it starts, the morning ones come when it starts; note reminders at their own time (migration 062) |
+| 0.63.0 | **Discounts:** each customer can have a discount on parts and on labour; every part line, the labour and other charges can have their own discount (empty = the customer's); a total discount ex VAT (% or kr) on a work order or counter sale, split over the VAT rates on the invoice; "Rabatt" column on the invoice (migration 063) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
