@@ -7,7 +7,8 @@ same as one made the day it was issued. Always Norwegian, like the other documen
 Layout (first page): logo top left (or the company name), the seller's details top right, the buyer where a window
 envelope shows it, FAKTURA / KREDITNOTA with a box of invoice details, a box with the car and the order, then the
 lines. Later pages: a short header. Every page: a footer with the company's details and "Side n av m". The lines table
-repeats its header on each page; the totals and payment details are kept together at the end.
+repeats its header on each page; the totals, payment details and notes sit together at the bottom of the last page,
+just above the footer (0.65.1).
 """
 from __future__ import annotations
 
@@ -23,8 +24,8 @@ from reportlab.lib.styles import ParagraphStyle
 from reportlab.lib.units import mm
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas as rl_canvas
-from reportlab.platypus import (BaseDocTemplate, Frame, KeepTogether, NextPageTemplate, PageTemplate, Paragraph,
-                                Spacer, Table, TableStyle)
+from reportlab.platypus import (BaseDocTemplate, Flowable, Frame, NextPageTemplate, PageTemplate, Paragraph, Spacer,
+                                Table, TableStyle)
 
 W, H = A4
 LEFT = RIGHT = 18 * mm
@@ -72,6 +73,33 @@ def org_line(s: dict) -> Optional[str]:
 
 def _p(text, style=BODY) -> Paragraph:
     return Paragraph(escape(str(text or "")).replace("\n", "<br/>"), style)
+
+
+class _AtBottom(Flowable):
+    """The totals, payment and notes at the bottom of the last page, just above the footer (0.65.1, the user's
+    request). Takes the rest of the frame and draws its contents at the bottom of it; when they don't fit in what is
+    left of the page, the whole block moves to the next page (never split)."""
+
+    def __init__(self, flowables):
+        super().__init__()
+        self.inner = flowables
+
+    def wrap(self, aw, ah):
+        self.width = aw
+        self._sizes = [f.wrap(aw, ah) for f in self.inner]
+        self._h = sum(h for _, h in self._sizes)
+        self.height = ah if self._h <= ah else self._h
+        return aw, self.height
+
+    def split(self, aw, ah):
+        return []   # never split: the frame moves the whole block to the next page
+
+    def draw(self):
+        y = self._h
+        for f, (w, h) in zip(self.inner, self._sizes):
+            y -= h
+            x = self.width - w if getattr(f, "hAlign", "LEFT") == "RIGHT" else 0
+            f.drawOn(self.canv, x, y)
 
 
 class _NumberedCanvas(rl_canvas.Canvas):
@@ -279,7 +307,7 @@ def build(inv: dict, logo: Optional[Path] = None) -> bytes:
     story.append(table)
     story.append(Spacer(0, 5 * mm))
 
-    # Totals, payment and notes: kept together at the end.
+    # Totals, payment and notes: together at the bottom of the last page (_AtBottom).
     tot = [["Sum eks. mva", nok(inv.get("total_ex"))]]
     for v in inv.get("vat_lines") or []:
         tot.append([f"Mva {pct(v.get('rate'))} av {nok(v.get('base'))}", nok(v.get("vat"))])
@@ -314,6 +342,6 @@ def build(inv: dict, logo: Optional[Path] = None) -> bytes:
         end += [Spacer(0, 4 * mm), _p(inv["note"])]
     if s.get("footer"):
         end += [Spacer(0, 4 * mm), _p(s["footer"], SMALL)]
-    story.append(KeepTogether(end))
+    story.append(_AtBottom(end))
     doc.build(story, canvasmaker=_NumberedCanvas)
     return out.getvalue()

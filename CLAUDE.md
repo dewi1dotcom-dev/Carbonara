@@ -1595,7 +1595,7 @@ Customer register company):
     mechanic, "Vår ref." = who issued it; `car.mechanic / our_ref` snapshotted from 0.65.0).
   - **Lines table** with its header repeated on every page; later pages get a short header.
   - **Every page:** a footer (company line, org. no., account) and "Side n av m" (`_NumberedCanvas`).
-  - **At the end:** totals and the payment box, kept together.
+  - **At the bottom of the last page** (0.65.1, `_AtBottom`): totals, payment box and notes, just above the footer.
   - **Served by** `GET /invoices/{id}/pdf` (inline; `?download=1` = attachment). File name (the user's rule) = order no.
     + space + date ddmmyy, e.g. "51544 121126.pdf" (`pdf_filename`; work order, else parts order, else invoice no.;
     credit notes + " kreditnota").
@@ -2036,6 +2036,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.64.0 | Parts page: the most sold parts (last 90 days) and the most recently used (opened / added to an order) are listed first, with "Sold n in 90 days · last used …" under the name; also in the part pickers (migration 064) |
 | 0.64.1 | The Parts menu opens Parts orders (all parts orders by default; "🔧 Parts store" button to the parts list); a red "Order parts" badge on orders with lines still "To order" (list and order page, `to_order` in `ORDERS_SELECT`) |
 | 0.65.0 | **Invoices as A4 PDFs:** a new, more professional layout (logo, seller, buyer at the envelope window, details box, car box, lines, totals, payment box, footer with "Side n av m"), several pages when needed; Print / Download PDF named "order no. ddmmyy"; logo upload on System → Invoicing |
+| 0.65.1 | Invoice PDF: totals, payment box and notes sit at the bottom of the last page, just above the footer line (`_AtBottom`; the whole block moves to a new page when it does not fit) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
