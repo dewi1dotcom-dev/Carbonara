@@ -14,9 +14,10 @@ const ACTIVE = ['open', 'ordered', 'arrived'];
 
 export async function partsOrdersView(el) {
   const saved = new URLSearchParams(location.hash.split('?')[1] || '');
-  const state = { show: saved.get('show') || 'active', scope: saved.get('scope') || 'counter', q: saved.get('q') || '' };
+  // 0.64.1: the Parts menu opens this page, showing all parts orders (counter sales and work orders') by default.
+  const state = { show: saved.get('show') || 'active', scope: saved.get('scope') || 'all', q: saved.get('q') || '' };
   const query = () => new URLSearchParams(Object.entries(state)
-    .filter(([k, v]) => v && !(k === 'show' && v === 'active') && !(k === 'scope' && v === 'counter'))).toString();
+    .filter(([k, v]) => v && !(k === 'show' && v === 'active') && !(k === 'scope' && v === 'all'))).toString();
   const scopeSel = h('select', { 'aria-label': 'Which orders' },
     [['counter', 'Counter sales'], ['workshop', 'For work orders'], ['all', 'All parts orders']]
       .map(([v, t]) => h('option', { value: v, selected: v === state.scope }, t)));
@@ -38,14 +39,22 @@ export async function partsOrdersView(el) {
   scopeSel.addEventListener('change', () => { state.scope = scopeSel.value; reload(); });
   search.addEventListener('input', debounce(() => { state.q = search.value.trim(); reload(); }, 300));
   append(el,
-    h('p', { class: 'small' }, canOpen('#/parts') ? h('a', { href: '#/parts' }, '← Parts') : null),
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, 'Parts orders'),
-        h('div', { class: 'muted' }, 'Parts sold to a customer over the counter. The parts for a job are added on its work order.')),
-      canEditOrders() ? h('button', { class: 'btn primary', type: 'button', onClick: () => newOrderDialog() }, '+ New parts order') : null),
+        h('div', { class: 'muted' }, 'Counter sales and the parts on work orders. The parts for a job are added on its work order.')),
+      h('div', { class: 'row-actions' },
+        canOpen('#/parts') ? h('a', { class: 'btn', href: '#/parts' }, '🔧 Parts store') : null,
+        canEditOrders() ? h('button', { class: 'btn primary', type: 'button', onClick: () => newOrderDialog() }, '+ New parts order') : null)),
     h('div', { class: 'toolbar' }, search, scopeSel, showSel),
     listSlot);
   await load();
+}
+
+/** 0.64.1: a red "Order parts" when lines are still "To order" (nobody has ordered them from the supplier yet). */
+function toOrderBadge(o) {
+  const n = Number(o.to_order);
+  if (!n || !ACTIVE.includes(o.status)) return null;
+  return h('span', { class: 'block' }, h('span', { class: 'badge bad' }, n > 1 ? `Order parts (${n})` : 'Order parts'));
 }
 
 function ordersTable(data) {
@@ -62,7 +71,7 @@ function ordersTable(data) {
         o.customer_no ? h('span', { class: 'muted small block' }, String(o.customer_no)) : null),
       h('td', {}, o.registration_number ? h('span', { class: 'mono' }, o.registration_number) : '–',
         o.make ? h('span', { class: 'muted small block', translate: 'no' }, carTitle(o)) : null),
-      h('td', {}, o.invoice_id ? h('span', { class: 'badge good' }, 'Invoiced') : orderBadge(o.status)),
+      h('td', {}, o.invoice_id ? h('span', { class: 'badge good' }, 'Invoiced') : orderBadge(o.status), toOrderBadge(o)),
       h('td', { class: 'num' }, String(o.lines)),
       h('td', { class: 'num' }, fmtMoney(o.total_inc)),
       h('td', {}, fmtDate(o.created_at, false), o.reference ? h('span', { class: 'muted small block', translate: 'no' }, o.reference) : null));
@@ -129,7 +138,7 @@ export async function partsOrderView(el, [id], host = el) {
     h('p', { class: 'small no-print' }, h('a', { href: '#/parts-orders' }, '← Parts orders')),
     h('div', { class: 'page-head' },
       h('div', {}, h('h1', {}, `Parts order #${o.order_no}`),
-        o.invoice_id ? h('span', { class: 'badge good' }, 'Invoiced') : orderBadge(o.status)),
+        o.invoice_id ? h('span', { class: 'badge good' }, 'Invoiced') : orderBadge(o.status), toOrderBadge(o)),
       h('div', { class: 'row-actions no-print' },
         h('button', { class: 'btn', type: 'button', onClick: () => window.print() }, '🖨 Print'),
         editable ? h('button', { class: 'btn', type: 'button', onClick: () => orderEditDialog(o, rerender) }, 'Edit') : null)),

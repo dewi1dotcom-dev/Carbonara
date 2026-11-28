@@ -2014,6 +2014,7 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.63.2 | Other charges: each box labelled (Charge, Quantity, Price ex VAT, Discount, VAT), VAT last before "+ Add"; the saved line says "VAT 25 %" |
 | 0.63.3 | Work order page: the car / work order details are a folding line ("reg. no. · make model") above "Waiting and follow-up", which folds too (the closed line shows the reason, look-again date, quiet, age); open / closed remembered per browser (`localStorage` `carbonara.workorder.open`); Print opens the details |
 | 0.64.0 | Parts page: the most sold parts (last 90 days) and the most recently used (opened / added to an order) are listed first, with "Sold n in 90 days · last used …" under the name; also in the part pickers (migration 064) |
+| 0.64.1 | The Parts menu opens Parts orders (all parts orders by default; "🔧 Parts store" button to the parts list); a red "Order parts" badge on orders with lines still "To order" (list and order page, `to_order` in `ORDERS_SELECT`) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate

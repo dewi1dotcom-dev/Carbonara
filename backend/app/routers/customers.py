@@ -217,6 +217,8 @@ ORDERS_SELECT = """SELECT o.id, o.order_no, o.status, o.created_at, o.done_at, o
                               AS work_order_number, o.invoice_id,
                           (SELECT i.number FROM invoices i WHERE i.id = o.invoice_id) AS invoice_number,
                           (SELECT count(*) FROM parts_order_lines l WHERE l.order_id = o.id) AS lines,
+                          (SELECT count(*) FROM parts_order_lines l WHERE l.order_id = o.id AND l.supply = 'order')
+                              AS to_order,
                           -- 0.63.0: with the line / customer discount and the order's total discount (an amount is
                           -- spread like the invoice spreads it over the VAT rates)
                           (SELECT CASE o.total_discount_kind

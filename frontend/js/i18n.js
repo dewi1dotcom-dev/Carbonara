@@ -723,6 +723,9 @@ const NO = {
     'Arbeidsordrer som trenger en titt: oppfølging, stille, ikke fakturert (når arbeidstiden min starter)',
   // Discounts (0.63.0)
   'The most sold and most recently used parts are listed first.': 'De mest solgte og sist brukte delene står først.',
+  'Order parts': 'Bestill deler', 'Parts store': 'Delelager',
+  'Counter sales and the parts on work orders. The parts for a job are added on its work order.':
+    'Disksalg og delene på arbeidsordrer. Delene til en jobb legges til på arbeidsordren.',
   'Charge': 'Tillegg', 'Discount': 'Rabatt', 'Discount (%)': 'Rabatt (%)', 'Discount %': 'Rabatt %', 'discount': 'rabatt', 'customer': 'kunde',
   'parts': 'deler', 'labour': 'arbeid', 'The customer\'s discount': 'Kundens rabatt', 'Customer discount:': 'Kunderabatt:',
   '(used where a line has no discount of its own)': '(brukes der en linje ikke har egen rabatt)',
@@ -1511,7 +1514,7 @@ const NO = {
 // In the Norwegian text {1}, {2}… insert the parts; {1t} also translates that part.
 const NO_PATTERNS = [
   ['Use the workplace\'s working day ({})', 'Bruk arbeidsplassens arbeidsdag ({1})'],
-  ['{} (customer)', '{1} (kunde)'],
+  ['{} (customer)', '{1} (kunde)'], ['Order parts ({n})', 'Bestill deler ({1})'],
   ['Sold {} in {n} days', 'Solgt {1} på {2} dager'], ['last used {}', 'sist brukt {1}'],
   ['Work order #{n} made', 'Arbeidsordre #{1} er laget'],
   ['Quiet {n} d', 'Stille {1} d'], ['Open {n} d', 'Åpen {1} d'], ['last activity {}', 'siste aktivitet {1}'],
