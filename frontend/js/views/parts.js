@@ -108,13 +108,24 @@ function statsLine(data, setShow) {
     data.editor && s.no_cost ? h('span', { class: 'block' }, `${s.no_cost} part(s) in stock have no cost price (not counted).`) : null);
 }
 
+/** 0.64.0: "Sold 6 in 90 days · used dd.mm.yyyy" under the name, for the popular parts listed first. */
+function popularLine(p, days) {
+  const sold = Number(p.sold_recent) > 0;
+  if (!sold && !p.last_used) return null;
+  return h('span', { class: 'small block popular-line' },
+    sold ? h('span', { class: 'badge good' }, `Sold ${fmtQty(p.sold_recent)} in ${days || 90} days`) : null,
+    sold && p.last_used ? ' ' : null,
+    p.last_used ? h('span', { class: 'muted' }, `last used ${fmtDate(p.last_used, false)}`) : null);
+}
+
 function partsTable(data, open) {
   if (!data.parts.length) return h('p', { class: 'empty' }, data.stats.parts ? 'No parts match.' : 'No parts yet.');
   const rows = data.parts.map((p) => {
     const tr = h('tr', { class: 'click-row', tabindex: '0' },
       h('td', {}, h('span', { class: 'mono', translate: 'no' }, p.part_number)),
       h('td', {}, h('span', { translate: 'no' }, p.name),
-        p.make || p.supplier ? h('span', { class: 'muted small block', translate: 'no' }, [p.make, p.supplier].filter(Boolean).join(' · ')) : null),
+        p.make || p.supplier ? h('span', { class: 'muted small block', translate: 'no' }, [p.make, p.supplier].filter(Boolean).join(' · ')) : null,
+        popularLine(p, data.popular_days)),
       h('td', { translate: 'no' }, p.location || '–'),
       h('td', { class: 'num' }, qtyText(p.quantity, p.unit), stockBadge(p) ? h('span', { class: 'block' }, stockBadge(p)) : null,
         Number(p.reserved) > 0 ? h('span', { class: 'muted small block' }, `${fmtQty(p.reserved)} reserved`) : null),
@@ -125,6 +136,7 @@ function partsTable(data, open) {
     return tr;
   });
   return h('div', {},
+    h('p', { class: 'muted small' }, 'The most sold and most recently used parts are listed first.'),
     h('div', { class: 'table-wrap' }, h('table', { class: 'price-table parts-table' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Part number'), h('th', {}, 'Name'), h('th', {}, 'Location'),
         h('th', { class: 'num' }, 'In stock'), h('th', { class: 'num col-ex' }, 'Price ex VAT'), h('th', { class: 'num' }, 'Price inc VAT'))),

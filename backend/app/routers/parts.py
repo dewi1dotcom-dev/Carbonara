@@ -74,6 +74,8 @@ def _out(row: dict, editor: bool) -> dict:
     return r
 
 
+POPULAR_DAYS = 90   # "sold recently" on the parts page (0.64.0)
+
 PART_COLS = """p.id, p.part_number, p.part_key, p.name, p.make, p.supplier, p.location, p.unit, p.quantity,
                p.min_quantity, p.cost_price, p.sale_price, p.vat_rate, p.note, p.created_at, p.updated_at"""
 
@@ -138,10 +140,17 @@ def list_parts(request: Request, q: str = "", show: Literal["all", "stock", "low
     editor = _editor(request.state.staff)
     where, params = _where(q, show, make)
     qk = part_key(q.strip()) if len(q.split()) == 1 else ""
+    # 0.64.0: after an exact / starting part number, the popular parts first: most sold in the last 90 days, then the
+    # most recently used (sold or looked up), then by part number.
     rows = conn.execute(
-        f"""SELECT {PART_COLS}, {RESERVED_SQL} AS reserved, count(*) OVER () AS total
-              FROM parts p WHERE {' AND '.join(where)}
-             ORDER BY (p.part_key = %s) DESC, (%s <> '' AND p.part_key LIKE %s) DESC, p.part_key
+        f"""WITH sold AS (SELECT part_id, sum(-change) AS n, max(created_at) AS at FROM part_movements
+                           WHERE kind IN ('out', 'order', 'order_return') AND created_at > now() - interval '{POPULAR_DAYS} days'
+                           GROUP BY part_id)
+            SELECT {PART_COLS}, {RESERVED_SQL} AS reserved, count(*) OVER () AS total,
+                   greatest(coalesce(s.n, 0), 0) AS sold_recent, greatest(p.looked_up_at, s.at) AS last_used
+              FROM parts p LEFT JOIN sold s ON s.part_id = p.id WHERE {' AND '.join(where)}
+             ORDER BY (p.part_key = %s) DESC, (%s <> '' AND p.part_key LIKE %s) DESC,
+                      greatest(coalesce(s.n, 0), 0) DESC, greatest(p.looked_up_at, s.at) DESC NULLS LAST, p.part_key
              LIMIT {LIST_LIMIT}""",
         [*params, qk, qk, qk + "%"]).fetchall()
     stats = conn.execute(
@@ -164,7 +173,13 @@ def list_parts(request: Request, q: str = "", show: Literal["all", "stock", "low
         "stats": stats,
         "makes": makes,
         "editor": editor,
+        "popular_days": POPULAR_DAYS,
     }
+
+
+def looked_up(conn, part_id: int) -> None:
+    """The part was opened or added to an order: it counts as recently used (0.64.0). Not a change to the part."""
+    conn.execute("UPDATE parts SET looked_up_at = now() WHERE id = %s", (part_id,))
 
 
 @router.get("/parts/imports")
@@ -224,6 +239,7 @@ def _get(conn, part_id: int, lock: bool = False) -> dict:
 def get_part(part_id: int, request: Request, conn=Depends(get_conn)):
     editor = _editor(request.state.staff)
     part = _out(_get(conn, part_id), editor)
+    looked_up(conn, part_id)
     part["reserved"] = conn.execute(f"SELECT {RESERVED_SQL} AS n FROM parts p WHERE p.id = %s",
                                     (part_id,)).fetchone()["n"]
     moves = conn.execute(

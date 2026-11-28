@@ -722,7 +722,8 @@ const NO = {
   'Work orders that need a look: follow-ups, quiet, not invoiced (when my work period starts)':
     'Arbeidsordrer som trenger en titt: oppfølging, stille, ikke fakturert (når arbeidstiden min starter)',
   // Discounts (0.63.0)
-  'Discount': 'Rabatt', 'Discount (%)': 'Rabatt (%)', 'Discount %': 'Rabatt %', 'discount': 'rabatt', 'customer': 'kunde',
+  'The most sold and most recently used parts are listed first.': 'De mest solgte og sist brukte delene står først.',
+  'Charge': 'Tillegg', 'Discount': 'Rabatt', 'Discount (%)': 'Rabatt (%)', 'Discount %': 'Rabatt %', 'discount': 'rabatt', 'customer': 'kunde',
   'parts': 'deler', 'labour': 'arbeid', 'The customer\'s discount': 'Kundens rabatt', 'Customer discount:': 'Kunderabatt:',
   '(used where a line has no discount of its own)': '(brukes der en linje ikke har egen rabatt)',
   'Total discount ex VAT': 'Totalrabatt eks. mva', 'Total discount ex VAT:': 'Totalrabatt eks. mva:',
@@ -1511,6 +1512,7 @@ const NO = {
 const NO_PATTERNS = [
   ['Use the workplace\'s working day ({})', 'Bruk arbeidsplassens arbeidsdag ({1})'],
   ['{} (customer)', '{1} (kunde)'],
+  ['Sold {} in {n} days', 'Solgt {1} på {2} dager'], ['last used {}', 'sist brukt {1}'],
   ['Work order #{n} made', 'Arbeidsordre #{1} er laget'],
   ['Quiet {n} d', 'Stille {1} d'], ['Open {n} d', 'Åpen {1} d'], ['last activity {}', 'siste aktivitet {1}'],
   ['In {n} weeks', 'Om {1} uker'], ['look again {}', 'se på igjen {1}'], ['no activity for {n} d', 'ingen aktivitet på {1} d'],

@@ -24,7 +24,9 @@ from ..common import bad_request, cap_name, conflict, not_found
 from ..db import get_conn
 from .customers import ORDERS_SELECT, EVENTS_SELECT, _names, event, require_register, touch
 from ..auth import require_staff
-from .parts import CENT, MAX_PRICE, MAX_QTY, _clean, _editor as _parts_editor, _fmt_qty, _move, require_parts_editor
+from .parts import (
+    CENT, MAX_PRICE, MAX_QTY, _clean, _editor as _parts_editor, _fmt_qty, _move, looked_up, require_parts_editor,
+)
 
 router = APIRouter(tags=["parts orders"])
 
@@ -280,6 +282,7 @@ def add_line(order_id: int, body: LineIn, conn=Depends(get_conn), staff=Depends(
                  body.vat_rate if body.vat_rate is not None else part["vat_rate"], staff["id"], supply,
                  staff["id"], body.discount)).fetchone()["id"]
         number = part["part_number"]
+        looked_up(conn, part["id"])   # popular parts first on the parts page (0.64.0)
     else:
         name = cap_name(_clean(body.name, 200) or "") or None
         if not name:

@@ -496,6 +496,14 @@ ul.plain { list-style: none; margin: 0; padding: 0; }
 
 /* "All vehicle data" expansion */
 .more { margin: .5rem 0 0; border-top: 1px solid var(--border); padding-top: .5rem; }
+/* Folding cards on the work order page (0.63.3): one line with an arrow; the details under it. */
+details.fold-card { padding-top: .75rem; padding-bottom: .75rem; }
+details.fold-card > summary { cursor: pointer; list-style: none; display: flex; align-items: center; gap: .5rem; }
+details.fold-card > summary::-webkit-details-marker { display: none; }
+details.fold-card > summary::before { content: '▸'; color: var(--muted); flex: none; transition: transform .15s; }
+details.fold-card[open] > summary::before { transform: rotate(90deg); }
+details.fold-card .fold-line { display: flex; flex-wrap: wrap; align-items: center; gap: .35rem .6rem; }
+details.fold-card .fold-body { margin-top: .75rem; }
 .more summary { cursor: pointer; font-weight: 600; color: var(--link); padding: .4rem 0; }
 .more[open] summary { margin-bottom: .25rem; }
 .more h3 { margin: 1rem 0 .4rem; font-size: .95rem; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
@@ -928,10 +936,14 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .invoice-doc .inv-pay { margin-top: 1.25rem; padding: .6rem .75rem; border: 1px solid #111; }
 .invoice-doc .inv-credit { font-weight: 600; }
 .invoice-doc .inv-footer { margin-top: 1.5rem; font-size: .8rem; color: #444; }
-.extra-line input[type=text] { width: auto; flex: 1; min-width: 7rem; }
-.extra-line input.num-input { flex: 0 1 6rem; min-width: 4.5rem; }
+/* Other charges entry (0.63.2): labelled boxes in one row, VAT last, then Add. */
+.extra-line { display: flex; flex-wrap: wrap; gap: .5rem; align-items: flex-end; margin-bottom: .5rem; }
+.extra-line label { display: flex; flex-direction: column; gap: .2rem; flex: 0 1 7rem; min-width: 5rem; font-size: .85rem; color: var(--muted); }
+.extra-line label.extra-text { flex: 1 1 12rem; }
+.extra-line input { width: 100%; }
 /* 0.63.0: the total discount row (kind, value, Save). */
-.total-discount select { width: auto; }
+.toolbar.total-discount { justify-content: flex-start; align-items: center; }
+.toolbar.total-discount select { flex: none; width: auto; }
 .total-discount input.num-input { width: 7rem; flex: none; }
 @media (max-width: 640px) { .invoice-doc { padding: 1rem; font-size: .85rem; } .invoice-doc .inv-kind { text-align: left; } }
 @media print { .invoice-doc { padding: 0; max-width: none; border-radius: 0; margin: 0; } }

@@ -92,16 +92,35 @@ export function attentionBadges(o) {
   return b.length ? h('div', { class: 'wo-attention' }, b.map((x, i) => [i ? ' ' : '', x])) : null;
 }
 
+// Folding cards on the work order page (0.63.3, the user's request): open / closed is kept per browser and survives
+// the page's own redraws.
+const FOLD_KEY = 'carbonara.workorder.open';
+const foldState = () => { try { return JSON.parse(localStorage.getItem(FOLD_KEY) || '{}'); } catch { return {}; } };
+function foldCard(key, cls, summary, ...body) {
+  const d = h('details', { class: `card fold-card ${cls}`, open: !!foldState()[key] },
+    h('summary', {}, summary), h('div', { class: 'fold-body' }, body));
+  d.addEventListener('toggle', () => {
+    try { localStorage.setItem(FOLD_KEY, JSON.stringify({ ...foldState(), [key]: d.open })); } catch { /* private mode */ }
+  });
+  return d;
+}
+
 /** "Waiting for / Look again on" on the work order page (0.61.0): why it waits and when someone should look at it
- *  again; on that day it is on Today and its creator (+ the people chosen in Settings) get a notification. */
+ *  again; on that day it is on Today and its creator (+ the people chosen in Settings) get a notification.
+ *  0.63.3: a folding card; the closed line shows the reason, the date and the age. */
 export function followUpCard(o, editable, rerender) {
   const age = Math.max(0, Math.round((Date.now() - new Date(o.created_at).getTime()) / 86400000));
   const facts = h('p', { class: 'small muted' },
     h('span', {}, `Open ${age} d`), ' · ', h('span', {}, `last activity ${fmtDate(o.last_activity)}`),
     o.quiet ? [' ', h('span', { class: `badge ${o.quiet}` }, `Quiet ${o.quiet_days} d`)] : null);
   const auto = !o.waiting_for && o.waiting ? h('span', { class: 'muted small' }, h('span', {}, 'Now:'), ' ', h('span', {}, WAITING[o.waiting])) : null;
+  const summary = h('span', { class: 'fold-line' }, h('strong', {}, 'Waiting and follow-up'),
+    o.waiting ? h('span', { class: 'badge' }, WAITING[o.waiting]) : null,
+    o.follow_up_on ? h('span', { class: `badge${o.follow_up_due ? ' warn' : ''}` }, h('span', {}, 'Look again on'), ` ${fmtDate(o.follow_up_on, false)}`) : null,
+    o.quiet ? h('span', { class: `badge ${o.quiet}` }, `Quiet ${o.quiet_days} d`) : null,
+    h('span', { class: 'muted small' }, `Open ${age} d`));
   if (!editable) {
-    return h('section', { class: 'card follow-up-card no-print' }, facts,
+    return foldCard('follow', `follow-up-card no-print${o.follow_up_due ? ' due' : ''}`, summary, facts,
       o.waiting ? h('p', {}, h('span', { class: 'badge' }, WAITING[o.waiting]), o.waiting_note ? h('span', { translate: 'no' }, ` ${o.waiting_note}`) : null) : null,
       o.follow_up_on ? h('p', {}, h('span', {}, 'Look again on'), ` ${fmtDate(o.follow_up_on, false)}`) : null);
   }
@@ -125,8 +144,8 @@ export function followUpCard(o, editable, rerender) {
   const quick = [1, 2, 4].map((n) => h('button', { class: 'link small', type: 'button', onClick: () => { when.value = inWeeks(n); send(when.value); } },
     n === 1 ? 'In 1 week' : `In ${n} weeks`));
   const clear = o.follow_up_on ? h('button', { class: 'link small danger', type: 'button', onClick: () => { when.value = ''; send(''); } }, 'No date') : null;
-  return h('section', { class: `card follow-up-card no-print${o.follow_up_due ? ' due' : ''}` },
-    h('div', { class: 'card-head' }, h('h2', {}, 'Waiting and follow-up'), facts),
+  return foldCard('follow', `follow-up-card no-print${o.follow_up_due ? ' due' : ''}`, summary,
+    facts,
     h('div', { class: 'grid' },
       h('div', { class: 'field' }, h('label', {}, 'Waiting for'), why, auto),
       h('div', { class: 'field' }, h('label', {}, 'Note'), note),
@@ -422,24 +441,24 @@ export async function workOrderView(el, [id], host = el) {
       h('div', {}, h('h1', {}, `Work order #${o.number}`), woBadge(o.status),
         o.title ? h('div', { class: 'muted', translate: 'no' }, o.title) : null),
       h('div', { class: 'row-actions no-print' },
-        h('button', { class: 'btn', type: 'button', onClick: () => window.print() }, '🖨 Print'),
+        h('button', {
+          class: 'btn', type: 'button',
+          onClick: () => {   // the car details are folded on screen but belong on the printout (0.63.3)
+            const d = el.querySelector('details.wo-details') || document.querySelector('details.wo-details');
+            const was = d?.open;
+            if (d) d.open = true;
+            window.print();
+            if (d && !was) d.open = false;
+          },
+        }, '🖨 Print'),
         editable ? h('button', { class: 'btn', type: 'button', onClick: () => editDialog(o, rerender) }, 'Edit') : null)),
     actions.length ? h('div', { class: 'actions left no-print' }, actions) : null,
     partsReadyBar(o, editable, rerender),
-    ACTIVE.includes(o.status) ? followUpCard(o, editable, rerender) : null,
-    o.not_invoiced ? h('div', { class: 'notice warn no-print' }, 'The work is done but not invoiced yet.') : null,
-    workOrderRecallCard(o, editable, rerender),
-    h('section', { class: 'card clock-card no-print' },
-      h('div', { class: 'clock-line' },
-        h('div', {},
-          h('strong', {}, h('span', {}, 'Labour:'), ` ${fmtDuration(o.labour_seconds)}`),
-          o.estimated_minutes ? h('span', { class: 'muted' }, ` (estimated ${fmtDuration(o.estimated_minutes * 60)})`) : null,
-          o.estimated_minutes && o.labour_seconds > o.estimated_minutes * 60 ? [' ', h('span', { class: 'badge warn' }, 'Over the estimate')] : null,
-          o.expected_done ? h('span', { class: 'block' }, h('span', {}, 'Expected done:'), ` ${fmtLocal(o.expected_done)}`) : null,
-          o.my_clock ? h('span', { class: 'block good-text' }, h('span', {}, 'Your clock is running since'), ` ${fmtLocal(o.my_clock, false)}`)
-            : Number(o.clocks_running) > 0 ? h('span', { class: 'block muted' }, h('span', {}, 'Clock running'), ` (${o.clocks_running})`) : null),
-        clockBtn)),
-    h('section', { class: 'card' },
+    // 0.63.3: the car + work order details as one folding line ("AB 12345 · Make Model"), above the follow-up.
+    foldCard('car', 'wo-details',
+      h('span', { class: 'fold-line' },
+        o.registration_number ? h('strong', { class: 'mono' }, o.registration_number) : null,
+        h('span', { translate: 'no' }, (o.vehicle_id || o.customer_car_id) ? carTitle(o) : h('span', { class: 'muted' }, 'Car deleted'))),
       h('dl', { class: 'kv' },
         row('Car', carValue),
         row('Customer', custValue),
@@ -456,6 +475,19 @@ export async function workOrderView(el, [id], host = el) {
           ? h('a', { href: `#/pdi-orders?car=${o.vehicle_id}` }, 'Open the PDI order') : h('span', {}, 'PDI order'))),
         row('Created', `${fmtDate(o.created_at)}${o.created_by_name ? ` · ${o.created_by_name}` : ''}`),
         row('Done', o.done_at && `${fmtDate(o.done_at)}${o.done_by_name ? ` · ${o.done_by_name}` : ''}`))),
+    ACTIVE.includes(o.status) ? followUpCard(o, editable, rerender) : null,
+    o.not_invoiced ? h('div', { class: 'notice warn no-print' }, 'The work is done but not invoiced yet.') : null,
+    workOrderRecallCard(o, editable, rerender),
+    h('section', { class: 'card clock-card no-print' },
+      h('div', { class: 'clock-line' },
+        h('div', {},
+          h('strong', {}, h('span', {}, 'Labour:'), ` ${fmtDuration(o.labour_seconds)}`),
+          o.estimated_minutes ? h('span', { class: 'muted' }, ` (estimated ${fmtDuration(o.estimated_minutes * 60)})`) : null,
+          o.estimated_minutes && o.labour_seconds > o.estimated_minutes * 60 ? [' ', h('span', { class: 'badge warn' }, 'Over the estimate')] : null,
+          o.expected_done ? h('span', { class: 'block' }, h('span', {}, 'Expected done:'), ` ${fmtLocal(o.expected_done)}`) : null,
+          o.my_clock ? h('span', { class: 'block good-text' }, h('span', {}, 'Your clock is running since'), ` ${fmtLocal(o.my_clock, false)}`)
+            : Number(o.clocks_running) > 0 ? h('span', { class: 'block muted' }, h('span', {}, 'Clock running'), ` (${o.clocks_running})`) : null),
+        clockBtn)),
     h('section', { class: 'card' },
       h('h2', {}, 'Work to perform'),
       o.description ? h('p', { class: 'pre-line', translate: 'no' }, o.description) : null,
@@ -756,7 +788,7 @@ function extraLines(o, editable, rerender) {
   const qty = h('input', { type: 'text', inputmode: 'decimal', value: '1', 'aria-label': 'Quantity', class: 'num-input' });
   const price = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'kr ex VAT', 'aria-label': 'Price ex VAT', class: 'num-input' });
   const vat = h('input', { type: 'text', inputmode: 'decimal', value: '25', 'aria-label': 'VAT (%)', class: 'num-input' });
-  const disc = h('input', { type: 'text', inputmode: 'decimal', placeholder: 'Discount %', 'aria-label': 'Discount (%)', class: 'num-input' });
+  const disc = h('input', { type: 'text', inputmode: 'decimal', placeholder: '0', 'aria-label': 'Discount (%)', class: 'num-input' });
   const add = h('button', { class: 'btn small', type: 'button' }, '+ Add');
   add.addEventListener('click', () => busy(add, async () => {
     const q = parseNum(qty.value); const p = parseNum(price.value); const v = parseNum(vat.value);
@@ -770,13 +802,21 @@ function extraLines(o, editable, rerender) {
   }));
   return h('div', {},
     list.length ? h('ul', { class: 'rows' }, list.map((x, i) => h('li', {},
-      h('span', { translate: 'no' }, `${x.text} · ${fmtQty(x.quantity)} × ${kr(x.unit_price)} · ${pct(x.vat_rate)}`,
-        Number(x.discount) > 0 ? [' · ', h('span', {}, 'discount'), ` ${pct(x.discount)}`] : null),
+      h('span', {}, h('span', { translate: 'no' }, `${x.text} · ${fmtQty(x.quantity)} × ${kr(x.unit_price)}`),
+        Number(x.discount) > 0 ? [' · ', h('span', {}, 'discount'), ` ${pct(x.discount)}`] : null,
+        ' · ', h('span', {}, 'VAT'), ` ${pct(x.vat_rate)}`),
       editable ? h('button', {
         class: 'link danger small no-print', type: 'button',
         onClick: async () => { list.splice(i, 1); try { await save(); } catch (e) { showError(e); } },
       }, 'remove') : null))) : h('p', { class: 'empty' }, 'None.'),
-    editable ? h('div', { class: 'toolbar extra-line no-print' }, text, qty, price, vat, disc, add) : null);
+    // Each box labelled; VAT last (right before Add), so it can't be taken for a price (0.63.2, the user's report).
+    editable ? h('div', { class: 'extra-line no-print' },
+      h('label', { class: 'extra-text' }, h('span', {}, 'Charge'), text),
+      h('label', {}, h('span', {}, 'Quantity'), qty),
+      h('label', {}, h('span', {}, 'Price ex VAT (kr)'), price),
+      h('label', {}, h('span', {}, 'Discount (%)'), disc),
+      h('label', {}, h('span', {}, 'VAT (%)'), vat),
+      add) : null);
 }
 
 /** Invoices and credit notes of this work order. */

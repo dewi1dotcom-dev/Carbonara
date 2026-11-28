@@ -248,7 +248,7 @@ backend/
                         customers (customer register, cars, owners, transfer from Vehicles), parts_orders,
                         work_orders (work orders), hours (work hours: start / end of day, clock, admin list),
                         invoices (invoices + credit notes from work orders), planner (team calendar)
-  migrations/           001…063
+  migrations/           001…064
 addons/sidekick/        Carbonara Sidekick, a Chrome extension (manifest, popup.html/js = start + progress, worker.js = the check): recall checks
                         in a dealer portal (0.42.0);
                         copied into the image (Dockerfile) and served zipped at /addons/sidekick.zip
@@ -341,6 +341,7 @@ frontend/               no build step; plain ES modules
 | 061 | `work_order_follow_up` | `work_orders.waiting_for` (customer / car / approval / parts / other), `waiting_note`, `follow_up_on` |
 | 062 | `push_work_period` | `push_outbox.send_after` (a notification held until the person's work period starts) |
 | 063 | `discounts` | `customers.discount_parts / discount_labour`, `parts_order_lines.discount`, `work_orders.labour_discount`, `total_discount` + `total_discount_kind` (percent / amount) on `work_orders` and `parts_orders` |
+| 064 | `parts_popular` | `parts.looked_up_at` (opened / added to an order); index on part movements out of the stock |
 
 **New schema changes = a new numbered file. Never change what an applied migration does**
 (the runner tracks by file name; comment-only edits are harmless).
@@ -2009,6 +2010,10 @@ ORM. Match the surrounding code. Comments explain *why*.
 | 0.61.0 | **Work orders aren't forgotten:** "Waiting for …" + "Look again on" date on each open work order, age and last activity, "Quiet" badges (amber 14 / red 30 days, System page), Today blocks (follow up, quiet, done not invoiced), "Needs a look" filter, a morning notification to the creator + people chosen in Settings (migration 061) |
 | 0.62.0 | **Notifications follow each person's work period:** 👤 → Notifications → My work period (default the System page's working day, Mon–Fri, or once the day is started with ⏱); notifications outside it wait until it starts, the morning ones come when it starts; note reminders at their own time (migration 062) |
 | 0.63.0 | **Discounts:** each customer can have a discount on parts and on labour; every part line, the labour and other charges can have their own discount (empty = the customer's); a total discount ex VAT (% or kr) on a work order or counter sale, split over the VAT rates on the invoice; "Rabatt" column on the invoice (migration 063) |
+| 0.63.1 | Total discount: the Percent / kr dropdown is only as wide as its text, on the left |
+| 0.63.2 | Other charges: each box labelled (Charge, Quantity, Price ex VAT, Discount, VAT), VAT last before "+ Add"; the saved line says "VAT 25 %" |
+| 0.63.3 | Work order page: the car / work order details are a folding line ("reg. no. · make model") above "Waiting and follow-up", which folds too (the closed line shows the reason, look-again date, quiet, age); open / closed remembered per browser (`localStorage` `carbonara.workorder.open`); Print opens the details |
+| 0.64.0 | Parts page: the most sold parts (last 90 days) and the most recently used (opened / added to an order) are listed first, with "Sold n in 90 days · last used …" under the name; also in the part pickers (migration 064) |
 
 **Next / ideas (not started):**
 - **HTTPS, step 2:** a real certificate for a host name (the user has a No-IP plan with a "Vital Encrypt" certificate
