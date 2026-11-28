@@ -27,6 +27,7 @@ export async function systemView(el, _params = [], host = el) {
       host.replaceChildren(...fresh.childNodes);
     } catch (e) { showError(e); }
   };
+  const logo = await logoBlock(rerender);
 
   append(el, // append(): the DOM's own append() would print the array of sections as text
     h('div', { class: 'page-head' }, h('h1', {}, 'System')),
@@ -40,7 +41,40 @@ export async function systemView(el, _params = [], host = el) {
     moreCard(more),
     groups.map((g) => h('section', { class: 'card' },
       h('h2', {}, g),
+      g === 'Invoicing' ? logo : null,
       h('div', { class: 'sys-rows' }, rows.filter((r) => r.group === g).map((r) => settingRow(r, rerender))))));
+}
+
+// ---------------------------------------------------------------- invoice logo (0.65.0)
+
+/** The logo printed on invoices: upload (cropped, white made transparent), preview, remove. Issued invoices keep the
+ *  logo they were made with. */
+async function logoBlock(rerender) {
+  let has = false;
+  try { has = (await fetch('/api/invoice-logo', { cache: 'no-store' })).ok; } catch { /* no logo */ }
+  const input = h('input', { type: 'file', accept: 'image/png,image/jpeg,image/webp', hidden: true });
+  const upload = h('button', { class: 'btn', type: 'button', onClick: () => input.click() }, has ? 'Upload a new logo' : 'Upload logo');
+  input.addEventListener('change', () => busy(upload, async () => {
+    const f = input.files[0];
+    if (!f) return;
+    const fd = new FormData();
+    fd.append('file', f);
+    await api.postForm('/system/invoice-logo', fd);
+    toast('Logo saved', 'success');
+    await rerender();
+  }));
+  const remove = has ? h('button', { class: 'link danger', type: 'button' }, 'Remove logo') : null;
+  remove?.addEventListener('click', () => busy(remove, async () => {
+    if (!confirm('Remove the logo from new invoices? Invoices already made keep theirs.')) return;
+    await api.del('/system/invoice-logo');
+    await rerender();
+  }));
+  return h('div', { class: 'logo-block' },
+    h('h3', {}, 'Logo on invoices'),
+    has ? h('div', { class: 'logo-preview' }, h('img', { src: `/api/invoice-logo?t=${Date.now()}`, alt: 'Logo' }))
+      : h('p', { class: 'muted small' }, 'No logo yet: the company name is printed instead.'),
+    h('p', { class: 'muted small' }, 'PNG or JPG. Empty margins are cut off and white becomes transparent. Invoices already made keep the logo they were made with.'),
+    h('div', { class: 'actions left' }, upload, remove, input));
 }
 
 // ---------------------------------------------------------------- background worker

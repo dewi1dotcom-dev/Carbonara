@@ -19,11 +19,12 @@ from datetime import date, timedelta
 from decimal import ROUND_HALF_UP, Decimal
 from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends
-from fastapi.responses import Response
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import FileResponse, Response
 from psycopg.types.json import Jsonb
 from pydantic import BaseModel, Field
 
+from ..auth import require_superadmin
 from ..common import bad_request, conflict, not_found, org_no
 from ..config import settings
 from ..db import get_conn
@@ -226,6 +227,69 @@ def billing(conn, wo: dict) -> dict:
             "total_discount_ex": discount}
 
 
+# --------------------------------------------------------------------------- #
+# the logo (0.65.0): uploaded on System → Invoicing, printed on invoices
+# --------------------------------------------------------------------------- #
+
+LOGO_KEY = "invoice_logo"   # app_settings: the file key of the current logo (not in the SETTINGS registry)
+
+
+def current_logo(conn) -> Optional[str]:
+    row = conn.execute("SELECT value FROM app_settings WHERE key = %s", (LOGO_KEY,)).fetchone()
+    return row["value"] if row else None
+
+
+def _with_logo(conn, s: dict) -> dict:
+    """The seller snapshot gets the logo in use when the invoice is issued (old logo files are never deleted, so an
+    invoice keeps its logo when a new one is uploaded)."""
+    return {**s, "logo": current_logo(conn)}
+
+
+def _logo_path(key: Optional[str]):
+    from .. import pdisheet
+    if not key or not key.startswith("logo/") or ".." in key:
+        return None
+    p = pdisheet.path(key, "png")
+    return p if p.exists() else None
+
+
+@router.get("/invoice-logo")
+def get_logo(conn=Depends(get_conn), _staff=Depends(require_work_orders)):
+    """The current logo (System page preview)."""
+    p = _logo_path(current_logo(conn))
+    if not p:
+        raise not_found("Logo")
+    return FileResponse(p, media_type="image/png", headers={"Cache-Control": "no-store"})
+
+
+@router.post("/system/invoice-logo")
+async def upload_logo(file: UploadFile = File(...), conn=Depends(get_conn), staff=Depends(require_superadmin)):
+    """A new logo: cropped to its content, at most 1200 px, stored as PNG (white made transparent)."""
+    import uuid
+    from .. import pdisheet
+    data = await file.read()
+    if len(data) > settings.max_upload_bytes:
+        raise bad_request("The file is too big")
+    try:
+        png = pdisheet.clean_image(data)
+    except pdisheet.SheetError as exc:
+        raise bad_request(str(exc))
+    key = f"logo/{uuid.uuid4().hex}"
+    p = pdisheet.path(key, "png")
+    p.parent.mkdir(parents=True, exist_ok=True)
+    p.write_bytes(png)
+    conn.execute("""INSERT INTO app_settings (key, value, updated_by) VALUES (%s, %s, %s)
+                    ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_by = EXCLUDED.updated_by,
+                                                    updated_at = now()""", (LOGO_KEY, key, staff["id"]))
+    return {"ok": True}
+
+
+@router.delete("/system/invoice-logo", status_code=204)
+def delete_logo(conn=Depends(get_conn), _staff=Depends(require_superadmin)):
+    """No logo on new invoices (the file stays: issued invoices may show it)."""
+    conn.execute("DELETE FROM app_settings WHERE key = %s", (LOGO_KEY,))
+
+
 def _next_number(conn) -> int:
     conn.execute("SELECT pg_advisory_xact_lock(hashtext('invoice_no'))")  # one series, no gaps
     n = conn.execute("SELECT max(number) AS n FROM invoices").fetchone()["n"] or 0
@@ -264,17 +328,20 @@ def issue(wo_id: int, body: IssueIn, conn=Depends(get_conn), staff=Depends(requi
     delivered = wo["done_at"].astimezone(OSLO).date() if wo["done_at"] else issued
     car = conn.execute(
         """SELECT coalesce(cc.registration_number, v.registration_number) AS registration_number,
-                  coalesce(cc.make, v.make) AS make, coalesce(cc.model, v.model) AS model, coalesce(cc.vin, v.vin) AS vin
+                  coalesce(cc.make, v.make) AS make, coalesce(cc.model, v.model) AS model, coalesce(cc.vin, v.vin) AS vin,
+                  m.name AS mechanic
              FROM work_orders w LEFT JOIN vehicles v ON v.id = w.vehicle_id
-             LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id WHERE w.id = %s""", (wo_id,)).fetchone()
+             LEFT JOIN customer_cars cc ON cc.id = w.customer_car_id LEFT JOIN staff m ON m.id = w.assigned_to
+            WHERE w.id = %s""", (wo_id,)).fetchone()
     row = conn.execute(
         """INSERT INTO invoices (number, kind, work_order_id, customer_id, issue_date, delivery_date, due_date, seller,
                                  buyer, car, lines, vat_lines, total_ex, vat, total_inc, kid, note, parts_order_ids,
                                  created_by)
            VALUES (%s, 'invoice', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (number, wo_id, wo["customer_id"], issued, delivered, issued + timedelta(days=settings.invoice_due_days),
-         _jsonb(b["seller"]), _jsonb(_buyer(conn, wo["customer_id"])),
-         _jsonb({**car, "km": wo["km"], "work_order": wo["number"]}), _jsonb(b["lines"]), _jsonb(b["vat_lines"]),
+         _jsonb(_with_logo(conn, b["seller"])), _jsonb(_buyer(conn, wo["customer_id"])),
+         _jsonb({**car, "km": wo["km"], "work_order": wo["number"], "our_ref": staff["name"]}), _jsonb(b["lines"]),
+         _jsonb(b["vat_lines"]),
          b["total_ex"], b["vat"], b["total_inc"], kid(number) if settings.invoice_kid == "on" else None,
          (body.note or "").strip() or None, handed, sid)).fetchone()
     conn.execute("UPDATE work_orders SET status = 'invoiced', invoice_id = %s, updated_at = now(), updated_by = %s "
@@ -305,7 +372,7 @@ def issue_parts(order_id: int, body: IssueIn, conn=Depends(get_conn), staff=Depe
         change_status(conn, order_id, "done", sid)   # refused (nothing saved) when a part has too little stock
     number = _next_number(conn)
     issued = today()
-    car = {"parts_order": order["order_no"]}
+    car = {"parts_order": order["order_no"], "our_ref": staff["name"]}
     if order["car_id"]:
         cc = conn.execute("SELECT registration_number, make, model, vin FROM customer_cars WHERE id = %s",
                           (order["car_id"],)).fetchone()
@@ -315,7 +382,7 @@ def issue_parts(order_id: int, body: IssueIn, conn=Depends(get_conn), staff=Depe
                                  lines, vat_lines, total_ex, vat, total_inc, kid, note, parts_order_ids, created_by)
            VALUES (%s, 'invoice', %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s) RETURNING id""",
         (number, order["customer_id"], issued, issued, issued + timedelta(days=settings.invoice_due_days),
-         _jsonb(b["seller"]), _jsonb(_buyer(conn, order["customer_id"])), _jsonb(car), _jsonb(b["lines"]),
+         _jsonb(_with_logo(conn, b["seller"])), _jsonb(_buyer(conn, order["customer_id"])), _jsonb(car), _jsonb(b["lines"]),
          _jsonb(b["vat_lines"]), b["total_ex"], b["vat"], b["total_inc"],
          kid(number) if settings.invoice_kid == "on" else None, (body.note or "").strip() or None, [order_id],
          sid)).fetchone()
@@ -482,7 +549,47 @@ def get_invoice(invoice_id: int, conn=Depends(get_conn), _staff=Depends(require_
              FROM invoices i LEFT JOIN staff cs ON cs.id = i.created_by LEFT JOIN staff ps ON ps.id = i.paid_by
              LEFT JOIN invoices o ON o.id = i.credits_invoice_id
             WHERE i.id = %s""", (invoice_id,)).fetchone()
-    return {**inv, **extra, "today": today()}
+    return {**inv, **extra, "today": today(), "has_logo": _invoice_logo(conn, inv) is not None,
+            "pdf_name": pdf_filename(inv)}
+
+
+def _invoice_logo(conn, inv: dict):
+    """The logo snapshot on the invoice; invoices issued before logos existed show the current one."""
+    s = inv["seller"] or {}
+    return _logo_path(s.get("logo") if "logo" in s else current_logo(conn))
+
+
+def pdf_filename(inv: dict) -> str:
+    """The user's rule: the order number, a space and the date as ddmmyy, e.g. "51544 121126.pdf" (a credit note gets
+    " kreditnota"). The order = the work order, else the parts order, else the invoice number."""
+    c = inv["car"] or {}
+    order = c.get("work_order") or c.get("parts_order") or inv["number"]
+    d = inv["issue_date"]
+    return f"{order} {d:%d%m%y}{'' if inv['kind'] == 'invoice' else ' kreditnota'}.pdf"
+
+
+@router.get("/invoices/{invoice_id}/pdf")
+def invoice_pdf(invoice_id: int, download: bool = False, conn=Depends(get_conn), _staff=Depends(require_work_orders)):
+    """The invoice as an A4 PDF (0.65.0): opened in the browser to print, or downloaded."""
+    from .. import invoicepdf
+    inv = _invoice(conn, invoice_id)
+    credits = conn.execute("SELECT number, issue_date FROM invoices WHERE id = %s",
+                           (inv["credits_invoice_id"],)).fetchone() if inv["credits_invoice_id"] else None
+    data = invoicepdf.build({**inv, "credits_number": credits["number"] if credits else None,
+                             "credits_issue_date": credits["issue_date"] if credits else None},
+                            _invoice_logo(conn, inv))
+    name = pdf_filename(inv)
+    return Response(data, media_type="application/pdf", headers={
+        "Content-Disposition": f'{"attachment" if download else "inline"}; filename="{name}"',
+        "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"})
+
+
+@router.get("/invoices/{invoice_id}/logo")
+def invoice_logo(invoice_id: int, conn=Depends(get_conn), _staff=Depends(require_work_orders)):
+    p = _invoice_logo(conn, _invoice(conn, invoice_id))
+    if not p:
+        raise not_found("Logo")
+    return FileResponse(p, media_type="image/png", headers={"Cache-Control": "private, max-age=3600"})
 
 
 def work_order_invoices(conn, wo_id: int) -> list[dict]:

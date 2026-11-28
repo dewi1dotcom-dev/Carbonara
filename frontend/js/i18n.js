@@ -723,6 +723,13 @@ const NO = {
     'Arbeidsordrer som trenger en titt: oppfølging, stille, ikke fakturert (når arbeidstiden min starter)',
   // Discounts (0.63.0)
   'The most sold and most recently used parts are listed first.': 'De mest solgte og sist brukte delene står først.',
+  // Invoice PDF + logo (0.65.0)
+  'Print': 'Skriv ut', 'Download PDF': 'Last ned PDF', 'Logo': 'Logo', 'Logo on invoices': 'Logo på fakturaer',
+  'Upload logo': 'Last opp logo', 'Upload a new logo': 'Last opp ny logo', 'Remove logo': 'Fjern logo', 'Logo saved': 'Logo lagret',
+  'No logo yet: the company name is printed instead.': 'Ingen logo ennå: firmanavnet skrives i stedet.',
+  'PNG or JPG. Empty margins are cut off and white becomes transparent. Invoices already made keep the logo they were made with.':
+    'PNG eller JPG. Tomme kanter kuttes bort og hvitt blir gjennomsiktig. Fakturaer som allerede er laget, beholder logoen de ble laget med.',
+  'Remove the logo from new invoices? Invoices already made keep theirs.': 'Fjerne logoen fra nye fakturaer? Fakturaer som allerede er laget, beholder sin.',
   'Order parts': 'Bestill deler', 'Parts store': 'Delelager',
   'Counter sales and the parts on work orders. The parts for a job are added on its work order.':
     'Disksalg og delene på arbeidsordrer. Delene til en jobb legges til på arbeidsordren.',

@@ -115,7 +115,9 @@ export async function invoiceView(el, [id], host = el) {
       h('div', { class: 'page-head' },
         h('div', {}, h('h1', {}, `${isInvoice ? 'Invoice' : 'Credit note'} no. ${inv.number}`), stateBadge(inv, inv.today)),
         h('div', { class: 'row-actions' },
-          h('button', { class: 'btn primary', type: 'button', onClick: () => window.print() }, '🖨 Print or PDF'),
+          // 0.65.0: the A4 PDF made by the server (several pages when needed); the browser's PDF viewer prints it.
+          h('a', { class: 'btn primary', href: `/api/invoices/${inv.id}/pdf`, target: '_blank', rel: 'noopener' }, '🖨 Print'),
+          h('a', { class: 'btn', href: `/api/invoices/${inv.id}/pdf?download=1`, download: inv.pdf_name || '' }, '⬇ Download PDF'),
           paidBtn)),
       credited ? h('div', { class: 'notice' }, h('span', {}, 'Credited by'), ' ',
         h('a', { href: `#/invoices/${inv.credited_by_id}` }, `Credit note no. ${inv.credited_by_number}`)) : null,
@@ -125,45 +127,56 @@ export async function invoiceView(el, [id], host = el) {
 }
 
 /** The invoice as a Norwegian document (always Norwegian, like the other documents). */
+/** 0.65.0: the same layout as the PDF (app/invoicepdf.py), drawn as a sheet of A4 paper on screen. */
 function invoiceDoc(inv) {
   const s = inv.seller || {};
   const b = inv.buyer || {};
   const c = inv.car || {};
   const isInvoice = inv.kind === 'invoice';
   const rabatt = (inv.lines || []).some((l) => Number(l.discount) > 0);   // the column only when a line has a discount (0.63.0)
-  const orgLine = s.org_no ? `Org.nr. ${s.org_no}${s.vat_registered ? ' MVA' : ''}` : null;
-  const meta = (label, value) => (value ? h('tr', {}, h('th', {}, label), h('td', {}, value)) : null);
-  const carText = [c.registration_number, [c.make, c.model].filter(Boolean).join(' '), c.vin ? `VIN ${c.vin}` : null,
-    c.km != null ? `Km-stand ${qtyNo(c.km)}` : null].filter(Boolean).join(' · ');
+  const orgLine = s.org_no ? (s.vat_registered ? `Org.nr. NO ${s.org_no} MVA` : `Org.nr. ${s.org_no}`) : null;
+  const cell = (label, value, cls = '') => h('div', { class: `inv-cell ${cls}` }, h('span', { class: 'inv-label' }, label),
+    h('span', { class: 'inv-value' }, value == null || value === '' ? '–' : String(value)));
+  const model = [c.make, c.model].filter(Boolean).join(' ');
+  const order = c.work_order ? ['Arbeidsordre', c.work_order] : c.parts_order ? ['Delebestilling', c.parts_order] : null;
   return h('div', { class: 'report invoice-doc', translate: 'no' },
-    h('div', { class: 'inv-head' },
+    h('div', { class: 'inv-top' },
+      h('div', { class: 'inv-logo' }, inv.has_logo
+        ? h('img', { src: `/api/invoices/${inv.id}/logo`, alt: s.name || '' })
+        : h('div', { class: 'inv-company-big' }, s.name || '')),
       h('div', { class: 'inv-seller' },
         h('div', { class: 'inv-company' }, s.name || ''),
         s.address ? h('div', { class: 'pre-line' }, s.address) : null,
+        s.phone ? h('div', {}, `Telefon: ${s.phone}`) : null,
+        s.email ? h('div', {}, `E-post: ${s.email}`) : null,
         orgLine ? h('div', {}, orgLine) : null,
-        s.foretaksregisteret ? h('div', {}, 'Foretaksregisteret') : null,
-        s.phone ? h('div', {}, `Tlf. ${s.phone}`) : null,
-        s.email ? h('div', {}, s.email) : null),
+        s.foretaksregisteret ? h('div', {}, 'Foretaksregisteret') : null)),
+    h('div', { class: 'inv-mid' },
+      h('div', { class: 'inv-buyer' },
+        h('div', { class: 'inv-label' }, isInvoice ? 'Faktureres til' : 'Kunde'),
+        h('div', { class: 'inv-buyer-name' }, b.name || ''),
+        b.address ? h('div', { class: 'pre-line' }, b.address) : null,
+        b.postal_code || b.city ? h('div', {}, [b.postal_code, b.city].filter(Boolean).join(' ')) : null,
+        b.org_no ? h('div', {}, `Org.nr. ${b.org_no}`) : null),
       h('div', { class: 'inv-title' },
         h('div', { class: 'inv-kind' }, isInvoice ? 'FAKTURA' : 'KREDITNOTA'),
-        h('table', { class: 'inv-meta' }, h('tbody', {},
-          meta(isInvoice ? 'Fakturanr.' : 'Kreditnotanr.', String(inv.number)),
-          meta(isInvoice ? 'Fakturadato' : 'Dato', no(inv.issue_date)),
-          meta('Leveringsdato', no(inv.delivery_date)),
-          isInvoice ? meta('Forfallsdato', no(inv.due_date)) : null,
-          meta('Kundenr.', b.customer_no ? String(b.customer_no) : null),
-          meta('Arbeidsordre', c.work_order ? String(c.work_order) : null),
-          meta('Delebestilling', c.parts_order ? String(c.parts_order) : null),
-          isInvoice ? meta('KID', inv.kid) : null)))),
-    h('div', { class: 'inv-buyer' },
-      h('div', { class: 'inv-label' }, 'Kunde'),
-      h('div', { class: 'inv-buyer-name' }, b.name || ''),
-      b.address ? h('div', {}, b.address) : null,
-      b.postal_code || b.city ? h('div', {}, [b.postal_code, b.city].filter(Boolean).join(' ')) : null,
-      b.org_no ? h('div', {}, `Org.nr. ${b.org_no}`) : null),
+        h('div', { class: 'inv-box' },
+          cell(isInvoice ? 'Fakturanr.' : 'Kreditnotanr.', inv.number, 'strong'),
+          cell(isInvoice ? 'Fakturadato' : 'Dato', no(inv.issue_date)),
+          isInvoice ? cell('Forfall', no(inv.due_date), 'strong') : cell('Leveringsdato', no(inv.delivery_date)),
+          cell('Kundenr.', b.customer_no),
+          isInvoice ? cell('Leveringsdato', no(inv.delivery_date)) : cell('Krediterer faktura', inv.credits_number),
+          isInvoice ? cell(inv.kid ? 'KID' : 'Kontonr.', inv.kid || s.bank_account) : h('span')))),
+    h('div', { class: 'inv-car' },
+      cell('Reg.nr.', c.registration_number, 'strong mono'),
+      cell('Bilmodell', model),
+      cell('Km-stand', c.km != null ? qtyNo(c.km) : null),
+      order ? cell(order[0], order[1], 'strong') : h('span'),
+      cell('Understellsnr. (VIN)', c.vin, 'mono wide'),
+      c.mechanic ? cell('Mekaniker', c.mechanic) : h('span'),
+      c.our_ref ? cell('Vår ref.', c.our_ref) : h('span')),
     !isInvoice && inv.credits_number ? h('p', { class: 'inv-credit' },
       `Krediterer faktura nr. ${inv.credits_number} datert ${no(inv.credits_issue_date)}.`) : null,
-    carText ? h('p', {}, h('strong', {}, 'Bil: '), carText) : null,
     h('table', { class: 'inv-lines' },
       h('thead', {}, h('tr', {}, h('th', {}, 'Varenr.'), h('th', {}, 'Beskrivelse'), h('th', { class: 'num' }, 'Antall'),
         h('th', {}, 'Enhet'), h('th', { class: 'num' }, 'Pris eks. mva'), rabatt ? h('th', { class: 'num' }, 'Rabatt') : null,
@@ -183,11 +196,15 @@ function invoiceDoc(inv) {
       h('tr', { class: 'inv-sum' }, h('th', {}, isInvoice ? 'Å betale (NOK)' : 'Til gode (NOK)'), h('td', { class: 'num' }, nok(inv.total_inc))))),
     !s.vat_registered ? h('p', {}, 'Selger er ikke registrert i Merverdiavgiftsregisteret. Det er ikke beregnet merverdiavgift.') : null,
     isInvoice ? h('div', { class: 'inv-pay' },
-      h('strong', {}, 'Betaling: '),
-      [s.bank_account ? `Kontonr. ${s.bank_account}` : null, inv.kid ? `KID ${inv.kid}` : null, `Forfall ${no(inv.due_date)}`]
-        .filter(Boolean).join(' · ')) : null,
+      h('strong', {}, 'Betaling'),
+      [s.bank_account ? `Kontonr. ${s.bank_account}` : null, inv.kid ? `KID ${inv.kid}` : null, `Forfall ${no(inv.due_date)}`,
+        `Beløp ${nok(inv.total_inc)} kr`].filter(Boolean).map((t) => h('span', {}, t))) : null,
     inv.note ? h('p', { class: 'pre-line' }, inv.note) : null,
-    s.footer ? h('p', { class: 'inv-footer pre-line' }, s.footer) : null);
+    s.footer ? h('p', { class: 'inv-footer pre-line' }, s.footer) : null,
+    h('div', { class: 'inv-foot' },
+      h('div', {}, [s.name, (s.address || '').replace(/\n/g, ', '), s.phone ? `Tlf. ${s.phone}` : null, s.email].filter(Boolean).join(' · ')),
+      h('div', {}, [orgLine, s.foretaksregisteret ? 'Foretaksregisteret' : null, s.bank_account ? `Kontonr. ${s.bank_account}` : null]
+        .filter(Boolean).join(' · '))));
 }
 
 function paidDialog(inv, done) {

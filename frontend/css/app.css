@@ -915,25 +915,42 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .print-only { display: none; }
 @media print { .print-only { display: block; } }
 
-/* Invoices (0.50.0): the Norwegian A4 invoice / credit note */
-.invoice-doc { background: var(--paper); color: #111; max-width: 210mm; margin: 0 auto 1rem; padding: 15mm; border-radius: var(--radius); font-size: .92rem; }
-.invoice-doc .inv-head { display: flex; justify-content: space-between; gap: 1.5rem; flex-wrap: wrap; margin-bottom: 1.5rem; }
-.invoice-doc .inv-company { font-size: 1.3rem; font-weight: 700; margin-bottom: .25rem; }
-.invoice-doc .inv-kind { font-size: 1.6rem; font-weight: 700; letter-spacing: .05em; text-align: right; margin-bottom: .4rem; }
-.invoice-doc .inv-meta th { text-align: left; font-weight: 600; padding: .1rem .75rem .1rem 0; }
-.invoice-doc .inv-meta td { text-align: right; padding: .1rem 0; }
-.invoice-doc .inv-buyer { margin-bottom: 1.25rem; min-height: 5rem; }
-.invoice-doc .inv-label { font-size: .75rem; text-transform: uppercase; letter-spacing: .05em; color: #555; }
-.invoice-doc .inv-buyer-name { font-weight: 700; }
+/* Invoices (0.50.0; 0.65.0 the same layout as the PDF): the Norwegian A4 invoice / credit note as a sheet of paper.
+   Always light, whatever the theme (it is a document). */
+.invoice-doc { background: #fff; color: #1C1B19; max-width: 210mm; margin: 0 auto 1rem; padding: 14mm 16mm 10mm; border-radius: 4px;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, .18); font-size: .9rem; line-height: 1.4; }
+.invoice-doc .inv-top { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+.invoice-doc .inv-logo img { max-width: 78mm; max-height: 26mm; display: block; }
+.invoice-doc .inv-company-big { font-size: 1.6rem; font-weight: 700; }
+.invoice-doc .inv-seller { font-size: .82rem; color: #333; }
+.invoice-doc .inv-company { font-size: 1.05rem; font-weight: 700; color: #1C1B19; margin-bottom: .2rem; }
+.invoice-doc .inv-mid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.25rem; align-items: start; }
+.invoice-doc .inv-buyer { padding-top: 2.2rem; font-size: .95rem; }
+.invoice-doc .inv-buyer-name { font-weight: 700; font-size: 1.05rem; }
+.invoice-doc .inv-kind { font-size: 1.9rem; font-weight: 700; letter-spacing: .03em; margin-bottom: .4rem; }
+.invoice-doc .inv-label { display: block; font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #6B6B6B; }
+.invoice-doc .inv-value { display: block; }
+.invoice-doc .inv-cell.strong .inv-value { font-weight: 700; }
+.invoice-doc .inv-cell.mono .inv-value { font-family: ui-monospace, Consolas, monospace; }
+.invoice-doc .inv-box { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem .75rem; border: 1px solid #D9D9D9;
+  border-radius: 6px; padding: .6rem .75rem; }
+.invoice-doc .inv-car { display: grid; grid-template-columns: 1fr 1.4fr 1fr 1fr; gap: .6rem .75rem; background: #F1F1F1;
+  border-radius: 6px; padding: .65rem .9rem; margin-bottom: 1rem; }
+.invoice-doc .inv-car .wide { grid-column: span 2; }
 .invoice-doc table.inv-lines { width: 100%; border-collapse: collapse; margin: .75rem 0; }
-.invoice-doc table.inv-lines th { text-align: left; border-bottom: 2px solid #111; padding: .3rem .4rem; font-size: .8rem; }
-.invoice-doc table.inv-lines td { border-bottom: 1px solid #ccc; padding: .3rem .4rem; vertical-align: top; }
+.invoice-doc table.inv-lines th { text-align: left; background: #F1F1F1; border-bottom: 1.5px solid #1C1B19; padding: .35rem .4rem;
+  font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: #6B6B6B; }
+.invoice-doc table.inv-lines th.num { text-align: right; }
+.invoice-doc table.inv-lines td { border-bottom: 1px solid #D9D9D9; padding: .32rem .4rem; vertical-align: top; }
+.invoice-doc .inv-foot { margin-top: 2rem; padding-top: .5rem; border-top: 1px solid #D9D9D9; text-align: center; font-size: .72rem; color: #6B6B6B; }
 .invoice-doc .num { text-align: right; white-space: nowrap; }
 .invoice-doc table.inv-totals { margin-left: auto; min-width: 55%; border-collapse: collapse; }
 .invoice-doc table.inv-totals th { text-align: left; font-weight: 400; padding: .2rem .5rem .2rem 0; }
 .invoice-doc table.inv-totals td { padding: .2rem 0; }
-.invoice-doc tr.inv-sum th, .invoice-doc tr.inv-sum td { font-weight: 700; font-size: 1.05rem; border-top: 2px solid #111; padding-top: .35rem; }
-.invoice-doc .inv-pay { margin-top: 1.25rem; padding: .6rem .75rem; border: 1px solid #111; }
+.invoice-doc tr.inv-sum th, .invoice-doc tr.inv-sum td { font-weight: 700; font-size: 1.1rem; border-top: 1.5px solid #1C1B19;
+  border-bottom: 3px double #1C1B19; padding: .4rem 0; }
+.invoice-doc .inv-pay { margin-top: 1.25rem; padding: .6rem .8rem; border: 1px solid #D9D9D9; border-radius: 6px;
+  display: flex; flex-wrap: wrap; gap: .3rem 1.2rem; }
 .invoice-doc .inv-credit { font-weight: 600; }
 .invoice-doc .inv-footer { margin-top: 1.5rem; font-size: .8rem; color: #444; }
 /* Other charges entry (0.63.2): labelled boxes in one row, VAT last, then Add. */
@@ -945,7 +962,15 @@ input.rc-reg-input { font-family: ui-monospace, "SF Mono", Menlo, Consolas, mono
 .toolbar.total-discount { justify-content: flex-start; align-items: center; }
 .toolbar.total-discount select { flex: none; width: auto; }
 .total-discount input.num-input { width: 7rem; flex: none; }
-@media (max-width: 640px) { .invoice-doc { padding: 1rem; font-size: .85rem; } .invoice-doc .inv-kind { text-align: left; } }
+@media (max-width: 640px) {
+  .invoice-doc { padding: 1rem; font-size: .82rem; }
+  .invoice-doc .inv-top, .invoice-doc .inv-mid { grid-template-columns: 1fr; gap: .75rem; }
+  .invoice-doc .inv-buyer { padding-top: 0; }
+  .invoice-doc .inv-car { grid-template-columns: 1fr 1fr; }
+}
+/* System → Invoicing → Logo (0.65.0) */
+.logo-preview { background: #fff; border: 1px solid var(--border); border-radius: 6px; padding: .75rem; display: inline-block; }
+.logo-preview img { max-width: 240px; max-height: 90px; display: block; }
 @media print { .invoice-doc { padding: 0; max-width: none; border-radius: 0; margin: 0; } }
 
 /* Planner (0.51.0): a line per person, jobs over the working day */
